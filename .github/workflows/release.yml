@@ -1,91 +1,106 @@
 name: Release
 
-# Tag v* : build bốn đích rồi đăng GitHub Release.
-# workflow_dispatch : chỉ build và lưu artifact, không tạo Release.
+# Tag v* : kiểm tag == phiên bản crate, chạy lại toàn bộ CI (gồm dựng và chạy thử bốn binary, thử bộ cài), gộp
+#          checksums.txt, đóng dấu phiên bản vào bộ cài, rồi đăng GitHub Release.
+# workflow_dispatch : làm y hệt nhưng dừng ở artifact `release-assets`, không tạo Release.
 on:
   push:
     tags: ["v*"]
   workflow_dispatch:
 
-permissions:
-  contents: read
+permissions: {}
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
-    name: build ${{ matrix.target }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - target: x86_64-unknown-linux-gnu
-            os: ubuntu-latest
-          - target: x86_64-apple-darwin
-            os: macos-latest # runner arm64, biên dịch chéo sang x86_64
-          - target: aarch64-apple-darwin
-            os: macos-latest
-          - target: x86_64-pc-windows-msvc
-            os: windows-latest
-    runs-on: ${{ matrix.os }}
-    defaults:
-      run:
-        shell: bash
+  verify:
+    name: tag == version
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.v.outputs.version }}
     steps:
-      - uses: actions/checkout@v7
-      # Cài đúng toolchain ghi trong rust-toolchain.toml, rồi thêm đích.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: rustup toolchain install
-      - run: rustup target add ${{ matrix.target }}
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: ${{ matrix.target }}
-      - run: cargo build --release --locked --package pkm --target ${{ matrix.target }}
-      - name: Đóng gói binary và sha256
-        env:
-          TARGET: ${{ matrix.target }}
+      - id: v
+        name: So tag với phiên bản trong Cargo.toml
         run: |
           set -euo pipefail
-          ext=""
-          if [[ "$TARGET" == *windows* ]]; then ext=".exe"; fi
-          mkdir -p out
-          asset="pkm-${TARGET}${ext}"
-          cp "target/${TARGET}/release/pkm${ext}" "out/${asset}"
-          cd out
-          # Tên file tương đối trong .sha256 để `sha256sum -c` chạy được.
-          if command -v sha256sum >/dev/null 2>&1; then
-            sha256sum "${asset}" > "${asset}.sha256"
-          else
-            shasum -a 256 "${asset}" > "${asset}.sha256"
+          version="v$(sh scripts/release-assets.sh version)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "$version" ]; then
+            echo "::error::tag $GITHUB_REF_NAME khác phiên bản crate $version ([workspace.package] version)"
+            exit 1
           fi
-          cat "${asset}.sha256"
-      - uses: actions/upload-artifact@v7
-        with:
-          name: pkm-${{ matrix.target }}
-          path: out/*
-          if-no-files-found: error
+          echo "phiên bản: $version (ref $GITHUB_REF_NAME)"
 
-  release:
-    name: publish release
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
-    runs-on: ubuntu-latest
+  # Toàn bộ CI: fmt, clippy, test ba nền, so khớp, và release-assets.yml (dựng, chạy thử, thử bộ cài, artifact).
+  ci:
+    needs: verify
     permissions:
-      contents: write
+      contents: read
+    uses: ./.github/workflows/ci.yml
+
+  package:
+    name: checksums và bộ cài
+    needs: [verify, ci]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     steps:
-      - uses: actions/download-artifact@v8
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           path: out
           pattern: pkm-*
           merge-multiple: true
-      - name: Kiểm tra sha256 trước khi đăng
+      - name: Đóng dấu bộ cài, gộp checksums.txt
+        env:
+          VERSION: ${{ needs.verify.outputs.version }}
+        run: |
+          set -euo pipefail
+          sh scripts/release-assets.sh stamp "$VERSION" scripts/install.sh out/install.sh
+          sh scripts/release-assets.sh stamp "$VERSION" scripts/install.ps1 out/install.ps1
+          for t in x86_64-unknown-linux-gnu x86_64-apple-darwin aarch64-apple-darwin x86_64-pc-windows-msvc; do
+            f="out/$(sh scripts/release-assets.sh asset-name "$t")"
+            [ -s "$f" ] || { echo "::error::thiếu $f"; exit 1; }
+          done
+          # 4 binary + install.sh + install.ps1; checksums.txt là file thứ 7.
+          sh scripts/release-assets.sh checksums out 6
+          ls -l out
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-assets
+          path: out/*
+          if-no-files-found: error
+
+  publish:
+    name: đăng release
+    if: github.ref_type == 'tag'
+    needs: [verify, package]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-assets
+          path: out
+      - name: Kiểm checksums.txt trước khi đăng
         working-directory: out
         run: |
-          ls -l
-          sha256sum -c ./*.sha256
+          set -euo pipefail
+          sha256sum -c --strict checksums.txt
+          [ "$(ls -1 | wc -l)" -eq 7 ] || { echo "::error::cần 7 file"; ls -l; exit 1; }
       - name: Tạo GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           TAG: ${{ github.ref_name }}
-        run: gh release create "$TAG" out/* --title "$TAG" --generate-notes --verify-tag
+        run: |
+          set -euo pipefail
+          pre=()
+          case "$TAG" in *-*) pre=(--prerelease) ;; esac   # v0.2.0-rc.1 không thành "latest"
+          gh release create "$TAG" out/* --title "$TAG" --generate-notes --verify-tag "${pre[@]}"
