@@ -14,7 +14,7 @@ regex = "1"
 sha1_smol = "1"
 unicode-normalization = "0.1"
 unsafe-libyaml = "0.2.11"
-rusqlite = { version = "0.41.1", features = ["bundled", "functions"] }
+rusqlite = { version = "0.41.1", features = ["bundled", "functions", "hooks"] }
 chrono = { version = "0.4.45", default-features = false, features = ["clock"] }
 
 [target.'cfg(unix)'.dependencies]
