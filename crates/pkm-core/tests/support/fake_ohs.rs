@@ -15,7 +15,9 @@
 //!
 //! Mỗi lần khởi động ghi một dòng vào `<vault>/fake-ohs.starts` và ghi môi trường nhận được vào
 //! `<vault>/fake-ohs.env.json`. `search` trả sau `options.delayMs` ms một kết quả có `path` là câu tìm ở dạng NFD;
-//! câu `fail` thì trả `{"error"}`.
+//! câu `fail` thì trả `{"error"}`. `read` trả mỗi đường dẫn một note (dạng NFD): đường dẫn bắt đầu bằng `thiếu` là
+//! `{found: false, suggestions}`, còn lại là `{found: true, …, request}` với `request` là request nhận được (bỏ `id`);
+//! `paths` rỗng thì trả `{"error"}` như OHS.
 
 use std::fs::{self, OpenOptions};
 use std::io::{BufRead, Write};
@@ -160,6 +162,33 @@ fn main() {
                     } else {
                         let nfd: String = q.nfd().collect();
                         json!({"id": id, "results": [{"path": nfd, "score": 1.0}]})
+                    }
+                }
+                Some("read") => {
+                    let paths: Vec<String> = req["paths"]
+                        .as_array()
+                        .map(|a| a.iter().filter_map(|p| p.as_str().map(str::to_owned)).collect())
+                        .unwrap_or_default();
+                    if paths.is_empty() {
+                        json!({"id": id, "error": "Invalid stdio request: paths must not be empty"})
+                    } else {
+                        let mut echo = req.clone();
+                        echo.as_object_mut().map(|m| m.remove("id"));
+                        let notes: Vec<Value> = paths
+                            .iter()
+                            .map(|p| {
+                                let nfd: String = p.nfd().collect();
+                                if p.starts_with("thiếu") {
+                                    let hint: String = "Gợi ý.md".nfd().collect();
+                                    json!({"path": nfd, "found": false, "suggestions": [hint]})
+                                } else {
+                                    let link: String = "Liên kết.md".nfd().collect();
+                                    json!({"path": nfd, "found": true, "title": p, "content": "nội dung",
+                                           "links": [link], "backlinks": [], "request": echo})
+                                }
+                            })
+                            .collect();
+                        json!({"id": id, "notes": notes})
                     }
                 }
                 Some(other) => json!({"id": id, "error": format!("unknown action: {other}")}),

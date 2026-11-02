@@ -111,6 +111,49 @@ fn search_returns_nfc_paths_once_ready() {
 }
 
 #[test]
+fn read_sends_paths_and_options_and_returns_notes_in_order_with_nfc_paths() {
+    let f = Fixture::new(json!({}));
+    let ohs = f.start();
+    ready(&ohs);
+    let paths = vec!["Đà Nẵng.md".to_owned(), "thiếu.md".to_owned()];
+    let notes = ohs
+        .read(&paths, json!({"snippetLength": 50, "related": false}))
+        .unwrap();
+    assert_eq!(notes.len(), 2);
+    assert_eq!(notes[0]["path"], "Đà Nẵng.md");
+    assert_eq!(notes[0]["found"], true);
+    assert_eq!(notes[0]["links"], json!(["Liên kết.md"]));
+    assert_eq!(
+        notes[0]["request"],
+        json!({"action": "read", "paths": ["Đà Nẵng.md", "thiếu.md"], "snippetLength": 50, "related": false})
+    );
+    assert_eq!(
+        notes[1],
+        json!({"path": "thiếu.md", "found": false, "suggestions": ["Gợi ý.md"]})
+    );
+    // Không có tuỳ chọn: request chỉ có `action` và `paths`, để OHS dùng mặc định của nó.
+    let notes = ohs.read(&paths[..1], Value::Null).unwrap();
+    assert_eq!(
+        notes[0]["request"],
+        json!({"action": "read", "paths": ["Đà Nẵng.md"]})
+    );
+}
+
+#[test]
+fn read_reports_not_ready_while_indexing() {
+    let f = Fixture::new(json!({}));
+    let ohs = f.start();
+    ready(&ohs);
+    f.configure(&json!({"status": {"total": 10, "indexed": 3, "pending": 7,
+                                   "model": "local:m", "active_model": "local:m", "indexing_errors": []}}));
+    eventually("indexing", || ohs.state().name() == "indexing");
+    let err = ohs.read(&["a.md".to_owned()], Value::Null).unwrap_err();
+    let e = err.not_ready_error().expect("ohs_not_ready");
+    assert_eq!(e["state"], "indexing");
+    assert_eq!(e.as_object().unwrap().len(), 5, "{e}");
+}
+
+#[test]
 fn ohs_is_started_with_vault_db_and_clean_environment() {
     let f = Fixture::new(json!({}));
     let db = f.tmp.path().join("ohs.db");

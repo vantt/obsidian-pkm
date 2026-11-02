@@ -1,8 +1,9 @@
 //! Module OHS duy nhất của `pkm` (D6, PRD mục 9): giữ một tiến trình `ohs serve --stdio` sống lâu, gửi request có `id`
 //! đồng thời từ nhiều luồng, khởi động lại có giới hạn khi OHS chết, và báo trạng thái theo D7.
 //!
-//! Dùng: [`Ohs::launch`] khi `pkm` khởi động (không chặn: OHS khởi động ở luồng nền), [`Ohs::search`] trong tool cần
-//! OHS, [`Ohs::state`] để báo trạng thái. Khi OHS chưa sẵn sàng, [`Ohs::search`] trả [`OhsError::NotReady`] và tool
+//! Dùng: [`Ohs::launch`] khi `pkm` khởi động (không chặn: OHS khởi động ở luồng nền), [`Ohs::search`] và
+//! [`Ohs::read`] trong tool cần OHS, [`Ohs::state`] để báo trạng thái. Khi OHS chưa sẵn sàng, hai hàm đó trả
+//! [`OhsError::NotReady`] và tool
 //! trả [`OhsError::not_ready_error`] cho agent; không có đường lùi cho ra kết quả kém (D7). Bỏ [`Ohs`] (hoặc gọi
 //! [`Ohs::shutdown`]) thì đóng stdin của OHS, chờ có giới hạn rồi kill: không để lại tiến trình `node` nào.
 //!
@@ -371,7 +372,8 @@ impl Ohs {
     }
 
     /// Tìm bằng OHS. `options` là object tuỳ chọn của OHS (`limit`, `mode`, `snippetLength`, `scope`, …) hoặc `null`.
-    /// `path` của mỗi kết quả được chuẩn hoá NFC (OHS trả NFD) để tra được trong index.
+    /// Đường dẫn trong mỗi kết quả được chuẩn hoá NFC (OHS trả NFD) để tra được trong index, xem
+    /// [`normalize_result_paths`].
     ///
     /// Kiểm `status` trước: OHS in `ready` trước khi index xong và lúc đó tìm trả `[]` không báo lỗi, nên chỉ tìm khi
     /// trạng thái là `ready`; ngược lại trả [`OhsError::NotReady`].
@@ -379,35 +381,63 @@ impl Ohs {
         if query.trim().is_empty() {
             return Err(OhsError::Invalid("câu tìm rỗng".into()));
         }
-        let options = match options {
-            Value::Object(m) => m,
-            Value::Null => Map::new(),
-            other => {
-                return Err(OhsError::Invalid(format!(
-                    "options phải là object, nhận {other}"
-                )));
-            }
-        };
+        let options = options_object(options)?;
+        let mut req = Map::new();
+        req.insert("query".into(), query.into());
+        req.insert("options".into(), Value::Object(options));
+        self.request(req, "results")
+    }
+
+    /// Đọc note bằng action `read` của OHS: mỗi phần tử của `paths` cho đúng một phần tử kết quả, cùng thứ tự. Note có
+    /// trong index là `{path, found: true, title, aliases, tags, content, links, backlinks, markdownLinks,
+    /// markdownBacklinks, urls}`, không có là `{path, found: false, suggestions}`. `options` là các khoá còn lại của
+    /// request (`snippetLength`, `related`) hoặc `null`; OHS bỏ qua khoá nó không biết. Đường dẫn được chuẩn hoá NFC như
+    /// [`Ohs::search`]. OHS tự đưa `paths` về NFD khi tra, nên gửi NFC được.
+    ///
+    /// Chỉ đọc khi trạng thái là `ready`, như [`Ohs::search`]: lúc đang index, note chưa vào index sẽ bị báo `found:
+    /// false` sai.
+    pub fn read(&self, paths: &[String], options: Value) -> Result<Vec<Value>, OhsError> {
+        if paths.is_empty() {
+            return Err(OhsError::Invalid("paths rỗng".into()));
+        }
+        if paths.iter().any(|p| p.trim().is_empty()) {
+            return Err(OhsError::Invalid("paths có đường dẫn rỗng".into()));
+        }
+        let options = options_object(options)?;
+        if let Some(key) = ["id", "action", "paths"]
+            .into_iter()
+            .find(|k| options.contains_key(*k))
+        {
+            return Err(OhsError::Invalid(format!(
+                "options của read không được có khoá {key}"
+            )));
+        }
+        let mut req = Map::new();
+        req.insert("action".into(), "read".into());
+        req.insert("paths".into(), paths.into());
+        req.extend(options);
+        self.request(req, "notes")
+    }
+
+    /// Gửi `req` khi OHS `ready` và lấy mảng `field` của phản hồi, đường dẫn đã chuẩn hoá NFC.
+    fn request(&self, req: Map<String, Value>, field: &str) -> Result<Vec<Value>, OhsError> {
         let proc = self.shared.running().map_err(OhsError::NotReady)?;
         let state = self.shared.current(&proc);
         if !state.is_ready() {
             return Err(OhsError::NotReady(state));
         }
-        let mut req = Map::new();
-        req.insert("query".into(), query.into());
-        req.insert("options".into(), Value::Object(options));
         let body = match proc.call(req, self.request_timeout) {
             Ok(body) => body,
             Err(CallError::Disconnected) => return Err(OhsError::NotReady(self.state())),
             Err(CallError::Timeout(d)) => return Err(OhsError::Timeout(d)),
             Err(CallError::Remote(m)) => return Err(OhsError::Remote(m)),
         };
-        let mut results = match body {
-            Value::Object(mut m) => match m.remove("results") {
+        let mut items = match body {
+            Value::Object(mut m) => match m.remove(field) {
                 Some(Value::Array(a)) => a,
                 other => {
                     return Err(OhsError::Protocol(format!(
-                        "phản hồi search không có mảng results: {other:?}"
+                        "phản hồi không có mảng {field}: {other:?}"
                     )));
                 }
             },
@@ -417,8 +447,8 @@ impl Ohs {
                 )));
             }
         };
-        normalize_result_paths(&mut results);
-        Ok(results)
+        normalize_result_paths(&mut items);
+        Ok(items)
     }
 
     /// PID của tiến trình OHS hiện tại, nếu có (để chẩn đoán và kiểm không mồ côi).
@@ -453,13 +483,44 @@ fn absolute(p: &Path) -> PathBuf {
     std::path::absolute(p).unwrap_or_else(|_| p.to_path_buf())
 }
 
-/// Chuẩn hoá `path` của mỗi kết quả sang NFC, tại chỗ; trường khác giữ nguyên.
+/// Object tuỳ chọn của request: object giữ nguyên, `null` là object rỗng, kiểu khác là lỗi.
+fn options_object(options: Value) -> Result<Map<String, Value>, OhsError> {
+    match options {
+        Value::Object(m) => Ok(m),
+        Value::Null => Ok(Map::new()),
+        other => Err(OhsError::Invalid(format!(
+            "options phải là object, nhận {other}"
+        ))),
+    }
+}
+
+/// Khoá chứa danh sách đường dẫn note trong kết quả `search` và `read` của OHS.
+const PATH_LIST_FIELDS: [&str; 5] = [
+    "links",
+    "backlinks",
+    "markdownLinks",
+    "markdownBacklinks",
+    "suggestions",
+];
+
+/// Chuẩn hoá sang NFC, tại chỗ, `path` và các danh sách đường dẫn ([`PATH_LIST_FIELDS`]) của mỗi kết quả; trường
+/// khác giữ nguyên.
 fn normalize_result_paths(results: &mut [Value]) {
-    for r in results {
-        if let Some(Value::String(p)) = r.get_mut("path")
+    fn nfc(v: &mut Value) {
+        if let Value::String(p) = v
             && !is_nfc(p)
         {
             *p = p.nfc().collect();
+        }
+    }
+    for r in results {
+        if let Some(p) = r.get_mut("path") {
+            nfc(p);
+        }
+        for key in PATH_LIST_FIELDS {
+            if let Some(Value::Array(list)) = r.get_mut(key) {
+                list.iter_mut().for_each(nfc);
+            }
         }
     }
 }
@@ -678,6 +739,49 @@ mod tests {
         assert_eq!(results[0]["score"], 0.5);
         assert_eq!(results[1], json!({"score": 1}));
         assert_eq!(results[2]["path"], "ascii.md");
+    }
+
+    #[test]
+    fn path_lists_of_read_and_search_results_are_normalized_to_nfc() {
+        let n = |s: &str| -> String { s.nfd().collect() };
+        let mut results = vec![
+            json!({"path": n("Đà Nẵng.md"), "found": true, "content": n("Đà"),
+                   "links": [n("Huế.md"), "a.md"], "backlinks": [n("Hà Nội.md")],
+                   "markdownLinks": [n("Ổn.md")], "markdownBacklinks": [], "urls": [n("https://ví.dụ")]}),
+            json!({"path": n("Thiếu.md"), "found": false, "suggestions": [n("Thiếu sót.md")]}),
+        ];
+        normalize_result_paths(&mut results);
+        assert_eq!(
+            results[0],
+            json!({"path": "Đà Nẵng.md", "found": true, "content": n("Đà"),
+                   "links": ["Huế.md", "a.md"], "backlinks": ["Hà Nội.md"],
+                   "markdownLinks": ["Ổn.md"], "markdownBacklinks": [], "urls": [n("https://ví.dụ")]})
+        );
+        assert_eq!(
+            results[1],
+            json!({"path": "Thiếu.md", "found": false, "suggestions": ["Thiếu sót.md"]})
+        );
+    }
+
+    #[test]
+    fn invalid_read_input_is_rejected_before_anything_is_sent() {
+        let ohs = Ohs::unavailable(OhsState::Starting);
+        let one = vec!["a.md".to_owned()];
+        for (paths, options) in [
+            (vec![], Value::Null),
+            (vec![" ".to_owned()], Value::Null),
+            (one.clone(), json!("x")),
+            (one.clone(), json!({"paths": ["b.md"]})),
+            (one.clone(), json!({"action": "search"})),
+            (one.clone(), json!({"id": "r1"})),
+        ] {
+            assert!(
+                matches!(ohs.read(&paths, options.clone()), Err(OhsError::Invalid(_))),
+                "{paths:?} {options}"
+            );
+        }
+        let err = ohs.read(&one, json!({"related": false})).unwrap_err();
+        assert_eq!(err.not_ready_error().unwrap()["state"], "broken");
     }
 
     #[test]

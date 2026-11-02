@@ -19,7 +19,7 @@ mod process;
 
 #[test]
 #[ignore = "cần gói OHS thật (PKM_OHS_DIR) và vault (PKM_OHS_TEST_VAULT)"]
-fn real_ohs_searches_concurrently_with_nfc_paths_and_exits_cleanly() {
+fn real_ohs_searches_concurrently_reads_with_nfc_paths_and_exits_cleanly() {
     let vault = PathBuf::from(std::env::var_os("PKM_OHS_TEST_VAULT").expect("PKM_OHS_TEST_VAULT"));
     let tmp = tempfile::tempdir().unwrap();
     let ohs = Ohs::launch(
@@ -69,6 +69,36 @@ fn real_ohs_searches_concurrently_with_nfc_paths_and_exits_cleanly() {
             .unwrap();
         assert_eq!(top[0]["path"], nfd_note);
     }
+
+    // `read` qua cùng tiến trình: note tìm được thì đọc được, đúng thứ tự, đường dẫn NFC; note không có thì
+    // `found: false` kèm gợi ý.
+    let hit = answers[0][0].clone();
+    let missing = "Không hề có note này.md".to_owned();
+    let notes = ohs
+        .read(
+            &[hit.clone(), missing.clone()],
+            json!({"snippetLength": 40, "related": true}),
+        )
+        .unwrap();
+    assert_eq!(notes.len(), 2);
+    assert_eq!(notes[0]["path"], hit.as_str());
+    assert_eq!(notes[0]["found"], true);
+    let content = notes[0]["content"].as_str().unwrap();
+    assert!(content.chars().count() <= 40, "{content:?}");
+    for key in ["links", "backlinks", "markdownLinks", "markdownBacklinks"] {
+        for p in notes[0][key].as_array().unwrap() {
+            assert!(is_nfc(p.as_str().unwrap()), "{key}: {p} chưa NFC");
+        }
+    }
+    assert_eq!(notes[1]["path"], missing.as_str());
+    assert_eq!(notes[1]["found"], false);
+    assert!(notes[1]["suggestions"].is_array(), "{}", notes[1]);
+    // Không truyền `related` thì OHS mặc định kèm liên kết; `related: false` thì danh sách liên kết rỗng.
+    let bare = ohs
+        .read(std::slice::from_ref(&hit), json!({"related": false}))
+        .unwrap();
+    assert_eq!(bare[0]["links"], json!([]));
+    assert_eq!(bare[0]["backlinks"], json!([]));
 
     ohs.shutdown();
     assert!(!process::alive(pid), "node {pid} còn chạy sau khi tắt");
