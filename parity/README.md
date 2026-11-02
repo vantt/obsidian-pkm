@@ -80,6 +80,7 @@ Mỗi mục (bảng, op, tool, file MCP, lệnh CLI) có một trong ba kết qu
 - Tool: `aliases`, `blocks` không có thứ tự; `related`: `seeds` và `related` sắp theo điểm giảm dần rồi id trước khi so (so tập note, thứ hạng, điểm).
 - CLI `stats`: `edges_by_origin`, `edges_by_rel` không có thứ tự.
 - MCP: so chuỗi.
+- Khoá object: khi so, chuỗi chuẩn (`canonical`) tự sắp khoá, vì `serde_json` bật `preserve_order` cho cả workspace. Dump của hai bên ghi khoá đã sắp như `write_json` của Python. Thứ tự khoá trên bản tin MCP thật được kiểm riêng bằng cách so với MCP server Python (`spec/PORTING.md`, mục MCP server).
 
 ## Ngoại lệ có tên
 
@@ -87,4 +88,11 @@ Chỗ Rust cố ý làm khác Python (PRD mục 4): một mục trong `exception
 
 ## Nối tầng Rust (phase 08–12)
 
-Mỗi phương thức của `RustSide` trong `src/rust_side.rs` (`table`, `answer`, `tool`, `mcp`, `cli`, `perf`) đang trả `None`, nên mọi mục báo "chưa có". Phase làm xong một tầng thì cho phương thức tương ứng trả `Some(...)` bằng cách gọi `pkm-core` (hoặc binary `pkm` cho CLI), giữ đúng định dạng trên; không đổi định dạng dump hay golden. Bộ câu luôn lấy từ dump mẫu, nên Rust chạy lại đúng các câu Python đã chạy.
+Mỗi phương thức của `RustSide` trong `src/rust_side.rs` lo một tầng, trả `Some(...)` khi bản Rust làm được và `None` khi chưa (mục đó báo "chưa có"). Định dạng dump và golden không đổi. Bộ câu luôn lấy từ dump mẫu, nên Rust chạy lại đúng các câu Python đã chạy.
+
+- `table`: gọi `pkm-core` (`index`, `vault`, `schema`).
+- `answer`, `tool`: gọi `pkm_core::query::answers::run` và `pkm_core::tools::call`, trả `Outcome` (`result` hoặc tên ngoại lệ Python ở `raised`). `tool` trả `None` cho `related` khi lõi chưa có tool này.
+- `mcp`, `cli`: chạy chính binary `pkm` (`src/rust_side/binary.rs`).
+- `perf`: số đo, không chặn.
+
+**Binary `pkm` phải được dựng trước khi chạy `parity check` hay `parity rust-dump`** (`cargo build -p pkm`, hoặc `cargo test --workspace` đã dựng). Bộ so khớp tìm binary theo `PKM_BIN`, không có thì tìm cạnh binary `parity` trong cùng `target/`. Không thấy binary thì tầng MCP và CLI báo "chưa có" kèm cảnh báo, không bao giờ tính là khớp.

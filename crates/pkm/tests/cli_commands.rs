@@ -1,5 +1,5 @@
-//! Binary `pkm` như người dùng gọi: lệnh trên vault không cần tầng tool (`build`, `stats`, `validate`), cách đọc
-//! nhớ trong index, `pkm mcp install --dry-run`, `pkm doctor`, trợ giúp.
+//! Binary `pkm` như người dùng gọi: lệnh trên vault (`build`, `stats`, `validate`, các lệnh hỏi graph qua tầng tool),
+//! cách đọc nhớ trong index, `pkm mcp install --dry-run`, `pkm doctor`, trợ giúp.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -130,6 +130,47 @@ fn first_query_builds_the_missing_index_quietly() {
     let o = pkm(&[&v.vault, "stats"]);
     assert!(o.status.success(), "{o:?}");
     assert!(Path::new(&v.vault).join(".kg/graph.db").is_file());
+}
+
+#[test]
+fn graph_commands_query_the_index_like_python_cli() {
+    let v = vault();
+    let run = |args: &[&str]| -> Value {
+        let mut all = vec![v.vault.as_str()];
+        all.extend_from_slice(args);
+        all.extend_from_slice(&["--db", &v.db, "--packs", "business"]);
+        let o = pkm(&all);
+        assert!(o.status.success(), "{args:?}: {o:?}");
+        let text = stdout(&o);
+        assert!(text.starts_with("{\n "), "JSON thụt lề 1: {text}");
+        serde_json::from_str(&text).unwrap()
+    };
+    let r = run(&["find", "doanh", "thu"]);
+    assert_eq!(r["count"], 1);
+    assert_eq!(r["items"][0]["id"], "Yếu tố/Doanh thu.md");
+    // CLI gọi thẳng `Tools.note`: không link `obsidian://`, không thân note, id sai không gợi ý.
+    let r = run(&["note", "Yếu tố/Doanh thu.md"]);
+    assert_eq!(r["type"], "factor");
+    assert!(r.get("url").is_none() && r.get("body").is_none(), "{r}");
+    let r = run(&["note", "Doanh thu"]);
+    assert_eq!(
+        r,
+        serde_json::json!({"error": "không có note Doanh thu; dùng find"})
+    );
+    let r = run(&["neighbors", "Yếu tố/Doanh thu.md", "--dir", "in"]);
+    assert_eq!(r["items"][0]["rel"], "increased_by");
+    assert_eq!(r["items"][0]["node"], "Yếu tố/Số lead.md");
+    let r = run(&["reach", "Yếu tố/Số lead.md", "--max-depth", "2"]);
+    assert_eq!(
+        r["items"],
+        serde_json::json!([{"id": "Yếu tố/Doanh thu.md", "depth": 1}])
+    );
+    let r = run(&["select", "type=factor", "--limit", "1"]);
+    assert_eq!((&r["count"], &r["truncated"]), (&2.into(), &true.into()));
+    assert!(r["handle"].as_str().unwrap().starts_with("select-"), "{r}");
+    // Không có --as-of: Python so với NULL trong SQL, không note nào khớp.
+    let r = run(&["valid", "factor"]);
+    assert_eq!(r, serde_json::json!({"count": 0, "items": []}));
 }
 
 #[test]

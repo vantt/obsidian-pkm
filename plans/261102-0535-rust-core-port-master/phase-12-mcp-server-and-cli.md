@@ -1,6 +1,6 @@
 ---
 title: "Phase 12: MCP server và CLI"
-status: in-progress
+status: done
 priority: P1
 effort: "2 ngày"
 prd: R10
@@ -24,15 +24,19 @@ MCP stdio thay được MCP `kg` Python: bắt tay khớp từng chữ, refresh 
 - Phần cắm Rust của bộ so khớp cho tầng MCP và CLI.
 
 ## Việc cần làm
-- [ ] MCP theo Q4: tên server, tên tool, mô tả, schema tham số, dạng kết quả giống Python từng chữ (11 tool, gồm `related` qua điểm vào chung của `tools`).
+- [x] MCP theo Q4: tên server, tên tool, mô tả, schema tham số, dạng kết quả giống Python từng chữ (11 tool, gồm `related` qua điểm vào chung của `tools`).
 - [ ] Cờ khởi động đủ như mục 8 PRD; cờ OHS đổi nghĩa thành đường dẫn gói OHS.
 - [x] `instructions` ghép như Python: mô tả vault (`--about`), mô tả từng loại trong schema, số note và quan hệ, đoạn của adapter, khối cố định.
 - [x] Refresh nền mặc định 5 s bằng `std::thread`; log JSONL (`--log`); giới hạn ký tự (`--max-chars`).
-- [ ] CLI bằng `clap`: `build [--full]`, `stats`, `validate`, `find`, `note`, `neighbors`, `reach`, `paths`, `loops`, `provenance`, `select`, `valid`, `mcp`, cùng tuỳ chọn chung của mục 10.
+- [x] CLI bằng `clap`: `build [--full]`, `stats`, `validate`, `find`, `note`, `neighbors`, `reach`, `paths`, `loops`, `provenance`, `select`, `valid`, `mcp`, cùng tuỳ chọn chung của mục 10.
 - [x] `pkm --version` in phiên bản và sha đặc tả đã khớp.
-- [ ] Chuyển 13 test của `test_mcp.py`.
+- [x] Chuyển 13 test của `test_mcp.py` (11 đã chuyển; 2 test cần `related` chờ phase 11, đánh dấu trong `spec/PORTING.md`).
 
-## Trạng thái (2026-11-02)
+## Trạng thái (2026-11-02, nối tầng tool)
+
+Xong. `tool_layer::installed()` bọc `pkm_core::tools`. Bộ so khớp trên kg-solo: 64 mục, 0 lệch chưa có tên, chỉ `tools/related` còn "chưa có". `mcp/tools_list` và cả 21 lệnh CLI giống golden từng byte. Bản tin `tools/list` giống MCP server Python từng byte, kể cả thứ tự khoá. 11 trên 13 test `test_mcp.py` đã chuyển (`crates/pkm/tests/mcp_tools.rs`); `test_related` và `test_related_on_fixture` chờ `related` của phase 11, vì mục nghiệm thu cho phép nghiệm thu 10 tool trước. Claude Code headless gọi được 10 tool qua `pkm` trên kg-solo. `pkm mcp install` rồi `--check` báo `11 tool`. Mục cờ khởi động vẫn mở: chờ lead quyết `--limit`, `--system` (câu hỏi ở báo cáo trước). Báo cáo: `plans/reports/fullstack-developer-261102-1530-phase-12-wiring.md`.
+
+## Trạng thái trước (2026-11-02, phần vỏ)
 
 Xong phần không cần tầng tool: giao thức MCP, `instructions`, dựng nền và refresh, thu gọn, cắt, log; CLI `build`, `stats`, `validate`, `pkm mcp install`, `pkm doctor`. Bộ so khớp trên kg-solo: `initialize`, `instructions` và 8 lệnh CLI giống golden từng byte. Còn: nối `pkm_core::tools` vào `installed()` trong `crates/pkm/src/mcp/tool_layer.rs` (danh mục tool, `Server.call`, `Tools.<method>` cho CLI), rồi `tools/list`, 13 lệnh CLI hỏi graph và 9 test `test_mcp.py` còn lại (`spec/PORTING.md`). Cờ: có đủ cờ của `parser()` Python; `--limit`, `--system` mà PRD mục 8 kể không có trong parser MCP của Python nên chưa thêm (chờ lead quyết); `--ohs-cli`, `--ohs-node` chuyển nguyên cho tầng tool. Báo cáo: `plans/reports/fullstack-developer-261102-1500-phase-12-cli-mcp.md`.
 

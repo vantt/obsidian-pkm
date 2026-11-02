@@ -230,34 +230,6 @@ Test Rust thêm, không có bản Python: `index::tests::{noop_build_keeps_every
 
 Test Rust thêm, không có bản Python: `index::tests::{noop_build_keeps_every_table, meta_like_python, counts_escape_non_ascii_status_like_json_dumps, changing_packs_or_options_rebuilds_everything, body_edges_and_edge_keys_links, options_pick_and_previous, ctx_add_and_drop_deduplicate_by_key, regexp_follows_python_re, missing_vault_is_an_error, empty_vault_builds_an_empty_index}`, `index::py::tests::*` (`float()`, `json.dumps`), `validate::tests::{rule_filter_and_limit, report_like_the_validate_command, views_are_recreated_and_sql_kept}`, `adapter::tests::{similar_file_replaces_both_pair_files, broken_private_data_is_an_error, load_and_system_pages}`.
 
-## MCP server (`pkm VAULT mcp`) và CLI (`pkm VAULT <lệnh>`)
-
-Thay `scripts/kg/mcp_server.py`, `scripts/kg/cli.py`, `scripts/kg/__main__.py` (`5a3eb2f`). Mã: `crates/pkm/src/mcp.rs` (và `mcp/`), `crates/pkm/src/cli.rs`. Bộ so khớp chạy chính binary `pkm` cho tầng MCP và CLI (`parity/src/rust_side/binary.rs`); trên kg-solo `initialize`, `instructions` và 8 lệnh CLI không cần tool (`build` ba kiểu, `stats`, `validate` ba kiểu, `loops` thiếu `--max-len`) giống golden từng byte.
-
-Tầng tool đi qua chỗ nối `crates/pkm/src/mcp/tool_layer.rs`: `tools/list` lấy danh mục tool từ tầng tool, `tools/call` gọi `ToolSession::call` (như `Server.call`), lệnh CLI hỏi graph gọi `ToolSession::query` (như `Tools.<method>`). Khi binary chưa có tầng tool, `tools/list` rỗng, `tools/call` trả `index unavailable: …`, lệnh CLI hỏi graph thoát mã 3 và bộ so khớp báo "chưa có".
-
-Giống Python: tên server `kg` `0.1.0`, phiên bản giao thức trả lại đúng bản client xin nếu thuộc `2025-06-18`, `2025-03-26`, `2024-11-05` (không thì `2025-06-18`); mỗi bản tin in như `json.dumps(..., ensure_ascii=False)` (dấu `, ` và `: `), dòng hỏng `-32700` in như `json.dumps` mặc định; batch, notification, phương thức lạ (`method not found: None` khi thiếu `method`), ba phương thức danh sách rỗng; `instructions` ghép đủ tám khối, thêm khối trang hệ thống, đoạn adapter, khối link `obsidian://` (`--obsidian-vault ""` để tắt); dựng index ở luồng nền, `initialize` và `tools/list` chờ tối đa 20 giây; refresh trước mỗi `tools/call` theo `--refresh-every` (mặc định 5, 30 khi vault ở `/mnt/<ổ>` dưới WSL; `-1` chỉ dựng lúc khởi động), chỉ mở lại graph khi build `full` hoặc có note đọc lại, xoá; build lỗi thì dùng index cũ; kết quả tool thu gọn (`compact`), `isError` khi object có `error` và nhiều nhất hai khoá, cắt ở `--max-chars` ký tự (đếm theo ký tự như `len` của Python); log JSONL `--log` cùng khoá và thứ tự; hết stdin thì thoát 0. CLI: cùng lệnh, cùng cờ (viết tắt cờ được như `argparse`), cùng điều kiện dựng index (`build`, `--refresh`, DB chưa có), cùng đầu ra (`build` hai dòng, `build --json` thụt lề 1 không xuống dòng cuối, JSON thụt lề 1, `validate` dạng văn bản), `loops cần --max-len` thoát 1.
-
-Khác Python (không có trên kg-solo; không cần ngoại lệ có tên):
-- Lỗi ngoài dự kiến của CLI in `pkm: <lý do>` và thoát 1 (Python in traceback, cũng thoát 1). Thiếu tham số vị trí (`note` không có NODE) và `select` có mục không dạng `KHOÁ=GIÁ_TRỊ` báo lỗi như vậy thay vì `IndexError`, `ValueError`.
-- MCP server không chết ở các chỗ Python ném ngoại lệ ra khỏi vòng đọc: `params` không phải object coi như rỗng; dòng không phải UTF-8 thành `-32700`; không ghi được file `--log` thì báo ra stderr rồi chạy tiếp.
-- Thêm `pkm mcp install …` và `pkm doctor …` ở đầu dòng lệnh. Như Python, chữ thứ hai là `mcp` thì luôn là MCP server; vault tên `mcp` chỉ đụng với `pkm mcp install`, vault tên `doctor` chỉ đụng khi chữ sau là cờ (`pkm doctor --json`). Ghi `./mcp`, `./doctor` để tránh.
-- `--ohs-cli`, `--ohs-node` (và `KG_OHS_CLI`, `KG_OHS_NODE`) chuyển nguyên cho tầng tool; nghĩa mới (gói OHS, PRD mục 9) thuộc tầng tool.
-
-Nguồn: `scripts/kg/tests/test_mcp.py` (13 test). Chạy: `cargo test -p pkm` (lọc `mcp::`, `cli::`, `--test mcp_stdio`, `--test cli_commands`).
-
-| Test Python | Test Rust | Trạng thái | Ghi chú |
-|---|---|---|---|
-| `Protocol.test_handshake` | `mcp::tests::handshake` | đã chuyển | Kiểm thêm từng byte của bản tin trả lời |
-| `Protocol.test_old_protocol_version_echoed` | `mcp::tests::old_protocol_version_echoed`, `tests/mcp_stdio.rs` | đã chuyển | Bản qua binary thật kiểm cả thoát khi stdin đóng |
-| `Protocol.test_tools_list` | `mcp::tests::tools_list_comes_from_the_tool_layer` | một phần | Vỏ trả đúng danh mục của tầng tool (giả, lấy từ golden); câu chữ danh mục kiểm cùng tầng tool và qua bộ so khớp (`mcp/tools_list`) |
-| `Protocol.test_unknown_node` | `mcp::tests::tool_results_are_compacted_and_errors_flagged` | một phần | Phần vỏ: lỗi kèm `did_you_mean` thành `isError`; tìm `did_you_mean` thuộc tầng tool |
-| `Protocol.test_find_and_note`, `test_neighbors_layers_window`, `test_reach_paths_loops`, `test_provenance_select_valid`, `test_more`, `test_related` | — | chưa chuyển | Kiểm kết quả tool: chuyển khi nối tầng tool |
-| `Refresh.test_edit_visible_on_next_call` | `mcp::tests::edit_visible_on_next_call`, `mcp::tests::packs_come_from_the_previous_build` | một phần | Sửa note thì lời gọi sau dựng lại index và mở lại graph; gói lấy từ lần build trước. Kết quả `select`, `neighbors`, `valid` qua tool chuyển khi nối tầng tool |
-| `FixtureOverMcp.test_answer_key_over_protocol`, `test_related_on_fixture` | — | chưa chuyển | Cần tầng tool (và gói OHS cho `related`) |
-
-Test Rust thêm, không có bản Python: `mcp::tests::{protocol_edges_like_python, long_results_are_cut_at_max_chars_counting_characters, without_tool_layer_calls_report_index_unavailable, every_tool_call_is_logged_as_jsonl, missing_vault_reports_the_build_error_in_instructions, obsidian_vault_flag_names_or_disables_links, windows_drive_only_under_mnt_letter}`, `mcp::pyjson::tests::*` (`json.dumps`, `repr(float)`), `mcp::instructions::tests::*` (`urllib.parse.quote`), `cli::tests::*`, `tests/cli_commands.rs` (cả `pkm mcp install --dry-run`, `pkm doctor --json`), `tests/mcp_stdio.rs::bad_flag_is_a_usage_error`.
-
 ## Module `query`, `tools`
 
 `pkm_core::query::Graph` là `scripts/kg/query.py`: câu SQL (recursive CTE của `reach`, `paths`, `loops`, điều kiện lọc `_w`, `_hid`, `_parts`, thứ tự `ORDER BY`) chép nguyên, phần Rust chỉ ghép câu, đọc dòng và gộp (`_collapse`, Tarjan của `all_loops`). `pkm_core::tools::Tools` là `scripts/kg/tools.py` (vỏ kết quả dài, handle `sha1` của `json.dumps(..., sort_keys=True)`, bộ nhớ 64 kết quả cho `more`); `pkm_core::tools::call` là `Server.call` của `scripts/kg/mcp_server.py` (note id chuẩn hoá NFC, `did_you_mean`, `url` `obsidian://open`, `body`, các lỗi `{"error": ...}`), điểm vào chung cho MCP, CLI và bộ so khớp; `Err` là chỗ Python ném ngoại lệ, mang tên lớp ngoại lệ Python (`KeyError`, `ValueError`, `TypeError`, ...). `pkm_core::tools::defs` là `tool_defs` (mô tả, schema tham số của `tools/list`): so với Python theo từng ký tự cả thứ tự khoá, với `hidden` đúng và sai. Kết quả dạng `dict` giữ thứ tự khoá của Python (`serde_json` có `preserve_order`). `pkm_core::query::answers` là `scripts/kg/tests/fixture_check.py` (`run`, `norm`, `check`). `related` chưa có: `call` trả `NotImplementedError`, bộ so khớp báo "chưa có".
@@ -279,3 +251,38 @@ Giới hạn đã biết (không gặp trong bộ so khớp; MCP client gửi đ
 | `check` (70 câu graph, 11 câu bảng) | `query::answers::check` | `query::tests::answer_key` |
 
 Test Rust thêm, không có bản Python: `query::tests::{reach_depth_and_direction, note_card_counts_edges_by_relation_and_layer, all_loops_start_at_smallest_id, answers_like_fixture_check}`, `query::py::tests::*` (`json.dumps`, `str`, `repr`, `int()`, cắt danh sách, `bool`), `tools::tests::{handle_like_python, short_results_have_no_handle_and_cache_is_bounded, call_reports_unknown_notes_with_suggestions, default_vault_name_like_abspath_basename, call_note_has_link_and_body, call_errors_like_server_call, call_runs_each_tool_with_mcp_arguments, definitions_match_the_golden_tools_list, definitions_add_system_only_when_vault_has_system_pages}`.
+
+
+## MCP server (`pkm VAULT mcp`) và CLI (`pkm VAULT <lệnh>`)
+
+Thay `scripts/kg/mcp_server.py`, `scripts/kg/cli.py`, `scripts/kg/__main__.py` (`5a3eb2f`). Mã: `crates/pkm/src/mcp.rs` (và `mcp/`), `crates/pkm/src/cli.rs`. Bộ so khớp chạy chính binary `pkm` cho tầng MCP và CLI (`parity/src/rust_side/binary.rs`); trên kg-solo `initialize`, `tools/list`, `instructions` và cả 21 lệnh CLI của golden (`build` ba kiểu, `stats`, `validate` ba kiểu, 13 lệnh hỏi graph, `loops` thiếu `--max-len`) giống golden từng byte. Bản tin `tools/list` của `pkm` và của MCP server Python trên cùng vault giống nhau từng byte, kể cả thứ tự khoá. 15 lời gọi `tools/call` (mọi tool trừ `related`, cả lỗi) cũng giống từng byte, trừ số `id` của cạnh: bản Python chạy trên máy đánh số cạnh theo thứ tự duyệt thư mục, còn bản Rust đánh số như golden.
+
+Tầng tool đi qua chỗ nối `crates/pkm/src/mcp/tool_layer.rs`, nối vào `pkm_core::tools`. `tools/list` là `tools::definitions(hidden)`. `tools/call` gọi `tools::call` (như `Server.call`; ngoại lệ thành `error: <repr>`). Lệnh CLI hỏi graph gọi các phương thức của `tools::Tools`, như `Tools.<method>` mà `cli.py` gọi: không chuẩn hoá NFC, không `did_you_mean`, không `url`, không `body`. Riêng `valid` của CLI đi qua `tools::call`, để khi vắng `--as-of` kết quả rỗng như `None` của Python. Vỏ vẫn chạy khi không có tầng tool (test của vỏ dùng tầng tool giả): `tools/list` rỗng, `tools/call` trả `index unavailable: …`, lệnh CLI hỏi graph thoát mã 3. `related` đi qua điểm vào chung; khi lõi chưa có tool này thì MCP trả `error: NotImplementedError(...)`.
+
+Giống Python: tên server `kg` `0.1.0`, phiên bản giao thức trả lại đúng bản client xin nếu thuộc `2025-06-18`, `2025-03-26`, `2024-11-05` (không thì `2025-06-18`); mỗi bản tin in như `json.dumps(..., ensure_ascii=False)` (dấu `, ` và `: `), dòng hỏng `-32700` in như `json.dumps` mặc định; batch, notification, phương thức lạ (`method not found: None` khi thiếu `method`), ba phương thức danh sách rỗng; `instructions` ghép đủ tám khối, thêm khối trang hệ thống, đoạn adapter, khối link `obsidian://` (`--obsidian-vault ""` để tắt); dựng index ở luồng nền, `initialize` và `tools/list` chờ tối đa 20 giây; refresh trước mỗi `tools/call` theo `--refresh-every` (mặc định 5, 30 khi vault ở `/mnt/<ổ>` dưới WSL; `-1` chỉ dựng lúc khởi động), chỉ mở lại graph khi build `full` hoặc có note đọc lại, xoá; build lỗi thì dùng index cũ; kết quả tool thu gọn (`compact`), `isError` khi object có `error` và nhiều nhất hai khoá, cắt ở `--max-chars` ký tự (đếm theo ký tự như `len` của Python); log JSONL `--log` cùng khoá và thứ tự; hết stdin thì thoát 0. CLI: cùng lệnh, cùng cờ (viết tắt cờ được như `argparse`), cùng điều kiện dựng index (`build`, `--refresh`, DB chưa có), cùng đầu ra (`build` hai dòng, `build --json` thụt lề 1 không xuống dòng cuối, JSON thụt lề 1, `validate` dạng văn bản), `loops cần --max-len` thoát 1.
+
+Khác Python (không có trên kg-solo; không cần ngoại lệ có tên):
+- Lỗi ngoài dự kiến của CLI in `pkm: <lý do>` và thoát 1 (Python in traceback, cũng thoát 1). Thiếu tham số vị trí (`note` không có NODE) và `select` có mục không dạng `KHOÁ=GIÁ_TRỊ` báo lỗi như vậy thay vì `IndexError`, `ValueError`.
+- MCP server không chết ở các chỗ Python ném ngoại lệ ra khỏi vòng đọc: `params` không phải object coi như rỗng; dòng không phải UTF-8 thành `-32700`; không ghi được file `--log` thì báo ra stderr rồi chạy tiếp.
+- Thêm `pkm mcp install …` và `pkm doctor …` ở đầu dòng lệnh. Như Python, chữ thứ hai là `mcp` thì luôn là MCP server; vault tên `mcp` chỉ đụng với `pkm mcp install`, vault tên `doctor` chỉ đụng khi chữ sau là cờ (`pkm doctor --json`). Ghi `./mcp`, `./doctor` để tránh.
+- `--ohs-cli`, `--ohs-node` (và `KG_OHS_CLI`, `KG_OHS_NODE`) chuyển nguyên cho tầng tool; nghĩa mới (gói OHS, PRD mục 9) thuộc tầng tool.
+
+Nguồn: `scripts/kg/tests/test_mcp.py` (13 test). Chạy: `cargo test -p pkm` (lọc `mcp::`, `cli::`, `--test mcp_stdio`, `--test mcp_tools`, `--test cli_commands`). `tests/mcp_tools.rs` chạy binary thật trên vault `NOTES` của `test_kg.py` (bỏ các note `Lỗi/`), như `Client` của Python.
+
+| Test Python | Test Rust | Trạng thái | Ghi chú |
+|---|---|---|---|
+| `Protocol.test_handshake` | `mcp::tests::handshake` | đã chuyển | Kiểm thêm từng byte của bản tin trả lời |
+| `Protocol.test_old_protocol_version_echoed` | `mcp::tests::old_protocol_version_echoed`, `tests/mcp_stdio.rs` | đã chuyển | Bản qua binary thật kiểm cả thoát khi stdin đóng |
+| `Protocol.test_tools_list` | `tests/mcp_tools.rs::tools_list`, `mcp::tests::tools_list_comes_from_the_tool_layer` | đã chuyển | Câu chữ và thứ tự khoá so với golden qua bộ so khớp (`mcp/tools_list`) |
+| `Protocol.test_find_and_note` | `tests/mcp_tools.rs::find_and_note` | đã chuyển | |
+| `Protocol.test_unknown_node` | `tests/mcp_tools.rs::unknown_node`, `mcp::tests::tool_results_are_compacted_and_errors_flagged` | đã chuyển | |
+| `Protocol.test_neighbors_layers_window` | `tests/mcp_tools.rs::neighbors_layers_window` | đã chuyển | |
+| `Protocol.test_reach_paths_loops` | `tests/mcp_tools.rs::reach_paths_loops` | đã chuyển | |
+| `Protocol.test_provenance_select_valid` | `tests/mcp_tools.rs::provenance_select_valid` | đã chuyển | |
+| `Protocol.test_more` | `tests/mcp_tools.rs::more` | đã chuyển | |
+| `Protocol.test_related` | — | chưa chuyển | Cần tool `related` của lõi (hiện trả `NotImplementedError`) |
+| `Refresh.test_edit_visible_on_next_call` | `tests/mcp_tools.rs::edit_visible_on_next_call`, `mcp::tests::edit_visible_on_next_call`, `mcp::tests::packs_come_from_the_previous_build` | đã chuyển | |
+| `FixtureOverMcp.test_answer_key_over_protocol` | `tests/mcp_tools.rs::answer_key_over_protocol` | đã chuyển | Cần `PKM_KG_SOLO=<vault kg-solo>`, không có thì bỏ qua (Python bỏ qua khi thiếu node); CI so cùng bộ câu qua bộ so khớp |
+| `FixtureOverMcp.test_related_on_fixture` | — | chưa chuyển | Cần tool `related` của lõi |
+
+Test Rust thêm, không có bản Python: `mcp::tests::{protocol_edges_like_python, long_results_are_cut_at_max_chars_counting_characters, without_tool_layer_calls_report_index_unavailable, every_tool_call_is_logged_as_jsonl, missing_vault_reports_the_build_error_in_instructions, obsidian_vault_flag_names_or_disables_links, windows_drive_only_under_mnt_letter}`, `mcp::pyjson::tests::*` (`json.dumps`, `repr(float)`), `mcp::instructions::tests::*` (`urllib.parse.quote`), `cli::tests::*`, `tests/cli_commands.rs` (cả `graph_commands_query_the_index_like_python_cli`, `pkm mcp install --dry-run`, `pkm doctor --json`), `tests/mcp_stdio.rs::bad_flag_is_a_usage_error`.

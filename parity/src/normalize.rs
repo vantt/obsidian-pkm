@@ -18,9 +18,27 @@ pub const MTIME_TOLERANCE: i64 = 1;
 /// Khoá `meta` ghi thời điểm và thời gian dựng.
 const VOLATILE_META: [&str; 2] = ["built_at", "ms"];
 
-/// Chuỗi chuẩn của một giá trị JSON (khoá object đã sắp), dùng làm khoá so và khoá sắp.
+/// Chuỗi chuẩn của một giá trị JSON (khoá object đã sắp), dùng làm khoá so và khoá sắp. Hàm tự sắp khoá: `serde_json`
+/// bật `preserve_order` cho cả workspace, nên object giữ thứ tự chèn và hai object bằng nhau có thể in khác nhau.
 pub fn canonical(v: &Value) -> String {
-    serde_json::to_string(v).unwrap_or_default()
+    serde_json::to_string(&sorted_keys(v)).unwrap_or_default()
+}
+
+fn sorted_keys(v: &Value) -> Value {
+    match v {
+        Value::Array(a) => Value::Array(a.iter().map(sorted_keys).collect()),
+        Value::Object(m) => {
+            let mut pairs: Vec<(&String, &Value)> = m.iter().collect();
+            pairs.sort_by(|a, b| a.0.cmp(b.0));
+            Value::Object(
+                pairs
+                    .into_iter()
+                    .map(|(k, x)| (k.clone(), sorted_keys(x)))
+                    .collect(),
+            )
+        }
+        v => v.clone(),
+    }
 }
 
 fn sort_canonical(items: &mut [Value]) {
@@ -252,6 +270,18 @@ pub fn diff(expected: &Value, actual: &Value, path: &str, int_tol: i64, out: &mu
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn canonical_sorts_keys_whatever_the_insertion_order() {
+        let a = json!({"b": 1, "a": {"y": [{"q": 1, "p": 2}], "x": null}});
+        let b = json!({"a": {"x": null, "y": [{"p": 2, "q": 1}]}, "b": 1});
+        assert_eq!(canonical(&a), canonical(&b));
+        assert_eq!(
+            canonical(&a),
+            r#"{"a":{"x":null,"y":[{"p":2,"q":1}]},"b":1}"#
+        );
+        assert_ne!(canonical(&json!([1, 2])), canonical(&json!([2, 1])));
+    }
 
     #[test]
     fn floats_within_tolerance_ints_exact_and_types_distinct() {
