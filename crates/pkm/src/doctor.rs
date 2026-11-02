@@ -1,7 +1,12 @@
 //! `pkm doctor`: chẩn đoán máy người dùng (PRD mục 10, "Thêm"): cấu hình Claude Desktop và mục `kg`, file index,
-//! gói OHS và trạng thái OHS (D7), đường dẫn dài trên Windows. Mỗi mục không ổn có câu "việc cần làm".
+//! gói OHS và trạng thái OHS (D7), đường dẫn dài trên Windows. Mỗi mục không ổn có câu "việc cần làm" (`action`) và,
+//! khi có, một lệnh chạy được không cần hỏi gì (`fix`).
 //!
-//! Lệnh con được đăng ký ở `cli`: gọi [`run`] với [`DoctorArgs`]; mã thoát khác 0 khi [`Report::healthy`] là `false`.
+//! Chỉ đọc: không ghi file nào, không dựng index, không chạy OHS. Chạy thử OHS (có thể bắt đầu index và nạp model) chỉ
+//! khi có `--deep`. OHS là tuỳ chọn ở giai đoạn so khớp: mọi mục OHS không ổn chỉ là `warn`.
+//!
+//! Lệnh con được đăng ký ở `cli`: gọi [`run`] với [`DoctorArgs`]; mã thoát khác 0 khi [`Report::ok`] là `false`.
+//! Hợp đồng `--json` (khoá ổn định qua các bản): xem [`Report::to_json`].
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -11,7 +16,14 @@ use pkm_core::ohs::{OhsPackage, OhsState};
 use serde_json::{Value, json};
 
 use crate::install::config::{self, ConfigDoc, SERVER_NAME, ServerEntry};
-use crate::install::{self, Hooks};
+use crate::install::{self, Hooks, shell};
+
+/// Phiên bản của envelope `--json`.
+pub const SCHEMA: u32 = 1;
+
+/// Không có OHS thì chỉ `related` khi không có `hits` bị ảnh hưởng.
+const WITHOUT_OHS: &str = "không có OHS thì chỉ `related` khi không có `hits` bị ảnh hưởng; mọi tool khác của \
+                           `kg` chạy bình thường";
 
 /// Tuỳ chọn của `pkm doctor`.
 #[derive(clap::Args, Debug, Clone, Default)]
@@ -25,13 +37,14 @@ pub struct DoctorArgs {
     /// Thư mục gói OHS; mặc định như `pkm` tìm (biến PKM_OHS_DIR, rồi thư mục của bộ cài).
     #[arg(long, value_name = "DIR")]
     pub ohs: Option<PathBuf>,
-    /// Không chạy thử OHS (chỉ kiểm gói có đủ file).
+    /// Chạy thử OHS trên vault của mục `kg` để xem trạng thái (OHS có thể bắt đầu index và nạp model). Mặc định chỉ
+    /// kiểm gói có đủ file và `node --version`, không ghi gì.
     #[arg(long)]
-    pub no_ohs_start: bool,
-    /// Chờ OHS sẵn sàng tối đa bao nhiêu giây khi chạy thử.
+    pub deep: bool,
+    /// Chờ OHS sẵn sàng tối đa bao nhiêu giây khi chạy thử (--deep).
     #[arg(long, default_value_t = 15, value_name = "SECS")]
     pub ohs_wait: u64,
-    /// In kết quả dạng JSON.
+    /// In kết quả dạng JSON: {schema, ok, data: {checks: [{id, status, detail, action, fix}]}, error, next}.
     #[arg(long)]
     pub json: bool,
 }
@@ -42,7 +55,7 @@ pub enum Status {
     Ok,
     /// Chạy được nhưng nên xử lý (hoặc đang chờ, ví dụ OHS đang index).
     Warn,
-    /// Hỏng: `kg` hoặc tool cần OHS sẽ không chạy đúng.
+    /// Hỏng: `kg` sẽ không chạy đúng.
     Fail,
     /// Không áp dụng hoặc không kiểm được vì mục trước đã hỏng.
     Skip,
@@ -59,13 +72,16 @@ impl Status {
     }
 }
 
-/// Một mục kiểm: mã ổn định (cho `--json`), kết quả, mô tả, và việc cần làm khi không ổn.
+/// Một mục kiểm: mã ổn định (cho `--json`), kết quả, mô tả, việc cần làm khi không ổn, và lệnh sửa chạy được.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Check {
     pub id: &'static str,
     pub status: Status,
     pub detail: String,
+    /// Câu giải thích việc cần làm (cho người đọc).
     pub action: Option<String>,
+    /// Lệnh sửa cho shell mặc định của máy (PowerShell trên Windows, `sh` nơi khác), không hỏi gì, chạy lại được.
+    pub fix: Option<String>,
 }
 
 impl Check {
@@ -75,15 +91,14 @@ impl Check {
             status: Status::Ok,
             detail: detail.into(),
             action: None,
+            fix: None,
         }
     }
 
     fn skip(id: &'static str, detail: impl Into<String>) -> Self {
         Self {
-            id,
             status: Status::Skip,
-            detail: detail.into(),
-            action: None,
+            ..Self::ok(id, detail)
         }
     }
 
@@ -98,7 +113,13 @@ impl Check {
             status,
             detail: detail.into(),
             action: Some(action.into()),
+            fix: None,
         }
+    }
+
+    fn with_fix(mut self, fix: Option<String>) -> Self {
+        self.fix = fix;
+        self
     }
 }
 
@@ -110,7 +131,7 @@ pub struct Report {
 
 impl Report {
     /// Không có mục nào `fail`.
-    pub fn healthy(&self) -> bool {
+    pub fn ok(&self) -> bool {
         self.checks.iter().all(|c| c.status != Status::Fail)
     }
 
@@ -118,20 +139,56 @@ impl Report {
         self.checks.iter().filter(|c| c.status == status).count()
     }
 
-    /// `{"healthy": bool, "checks": [{"id", "status", "detail", "action"}]}`; `action` là `null` khi ổn.
+    fn failed(&self) -> impl Iterator<Item = &Check> {
+        self.checks.iter().filter(|c| c.status == Status::Fail)
+    }
+
+    /// Lệnh sửa của các mục `fail`, theo thứ tự, bỏ trùng.
+    pub fn next(&self) -> Vec<String> {
+        let mut next: Vec<String> = Vec::new();
+        for fix in self.failed().filter_map(|c| c.fix.clone()) {
+            if !next.contains(&fix) {
+                next.push(fix);
+            }
+        }
+        next
+    }
+
+    /// Envelope chung của `--json`, khoá ổn định qua các bản:
+    ///
+    /// `{"schema": 1, "ok": bool, "data": {"checks": [{"id", "status", "detail", "action", "fix"}]},
+    ///   "error": null | {"code": "checks_failed", "why", "fix"}, "next": [lệnh, …]}`
+    ///
+    /// `status` thuộc `ok`, `warn`, `fail`, `skip`; `action`, `fix` là `null` khi không có. `next` là các `fix` của
+    /// mục `fail` theo thứ tự, bỏ trùng (rỗng khi `ok`); `error.fix` là lệnh đầu của `next` hoặc `null`.
     pub fn to_json(&self) -> Value {
+        let next = self.next();
+        let error = (!self.ok()).then(|| {
+            let ids: Vec<&str> = self.failed().map(|c| c.id).collect();
+            json!({
+                "code": "checks_failed",
+                "why": format!("{} mục lỗi: {}", ids.len(), ids.join(", ")),
+                "fix": next.first(),
+            })
+        });
         json!({
-            "healthy": self.healthy(),
-            "checks": self.checks.iter().map(|c| json!({
-                "id": c.id,
-                "status": c.status.name(),
-                "detail": c.detail,
-                "action": c.action,
-            })).collect::<Vec<_>>(),
+            "schema": SCHEMA,
+            "ok": self.ok(),
+            "data": {
+                "checks": self.checks.iter().map(|c| json!({
+                    "id": c.id,
+                    "status": c.status.name(),
+                    "detail": c.detail,
+                    "action": c.action,
+                    "fix": c.fix,
+                })).collect::<Vec<_>>(),
+            },
+            "error": error,
+            "next": next,
         })
     }
 
-    /// Bản cho người đọc: mỗi mục một dòng, việc cần làm thụt vào dòng dưới, dòng tổng kết ở cuối.
+    /// Bản cho người đọc: mỗi mục một dòng, việc cần làm và lệnh sửa thụt vào dòng dưới, dòng tổng kết ở cuối.
     pub fn to_text(&self) -> String {
         let mut out = String::new();
         for c in &self.checks {
@@ -145,6 +202,9 @@ impl Report {
             if let Some(action) = &c.action {
                 out.push_str(&format!("       việc cần làm: {action}\n"));
             }
+            if let Some(fix) = &c.fix {
+                out.push_str(&format!("       lệnh: {fix}\n"));
+            }
         }
         out.push_str(&format!(
             "{} lỗi, {} cảnh báo\n",
@@ -155,9 +215,21 @@ impl Report {
     }
 }
 
-/// Chạy `pkm doctor`, in kết quả; trả [`Report::healthy`].
+/// Chạy `pkm doctor`, in kết quả; trả [`Report::ok`].
 pub fn run(args: &DoctorArgs, hooks: &dyn Hooks, out: &mut dyn Write) -> Result<bool, String> {
-    let report = diagnose(args, hooks);
+    let exe = std::env::current_exe()
+        .map_err(|e| format!("không xác định được đường dẫn của pkm: {e}"))?;
+    run_with(args, hooks, &exe, out)
+}
+
+/// [`run`] với binary `pkm` truyền vào (dùng trong lệnh sửa khi mục `kg` không chỉ tới binary nào dùng được).
+pub fn run_with(
+    args: &DoctorArgs,
+    hooks: &dyn Hooks,
+    exe: &Path,
+    out: &mut dyn Write,
+) -> Result<bool, String> {
+    let report = diagnose(args, hooks, exe);
     let text = if args.json {
         format!(
             "{}\n",
@@ -167,20 +239,83 @@ pub fn run(args: &DoctorArgs, hooks: &dyn Hooks, out: &mut dyn Write) -> Result<
         report.to_text()
     };
     out.write_all(text.as_bytes()).map_err(|e| e.to_string())?;
-    Ok(report.healthy())
+    Ok(report.ok())
 }
 
-/// Chạy mọi mục kiểm.
-pub fn diagnose(args: &DoctorArgs, hooks: &dyn Hooks) -> Report {
+/// Lệnh sửa dựng từ mục `kg`: chạy bằng binary của mục đó nếu còn, không thì bằng `pkm` đang chạy.
+struct Fixes {
+    exe: String,
+    /// `args` của mục `kg` khi vault trong đó còn và `args` đúng dạng [`install::server_entry`] ghi.
+    entry_args: Option<Vec<String>>,
+    no_ohs: bool,
+}
+
+impl Fixes {
+    fn new(entry: Option<&ServerEntry>, exe: &Path) -> Self {
+        let usable = entry
+            .map(|e| Path::new(&e.command))
+            .filter(|c| c.is_absolute() && c.is_file());
+        let entry_args = entry
+            .filter(|e| install::entry_paths(&e.args).0.is_some_and(|v| v.is_dir()))
+            .filter(|e| install::reinstall_args(&e.args, false).is_some())
+            .map(|e| e.args.clone());
+        Self {
+            exe: usable.unwrap_or(exe).to_string_lossy().into_owned(),
+            entry_args,
+            no_ohs: entry.is_some_and(installed_without_ohs),
+        }
+    }
+
+    fn line(&self, args: Vec<String>) -> String {
+        shell::command_line(&self.exe, &args)
+    }
+
+    /// `pkm mcp install` lại với đúng vault và cờ của mục `kg` (từ chối khi Claude Desktop đang chạy).
+    fn reinstall(&self) -> Option<String> {
+        install::reinstall_args(self.entry_args.as_deref()?, self.no_ohs).map(|a| self.line(a))
+    }
+
+    /// Dựng lại index của mục `kg` vào `db`.
+    fn rebuild(&self, db: &Path) -> Option<String> {
+        let mut args = install::rebuild_args(self.entry_args.as_deref()?)?;
+        let db = db.to_string_lossy().into_owned();
+        match args.iter().position(|a| a == "--db") {
+            Some(i) if i + 1 < args.len() => args[i + 1] = db,
+            _ => args.extend(["--db".to_owned(), db]),
+        }
+        Some(self.line(args))
+    }
+}
+
+/// Mục `kg` được cài với `--no-ohs` (`env` có `PKM_NO_OHS=1`).
+fn installed_without_ohs(entry: &ServerEntry) -> bool {
+    entry
+        .env
+        .iter()
+        .any(|(k, v)| k == install::NO_OHS_ENV && v == "1")
+}
+
+/// Chạy mọi mục kiểm. `exe` là binary `pkm` dùng trong lệnh sửa khi mục `kg` không chỉ tới binary nào dùng được.
+pub fn diagnose(args: &DoctorArgs, hooks: &dyn Hooks, exe: &Path) -> Report {
     let mut checks = Vec::new();
     let entry = check_config(args.config.as_deref(), &mut checks);
+    let fixes = Fixes::new(entry.as_ref(), exe);
+    if let Some(c) = checks.last_mut().filter(|c| c.status == Status::Fail) {
+        c.fix = fixes.reinstall();
+    }
     let (vault, entry_db) = entry
         .as_ref()
         .map(|e| install::entry_paths(&e.args))
         .unwrap_or_default();
-    checks.push(check_db(args.db.clone().or(entry_db), hooks));
-    let pkg = check_ohs_package(args.ohs.as_deref(), &mut checks);
-    checks.push(check_ohs_state(pkg, vault.as_deref(), args, hooks));
+    checks.push(check_db(args.db.clone().or(entry_db), &fixes, hooks));
+    let pkg = check_ohs_package(args.ohs.as_deref(), &fixes, &mut checks);
+    checks.push(check_ohs_node(pkg.as_ref(), hooks));
+    checks.push(check_ohs_state(
+        pkg,
+        vault.filter(|v| v.is_dir()).as_deref(),
+        args,
+        hooks,
+    ));
     checks.push(check_long_paths(hooks));
     Report { checks }
 }
@@ -288,7 +423,7 @@ fn entry_problem(entry: &ServerEntry) -> Option<String> {
     None
 }
 
-fn check_db(db: Option<PathBuf>, hooks: &dyn Hooks) -> Check {
+fn check_db(db: Option<PathBuf>, fixes: &Fixes, hooks: &dyn Hooks) -> Check {
     const ID: &str = "db";
     let Some(db) = db else {
         return Check::skip(
@@ -298,21 +433,22 @@ fn check_db(db: Option<PathBuf>, hooks: &dyn Hooks) -> Check {
     };
     let action =
         "Chạy `pkm mcp install VAULT` (dựng index lần đầu), hoặc `pkm VAULT build --db <file>`.";
-    if !db.is_file() {
-        return Check::bad(
-            ID,
-            Status::Fail,
-            format!("{} chưa có", db.display()),
-            action,
-        );
-    }
-    match hooks.check_db(&db) {
-        Ok(detail) => Check::ok(ID, detail),
-        Err(e) => Check::bad(ID, Status::Fail, e, action),
-    }
+    let detail = if db.is_file() {
+        match hooks.check_db(&db) {
+            Ok(detail) => return Check::ok(ID, detail),
+            Err(e) => e,
+        }
+    } else {
+        format!("{} chưa có", db.display())
+    };
+    Check::bad(ID, Status::Fail, detail, action).with_fix(fixes.rebuild(&db))
 }
 
-fn check_ohs_package(flag: Option<&Path>, checks: &mut Vec<Check>) -> Option<OhsPackage> {
+fn check_ohs_package(
+    flag: Option<&Path>,
+    fixes: &Fixes,
+    checks: &mut Vec<Check>,
+) -> Option<OhsPackage> {
     const ID: &str = "ohs_package";
     let found = match flag {
         Some(dir) => OhsPackage::from_dir(dir),
@@ -323,11 +459,46 @@ fn check_ohs_package(flag: Option<&Path>, checks: &mut Vec<Check>) -> Option<Ohs
             checks.push(Check::ok(ID, pkg.root.display().to_string()));
             Some(pkg)
         }
-        Err(e) => {
-            let action = OhsState::missing_package(&e).action();
-            checks.push(Check::bad(ID, Status::Fail, e.to_string(), action));
+        Err(e) if fixes.no_ohs => {
+            checks.push(Check::skip(
+                ID,
+                format!("mục `{SERVER_NAME}` cài với --no-ohs ({e})"),
+            ));
             None
         }
+        Err(e) => {
+            let action = format!(
+                "Cài gói OHS: thoát hẳn Claude Desktop rồi chạy lại `pkm mcp install` (tự tải bằng gh đã đăng nhập, \
+                 hoặc từ biến {} nếu đặt: URL https của gói, kèm <URL>.sha256), hoặc thêm --ohs-package \
+                 <file zip|thư mục|URL>. Không cần OHS thì cài lại với --no-ohs.",
+                install::ohs_bundle::PACKAGE_ENV
+            );
+            checks.push(
+                Check::bad(ID, Status::Warn, format!("{e}; {WITHOUT_OHS}"), action)
+                    .with_fix(fixes.reinstall()),
+            );
+            None
+        }
+    }
+}
+
+/// Node của gói OHS chạy được (`node --version`); không chạy OHS.
+fn check_ohs_node(pkg: Option<&OhsPackage>, hooks: &dyn Hooks) -> Check {
+    const ID: &str = "ohs_node";
+    let Some(pkg) = pkg else {
+        return Check::skip(ID, "không có gói OHS");
+    };
+    match hooks.node_version(&pkg.node) {
+        Ok(v) => Check::ok(ID, format!("{} {v}", pkg.node.display())),
+        Err(e) => Check::bad(
+            ID,
+            Status::Warn,
+            format!("{e}; {WITHOUT_OHS}"),
+            format!(
+                "Gói OHS hỏng: thoát hẳn Claude Desktop, xoá thư mục {} rồi chạy lại `pkm mcp install`.",
+                pkg.root.display()
+            ),
+        ),
     }
 }
 
@@ -341,10 +512,13 @@ fn check_ohs_state(
     let Some(pkg) = pkg else {
         return Check::skip(ID, "không có gói OHS");
     };
-    if args.no_ohs_start {
-        return Check::skip(ID, "không chạy thử OHS (--no-ohs-start)");
+    if !args.deep {
+        return Check::skip(
+            ID,
+            "không chạy thử OHS (thêm --deep; OHS có thể bắt đầu index và nạp model)",
+        );
     }
-    let Some(vault) = vault.filter(|v| v.is_dir()) else {
+    let Some(vault) = vault else {
         return Check::skip(ID, "không biết vault nào (mục `kg` chưa đúng)");
     };
     let state = hooks.ohs_state(pkg, vault, Duration::from_secs(args.ohs_wait));
@@ -354,32 +528,37 @@ fn check_ohs_state(
         OhsState::Starting | OhsState::Indexing { .. } => {
             Check::bad(ID, Status::Warn, detail, state.action())
         }
-        OhsState::ModelMissing { .. } | OhsState::Broken { .. } => {
-            Check::bad(ID, Status::Fail, detail, state.action())
-        }
+        OhsState::ModelMissing { .. } | OhsState::Broken { .. } => Check::bad(
+            ID,
+            Status::Warn,
+            format!("{detail}; {WITHOUT_OHS}"),
+            state.action(),
+        ),
     }
 }
 
 fn check_long_paths(hooks: &dyn Hooks) -> Check {
     const ID: &str = "long_paths";
-    let action = "Bật đường dẫn dài: PowerShell (Run as administrator) chạy `New-ItemProperty -Path \
-                  'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\FileSystem' -Name LongPathsEnabled -Value 1 \
-                  -PropertyType DWORD -Force`, rồi đăng xuất và đăng nhập lại.";
+    const FIX: &str = "New-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\FileSystem' -Name \
+                       LongPathsEnabled -Value 1 -PropertyType DWORD -Force";
+    let bad = |detail: String| {
+        Check::bad(
+            ID,
+            Status::Warn,
+            detail,
+            "Bật đường dẫn dài: chạy lệnh dưới trong PowerShell (Run as administrator), rồi đăng xuất và đăng \
+             nhập lại.",
+        )
+        .with_fix(Some(FIX.to_owned()))
+    };
     match hooks.long_paths_enabled() {
         None => Check::skip(ID, "không phải Windows"),
         Some(Ok(true)) => Check::ok(ID, "LongPathsEnabled = 1"),
-        Some(Ok(false)) => Check::bad(
-            ID,
-            Status::Warn,
-            "LongPathsEnabled tắt: note có đường dẫn dài hơn 260 ký tự có thể không đọc được",
-            action,
+        Some(Ok(false)) => bad(
+            "LongPathsEnabled tắt: note có đường dẫn dài hơn 260 ký tự có thể không đọc được"
+                .to_owned(),
         ),
-        Some(Err(e)) => Check::bad(
-            ID,
-            Status::Warn,
-            format!("không đọc được LongPathsEnabled: {e}"),
-            action,
-        ),
+        Some(Err(e)) => bad(format!("không đọc được LongPathsEnabled: {e}")),
     }
 }
 

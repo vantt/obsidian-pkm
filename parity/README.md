@@ -49,6 +49,8 @@ Lệnh dump Python hai lần (lần hai chạy lại đúng bộ câu của lầ
 
 `.github/workflows/ci.yml` trên ba nền: `parity fixture-args` in tham số `npx` theo `spec/spec.lock`, `npx … --out $RUNNER_TEMP/kg-solo` dựng vault, rồi `parity check --vault $RUNNER_TEMP/kg-solo` chạy bản Rust và so với `golden/<sha ghim>/`. Vault phải nằm trong thư mục cùng tên với golden (`kg-solo`, tên vault có trong `instructions` và link `obsidian://`), tree hash của fixture phải khớp manifest golden. `related` chỉ có câu hỏi (không `hits`) cần OHS nên không có trong bộ câu; phần đó so trên máy có gói OHS.
 
+Tầng MCP và CLI chạy chính binary `pkm` (`src/rust_side/binary.rs`), nên binary phải được dựng trước: CI dựa vào bước `cargo test --workspace` chạy trước `parity check`; chạy tay thì dựng `pkm` trước (hoặc đặt `PKM_BIN`), không thì hai tầng này báo "chưa có".
+
 ## Đọc kết quả
 
 Mỗi mục (bảng, op, tool, file MCP, lệnh CLI) có một trong ba kết quả: **khớp**, **lệch** (kèm số lệch chưa có tên và có tên), **chưa có** (bản Rust chưa làm tầng đó; không bao giờ tính là khớp). Mỗi chỗ lệch chỉ đúng `file:dòng` trong dump mẫu, cùng cột hoặc JSON pointer và giá trị hai bên. Mã thoát: 0 khi không có lệch chưa có tên, 1 khi có, 2 khi lỗi (dump hỏng, sai vault). `--strict` coi "chưa có" là lỗi (dùng khi mọi tầng Rust đã xong). Hiệu năng (`build` đủ, `build` tăng dần không đổi gì, một vòng refresh MCP, từng tool) chỉ ghi số, không chặn.
