@@ -5,6 +5,7 @@
 //! làm được, `None` khi chưa. Mục trả `None` được khai trong `not_available` của manifest và báo
 //! "chưa có"; bộ so khớp không bao giờ tính chúng là khớp.
 
+mod binary;
 mod index_tables;
 mod note_tables;
 
@@ -18,9 +19,10 @@ use serde_json::{Map, Value};
 use crate::dump::{CliCommand, Dump, Manifest, VaultInfo, Writer};
 
 /// Kết quả bắt tay MCP: `initialize` (bỏ `instructions`), `tools/list`, khối `instructions`.
+/// `tools_list` là `None` khi binary chưa có tầng tool (danh sách rỗng).
 pub struct McpHandshake {
     pub initialize: Value,
-    pub tools_list: Value,
+    pub tools_list: Option<Value>,
     pub instructions: String,
 }
 
@@ -39,16 +41,20 @@ pub struct RustSide {
     note_tables: OnceCell<HashMap<&'static str, note_tables::Rows>>,
     /// Mọi bảng của index SQLite (build đủ rồi tăng dần), dựng một lần khi được hỏi lần đầu.
     index_tables: OnceCell<index_tables::Built>,
+    /// Binary `pkm` cho tầng MCP và CLI; `None` khi không có binary.
+    pkm: Option<binary::Pkm>,
 }
 
 impl RustSide {
-    pub fn new(vault: &Path, run: &Value) -> Self {
-        Self {
+    /// `pkm`: binary cho tầng MCP và CLI (`None`: hai tầng đó báo "chưa có").
+    pub fn new(vault: &Path, run: &Value, pkm: Option<&Path>) -> Result<Self> {
+        Ok(Self {
             vault: vault.to_path_buf(),
             run: run.clone(),
             note_tables: OnceCell::new(),
             index_tables: OnceCell::new(),
-        }
+            pkm: pkm.map(binary::Pkm::new).transpose()?,
+        })
     }
 
     pub fn vault(&self) -> &Path {
@@ -129,13 +135,21 @@ impl RustSide {
         Ok(None)
     }
 
+    /// Bắt tay với `pkm VAULT mcp` trên index dựng sẵn (như `dump_mcp` của Python).
     pub fn mcp(&mut self) -> Result<Option<McpHandshake>> {
-        Ok(None)
+        self.pkm
+            .as_ref()
+            .map(|p| p.mcp(&self.vault, &self.run))
+            .transpose()
     }
 
-    /// Một lệnh `pkm VAULT ... --db DB`; `args` không gồm VAULT và `--db`.
-    pub fn cli(&mut self, _args: &[String]) -> Result<Option<CliOutput>> {
-        Ok(None)
+    /// Một lệnh `pkm VAULT ... --db DB`; `args` không gồm VAULT và `--db`. Các lệnh chạy theo thứ tự trên cùng
+    /// một index. `None` khi không có binary hoặc lệnh cần tầng tool mà binary chưa có.
+    pub fn cli(&mut self, args: &[String]) -> Result<Option<CliOutput>> {
+        match &self.pkm {
+            Some(p) => p.cli(&self.vault, args),
+            None => Ok(None),
+        }
     }
 
     /// Số đo hiệu năng cùng khoá với `perf.json` của Python.
@@ -183,11 +197,23 @@ pub fn check_vault(vault: &Path, like: &Manifest) -> Result<()> {
     Ok(())
 }
 
-/// Chạy bản Rust trên `vault` theo bộ câu của dump mẫu `like`, ghi dump vào `out`.
+/// Chạy bản Rust trên `vault` theo bộ câu của dump mẫu `like`, ghi dump vào `out`. Tầng MCP và CLI chạy binary
+/// `pkm` của bản dựng hiện tại (`PKM_BIN`, hoặc cạnh binary đang chạy).
 pub fn dump(vault: &Path, like: &Dump, out: &Path) -> Result<Manifest> {
+    let pkm = binary::locate();
+    if pkm.is_none() {
+        eprintln!(
+            "không thấy binary pkm (dựng bằng `cargo build -p pkm` hoặc đặt PKM_BIN): tầng MCP và CLI báo \"chưa có\""
+        );
+    }
+    dump_with(vault, like, out, pkm.as_deref())
+}
+
+/// [`dump`] với binary `pkm` chỉ định (`None`: tầng MCP và CLI báo "chưa có").
+pub fn dump_with(vault: &Path, like: &Dump, out: &Path, pkm: Option<&Path>) -> Result<Manifest> {
     check_vault(vault, &like.manifest)?;
     let w = Writer::create(out)?;
-    let mut side = RustSide::new(vault, &like.manifest.run);
+    let mut side = RustSide::new(vault, &like.manifest.run, pkm)?;
     let mut missing: Vec<String> = Vec::new();
     let mut tables = std::collections::BTreeMap::new();
 
@@ -267,7 +293,10 @@ pub fn dump(vault: &Path, like: &Dump, out: &Path) -> Result<Manifest> {
     match side.mcp()? {
         Some(h) => {
             w.json("mcp/initialize.json", &h.initialize)?;
-            w.json("mcp/tools_list.json", &h.tools_list)?;
+            match &h.tools_list {
+                Some(t) => w.json("mcp/tools_list.json", t)?,
+                None => missing.push("mcp:tools_list".into()),
+            }
             w.text("mcp/instructions.txt", &h.instructions)?;
         }
         None => missing.push("mcp:*".into()),

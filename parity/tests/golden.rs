@@ -261,7 +261,8 @@ fn rust_side_reports_every_missing_layer_as_not_available_never_as_match() {
     let tmp = tempfile::tempdir().unwrap();
     let g = Dump::open(&golden()).unwrap();
     let vault = fake_vault(tmp.path(), &g);
-    rust_side::dump(&vault, &g, &tmp.path().join("rust")).unwrap();
+    // Không có binary `pkm`: tầng MCP và CLI là "chưa có", không bao giờ là khớp.
+    rust_side::dump_with(&vault, &g, &tmp.path().join("rust"), None).unwrap();
     let r = Dump::open(&tmp.path().join("rust")).unwrap();
     let cmp = compare(&g, &r, &[]).unwrap();
     assert!(!cmp.items.is_empty());
