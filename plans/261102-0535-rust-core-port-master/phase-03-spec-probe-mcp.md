@@ -1,6 +1,6 @@
 ---
 title: "Phase 3: Bài thử S2, MCP"
-status: todo
+status: in-progress
 priority: P1
 effort: "0,5 ngày"
 prd: R02
@@ -23,9 +23,9 @@ Một MCP server Rust nhỏ, một tool, bắt tay được với Claude Desktop
 - Thêm mục Q4 vào `docs/DECISIONS.md`.
 
 ## Việc cần làm
-- [ ] Viết server bằng `rmcp`. Nếu `rmcp` kéo async runtime nặng hoặc không cho kiểm soát đủ câu chữ `instructions`, mô tả tool, schema tham số, viết thêm bản JSON-RPC tự viết để so.
-- [ ] Bắt tay với Claude Code: `initialize`, `tools/list`, gọi tool.
-- [ ] Ghi phiên bản giao thức Python đang trả và làm bản Rust trả cùng giá trị.
+- [x] Viết server bằng `rmcp`. Nếu `rmcp` kéo async runtime nặng hoặc không cho kiểm soát đủ câu chữ `instructions`, mô tả tool, schema tham số, viết thêm bản JSON-RPC tự viết để so.
+- [x] Bắt tay với Claude Code: `initialize`, `tools/list`, gọi tool.
+- [x] Ghi phiên bản giao thức Python đang trả và làm bản Rust trả cùng giá trị.
 - [ ] Đưa user đoạn JSON cấu hình để thêm server thử vào Claude Desktop trên Windows; chờ user báo kết quả.
 
 ## Nghiệm thu
@@ -35,3 +35,6 @@ Một MCP server Rust nhỏ, một tool, bắt tay được với Claude Desktop
 
 ## Cần user
 Chạy thử trên Claude Desktop Windows.
+
+## Tình trạng (2026-11-02)
+Xong phần máy: hai server thử ở `probes/s2-mcp/`, Claude Code 2.1.316 gọi được tool của cả hai, Q4 đã chốt (JSON-RPC tự viết). Còn chờ user chạy thử Claude Desktop trên Windows theo hướng dẫn ở [báo cáo](../reports/probe-s2-mcp-261102-1317.md#6-việc-của-user-claude-desktop-trên-windows).
