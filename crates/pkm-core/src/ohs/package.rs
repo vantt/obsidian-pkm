@@ -32,6 +32,11 @@ pub const IGNORE_PATTERNS_ENV: &str = "OBSIDIAN_IGNORE_PATTERNS";
 /// tiến trình trên một index phải cùng giá trị, không thì OHS báo lệch content policy.
 pub const PACK_IGNORE_PATTERNS: &str = ".obsidian/**,templates/**,*.canvas,_ohs/**";
 
+/// Có gửi [`PACK_IGNORE_PATTERNS`] không. Tắt tới khi bản B được index lại với mẫu này (kế hoạch E12.9.0 ở repo đặc
+/// tả): index của nó và mọi bên gọi khác vẫn dùng mặc định của upstream, một bên gửi mẫu khác làm bên làm chủ index
+/// lệch content policy. Như `OHS_IGNORE_ON` của `platform_paths` (Python, `58010ad`).
+pub const PACK_IGNORE_ON: bool = false;
+
 /// File mô tả gói của fork, có `version`.
 const MANIFEST: &str = "MANIFEST.json";
 

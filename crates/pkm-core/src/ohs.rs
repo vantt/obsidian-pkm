@@ -25,7 +25,7 @@ use unicode_normalization::{UnicodeNormalization, is_nfc};
 
 pub use package::{
     DEFAULT_DIR_NAME, IGNORE_PATTERNS_ENV, LANGUAGE_PACK_ENV, OHS_DIR_ENV, OhsPackage,
-    PACK_IGNORE_PATTERNS, PackageError,
+    PACK_IGNORE_ON, PACK_IGNORE_PATTERNS, PackageError,
 };
 pub use state::OhsState;
 
@@ -527,10 +527,12 @@ impl Supervisor {
             cmd.env("OBSIDIAN_DB_PATH", db);
         }
         // Gói tiếng Việt đi kèm: đặt cho mọi lần chạy, để index không bị dựng lại bảng view qua lại giữa các bên
-        // gọi. Cùng gói là mẫu bỏ qua có `_ohs/**` (thư mục từ điển của gói vi). Gói không có thì để nguyên môi trường.
+        // gọi. Mẫu bỏ qua `_ohs/**` chỉ khi bật [`PACK_IGNORE_ON`]. Gói không có thì để nguyên môi trường.
         if let Some(pack) = &self.pkg.pack {
-            cmd.env(LANGUAGE_PACK_ENV, pack)
-                .env(IGNORE_PATTERNS_ENV, PACK_IGNORE_PATTERNS);
+            cmd.env(LANGUAGE_PACK_ENV, pack);
+            if PACK_IGNORE_ON {
+                cmd.env(IGNORE_PATTERNS_ENV, PACK_IGNORE_PATTERNS);
+            }
         }
         #[cfg(windows)]
         {
