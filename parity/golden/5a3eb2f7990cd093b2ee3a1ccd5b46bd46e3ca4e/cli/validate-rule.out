@@ -1,0 +1,54 @@
+{
+ "counts": {
+  "R2": {
+   "deviations": 1,
+   "notes": 1
+  },
+  "R3": {
+   "deviations": 1,
+   "notes": 1
+  },
+  "R4": {
+   "deviations": 2,
+   "notes": 2
+  },
+  "R5": {
+   "deviations": 1,
+   "notes": 1
+  },
+  "R6": {
+   "deviations": 1,
+   "notes": 1
+  },
+  "R7": {
+   "deviations": 1,
+   "notes": 1
+  },
+  "R8": {
+   "deviations": 4,
+   "notes": 4
+  },
+  "R9": {
+   "deviations": 2,
+   "notes": 2
+  },
+  "R10": {
+   "deviations": 1,
+   "notes": 1
+  }
+ },
+ "examples": {
+  "R8": [
+   {
+    "rule": "R8",
+    "node": "Khách hàng/Cua hang Moc.md",
+    "detail": "title trùng (không phân biệt hoa thường, dấu): Cua hang Moc"
+   },
+   {
+    "rule": "R8",
+    "node": "Khách hàng/Cửa hàng Mộc.md",
+    "detail": "title trùng (không phân biệt hoa thường, dấu): Cửa hàng Mộc"
+   }
+  ]
+ }
+}

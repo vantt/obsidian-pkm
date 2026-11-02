@@ -1,6 +1,6 @@
 ---
 title: "Phase 5: Bộ so khớp và golden"
-status: todo
+status: in-progress
 priority: P1
 effort: "2,5 ngày"
 prd: "R04, R05 (golden)"
@@ -29,21 +29,28 @@ Dựng bộ so khớp, tiêu chuẩn "khớp" duy nhất của dự án (mục 6
 - Ngoại lệ có tên nằm trong một file (gợi ý `parity/exceptions.toml`), mỗi mục trỏ tới mục "Lệch có chủ ý" của `spec/PORTING.md`.
 
 ## Việc cần làm
-- [ ] Phía Python (chạy trên máy): clone repo đặc tả ở một sha bất kỳ, dựng index, dump mọi bảng của mục 6 (`nodes`, `props`, `links`, `raw_links`, `blocks`, `names`, `edges`, `meta`, mọi `schema_*`, view `v3_deviations`), chạy bộ câu tool, dump MCP handshake (`initialize`, `tools/list`, `instructions`), dump đầu ra CLI.
-- [ ] Bộ câu: (1) mọi câu trong `.kg-answers.json` của kg-solo; (2) bộ sinh tự động cho bản B (mỗi loại note vài note, mỗi tool vài tham số, gồm `as_of`, `statuses`, `accepted_only`, `system`, `limit`).
-- [ ] Phần so: so từng dòng bảng, so JSON tool sau khi chuẩn hoá thứ tự danh sách không thứ tự; `related` so tập note, thứ hạng, điểm lệch tối đa 1e-6; MCP và CLI so chuỗi.
-- [ ] Tầng hiệu năng: đo `build` đủ, `build` tăng dần không đổi gì, một vòng refresh MCP, mỗi tool; ghi số, không chặn.
-- [ ] Đầu ra `parity/report.json` và bảng tóm tắt; mã thoát khác 0 khi có lệch chưa có tên.
-- [ ] Chế độ `--private <vault>`: chỉ in số dòng lệch theo bảng và theo tool, không in nội dung note.
-- [ ] Xuất golden kg-solo ở `5a3eb2f` vào `parity/golden/5a3eb2f7990cd093b2ee3a1ccd5b46bd46e3ca4e/`, kèm lệnh dựng lại golden ở sha khác (phase 15 dùng khi nâng ghim).
-- [ ] Bước CI: `npx github:vantt/obsidian-test-fixture#v0.7.0 generate …` với preset, seed của `spec.lock`, rồi chạy phần so với golden của sha ghim.
-- [ ] `parity/README.md` ngắn: cách chạy trên máy, trên bản B, cách dựng golden.
+- [x] Phía Python (chạy trên máy): clone repo đặc tả ở một sha bất kỳ, dựng index, dump mọi bảng của mục 6 (`nodes`, `props`, `links`, `raw_links`, `blocks`, `names`, `edges`, `meta`, mọi `schema_*`, view `v3_deviations`), chạy bộ câu tool, dump MCP handshake (`initialize`, `tools/list`, `instructions`), dump đầu ra CLI.
+- [x] Bộ câu: (1) mọi câu trong `.kg-answers.json` của kg-solo; (2) bộ sinh tự động cho bản B (mỗi loại note vài note, mỗi tool vài tham số, gồm `as_of`, `statuses`, `accepted_only`, `system`, `limit`).
+- [x] Phần so: so từng dòng bảng, so JSON tool sau khi chuẩn hoá thứ tự danh sách không thứ tự; `related` so tập note, thứ hạng, điểm lệch tối đa 1e-6; MCP và CLI so chuỗi.
+- [x] Tầng hiệu năng: đo `build` đủ, `build` tăng dần không đổi gì, một vòng refresh MCP, mỗi tool; ghi số, không chặn.
+- [x] Đầu ra `parity/report.json` và bảng tóm tắt; mã thoát khác 0 khi có lệch chưa có tên.
+- [x] Chế độ `--private <vault>`: chỉ in số dòng lệch theo bảng và theo tool, không in nội dung note.
+- [x] Xuất golden kg-solo ở `5a3eb2f` vào `parity/golden/5a3eb2f7990cd093b2ee3a1ccd5b46bd46e3ca4e/`, kèm lệnh dựng lại golden ở sha khác (phase 15 dùng khi nâng ghim).
+- [x] Bước CI: `npx github:vantt/obsidian-test-fixture#v0.7.0 generate …` với preset, seed của `spec.lock`, rồi chạy phần so với golden của sha ghim.
+- [x] `parity/README.md` ngắn: cách chạy trên máy, trên bản B, cách dựng golden.
 
 ## Nghiệm thu
 - Python ở sha ghim so với chính nó: 0 lệch trên kg-solo và trên bản B (máy user, chỉ in số).
 - Cố ý sửa một dòng trong một file golden thì lệnh so trả mã khác 0 và chỉ đúng dòng đó.
 - CI xanh với bước so mới (mọi tầng báo "chưa có" ở thời điểm này là đúng).
 - Không có nội dung bản B trong repo (`git grep` theo vài tên note bản B do user đưa ra cho kết quả rỗng).
+
+## Trạng thái thực hiện (2026-11-02)
+Đã làm và kiểm trên kg-solo: bộ so khớp (`parity/`), golden ở `5a3eb2f`, bước CI; Python so với chính nó ra 0 lệch; sửa một dòng golden thì lệnh so trả mã 1 và chỉ đúng dòng đó; chế độ `--private` chạy được (thử trên một bản sao kg-solo, chỉ in số). Báo cáo: `plans/reports/fullstack-developer-261102-1317-phase-05-parity.md`.
+
+Còn lại (user hoãn bản B):
+- [ ] Python ở sha ghim so với chính nó trên bản B, máy user: `python3 parity/parity.py run --private <bản B> --adapter e11 --packs capture --no-aliases --edge-keys links --body-edges --against python` ra 0 lệch.
+- [ ] `git grep` theo vài tên note bản B do user đưa ra cho kết quả rỗng.
 
 ## Cần user
 Đường dẫn bản B, cho phép chạy trên máy user.

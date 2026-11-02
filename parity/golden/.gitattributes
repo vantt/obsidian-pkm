@@ -1,0 +1,2 @@
+# Golden phải giữ nguyên từng byte trên mọi nền (Windows checkout không đổi LF thành CRLF).
+* -text

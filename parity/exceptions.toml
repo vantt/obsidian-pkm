@@ -1,0 +1,10 @@
+# Ngoại lệ có tên của bộ so khớp: chỗ Rust cố ý làm khác bản Python ở sha ghim (docs/PRD.md mục 4).
+# Mỗi mục phải có mục cùng tên trong phần "Lệch có chủ ý" của spec/PORTING.md; thiếu thì `parity` từ chối chạy.
+# Lệch không có mục ở đây là lệch chưa có tên: mã thoát khác 0.
+#
+# [[exception]]
+# name = "ten-ngoai-le"            # cũng là tên mục trong spec/PORTING.md
+# layer = "tools"                  # index | answers | tools | mcp | cli
+# item = "neighbors"               # bảng, op, tool, file MCP (initialize, tools_list, instructions) hay id lệnh CLI; "*" = mọi mục
+# fields = ["/result/items/*/claim"]  # tuỳ chọn: chỉ tha khi mọi chỗ lệch nằm dưới các trường này ("*" khớp một đoạn)
+# reason = "một câu; chi tiết ở spec/PORTING.md"

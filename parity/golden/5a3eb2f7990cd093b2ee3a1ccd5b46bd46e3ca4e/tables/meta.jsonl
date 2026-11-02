@@ -1,0 +1,16 @@
+{"key": "adapter", "value": ""}
+{"key": "adapter_spec", "value": ""}
+{"key": "built_at", "value": "<volatile>"}
+{"key": "edges", "value": "{\"accepted\": 708, \"proposed\": 8, \"superseded\": 10}"}
+{"key": "hidden", "value": "[]"}
+{"key": "mode", "value": "incremental"}
+{"key": "ms", "value": "<volatile>"}
+{"key": "notes", "value": "746"}
+{"key": "notes_read", "value": "0"}
+{"key": "notes_removed", "value": "0"}
+{"key": "options", "value": "aliases=1,edge_keys=schema,body_edges=0"}
+{"key": "packs", "value": "business"}
+{"key": "schema_digest", "value": "bbaa9f0197ef"}
+{"key": "schema_problems", "value": ""}
+{"key": "schema_version", "value": "3"}
+{"key": "vault", "value": "<VAULT>"}

@@ -76,3 +76,9 @@ Mỗi quyết định một mục, theo khung:
 - **Lựa chọn:** so tên không phân biệt hoa thường bằng `caseless` (khớp `str.casefold` của Python), chuẩn hoá NFC/NFD bằng `unicode-normalization`; thư mục nhà lấy từ `std::env::home_dir` thay vì crate `dirs`; Windows dùng `MoveFileExW` không cờ thay thế (`windows-sys`).
 - **Lý do:** `to_lowercase` không giống `casefold` với một số ký tự; `home_dir` đã đúng trên ba nền từ Rust 1.86 nên không cần thêm crate; `std::fs::rename` trên Windows đè đích, khác `os.rename`.
 - **Bằng chứng:** `crates/pkm-core/src/platform.rs`, bảng test platform trong `spec/PORTING.md`.
+
+## Thứ tự liệt kê file khi so khớp: sắp theo đường dẫn, so chặt
+- **Ngày:** 2026-11-02
+- **Lựa chọn:** phía Python của bộ so khớp liệt kê note theo đường dẫn đã sắp (thứ tự NTFS và APFS trả về). `edges.id` và `related` vẫn so chặt như PRD (điểm lệch tối đa 1e-6). Lõi Rust liệt kê note theo đường dẫn đã sắp, chèn cạnh và chạy PageRank đúng thứ tự Python.
+- **Lý do:** đầu ra Python phụ thuộc thứ tự hệ điều hành liệt kê file: đảo thứ tự trên kg-solo đổi 593/726 `edges.id` và đổi điểm `related` cỡ 1e-5. Ghim thứ tự giúp golden dựng trên máy này khớp trên máy khác mà không phải nới luật so. Nếu phase index hoặc related không giữ được thứ tự này thì phần đó ghi ngoại lệ có tên, không nới luật chung.
+- **Bằng chứng:** báo cáo `plans/reports/fullstack-developer-261102-1317-phase-05-parity.md`, `parity/dump-python.py`.

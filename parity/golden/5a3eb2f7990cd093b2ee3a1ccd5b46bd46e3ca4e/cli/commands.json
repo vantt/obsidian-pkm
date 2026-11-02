@@ -1,0 +1,241 @@
+[
+  {
+    "args": [
+      "build",
+      "--full",
+      "--packs",
+      "business",
+      "--edge-keys",
+      "schema"
+    ],
+    "exit": 0,
+    "id": "build-full",
+    "kind": "text",
+    "stdout": "build-full.out"
+  },
+  {
+    "args": [
+      "build"
+    ],
+    "exit": 0,
+    "id": "build-noop",
+    "kind": "text",
+    "stdout": "build-noop.out"
+  },
+  {
+    "args": [
+      "build",
+      "--json"
+    ],
+    "exit": 0,
+    "id": "build-json",
+    "kind": "json",
+    "stdout": "build-json.out"
+  },
+  {
+    "args": [
+      "stats"
+    ],
+    "exit": 0,
+    "id": "stats",
+    "kind": "json",
+    "stdout": "stats.out"
+  },
+  {
+    "args": [
+      "validate"
+    ],
+    "exit": 0,
+    "id": "validate",
+    "kind": "text",
+    "stdout": "validate.out"
+  },
+  {
+    "args": [
+      "validate",
+      "--json"
+    ],
+    "exit": 0,
+    "id": "validate-json",
+    "kind": "json",
+    "stdout": "validate-json.out"
+  },
+  {
+    "args": [
+      "validate",
+      "--rule",
+      "R8",
+      "--limit",
+      "2",
+      "--json"
+    ],
+    "exit": 0,
+    "id": "validate-rule",
+    "kind": "json",
+    "stdout": "validate-rule.out"
+  },
+  {
+    "args": [
+      "find",
+      "Chất lượng bàn giao tăng hài lòng của Đông Á"
+    ],
+    "exit": 0,
+    "id": "find",
+    "kind": "json",
+    "stdout": "find.out"
+  },
+  {
+    "args": [
+      "find",
+      "Chất",
+      "--type",
+      "claim"
+    ],
+    "exit": 0,
+    "id": "find-type",
+    "kind": "json",
+    "stdout": "find-type.out"
+  },
+  {
+    "args": [
+      "note",
+      "Claim/Chất lượng bàn giao tăng hài lòng của Đông Á.md"
+    ],
+    "exit": 0,
+    "id": "note",
+    "kind": "json",
+    "stdout": "note.out"
+  },
+  {
+    "args": [
+      "neighbors",
+      "Claim/Chất lượng bàn giao tăng hài lòng của Đông Á.md",
+      "--dir",
+      "in"
+    ],
+    "exit": 0,
+    "id": "neighbors",
+    "kind": "json",
+    "stdout": "neighbors.out"
+  },
+  {
+    "args": [
+      "neighbors",
+      "Claim/Chất lượng bàn giao tăng hài lòng của Đông Á.md",
+      "--accepted",
+      "--as-of",
+      "2026-10-15",
+      "--limit",
+      "3"
+    ],
+    "exit": 0,
+    "id": "neighbors-filter",
+    "kind": "json",
+    "stdout": "neighbors-filter.out"
+  },
+  {
+    "args": [
+      "reach",
+      "Claim/Chất lượng bàn giao tăng hài lòng của Đông Á.md",
+      "--max-depth",
+      "2"
+    ],
+    "exit": 0,
+    "id": "reach",
+    "kind": "json",
+    "stdout": "reach.out"
+  },
+  {
+    "args": [
+      "loops",
+      "Claim/Chất lượng bàn giao tăng hài lòng của Đông Á.md",
+      "--max-len",
+      "4"
+    ],
+    "exit": 0,
+    "id": "loops",
+    "kind": "json",
+    "stdout": "loops.out"
+  },
+  {
+    "args": [
+      "loops",
+      "Claim/Chất lượng bàn giao tăng hài lòng của Đông Á.md"
+    ],
+    "exit": 1,
+    "id": "loops-no-max-len",
+    "kind": "text",
+    "stderr": "loops-no-max-len.err",
+    "stdout": "loops-no-max-len.out"
+  },
+  {
+    "args": [
+      "provenance",
+      "Claim/Bài đăng LinkedIn đi cùng lead.md"
+    ],
+    "exit": 0,
+    "id": "provenance",
+    "kind": "json",
+    "stdout": "provenance.out"
+  },
+  {
+    "args": [
+      "select",
+      "status=proposed",
+      "proposed_by=llm"
+    ],
+    "exit": 0,
+    "id": "select",
+    "kind": "json",
+    "stdout": "select.out"
+  },
+  {
+    "args": [
+      "select",
+      "type=claim",
+      "--system"
+    ],
+    "exit": 0,
+    "id": "select-type",
+    "kind": "json",
+    "stdout": "select-type.out"
+  },
+  {
+    "args": [
+      "valid",
+      "claim",
+      "--as-of",
+      "2026-10-15"
+    ],
+    "exit": 0,
+    "id": "valid",
+    "kind": "json",
+    "stdout": "valid.out"
+  },
+  {
+    "args": [
+      "paths",
+      "Khái niệm/Bán hàng tư vấn.md",
+      "MOC/MOC Kinh doanh.md",
+      "--max-len",
+      "4"
+    ],
+    "exit": 0,
+    "id": "paths",
+    "kind": "json",
+    "stdout": "paths.out"
+  },
+  {
+    "args": [
+      "paths",
+      "Khái niệm/Bán hàng tư vấn.md",
+      "MOC/MOC Kinh doanh.md",
+      "--statuses",
+      "accepted,proposed"
+    ],
+    "exit": 0,
+    "id": "paths-statuses",
+    "kind": "json",
+    "stdout": "paths-statuses.out"
+  }
+]
