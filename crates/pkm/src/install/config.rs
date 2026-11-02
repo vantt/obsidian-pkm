@@ -1,5 +1,5 @@
-//! File cấu hình của Claude Desktop (`claude_desktop_config.json`): tìm file, đọc, sửa đúng mục `kg` trong
-//! `mcpServers`, ghi nguyên tử kèm bản sao lưu.
+//! File cấu hình của Claude Desktop (`claude_desktop_config.json`): tìm file, đọc, sửa đúng mục `pkm` trong
+//! `mcpServers` (và đổi tên mục `kg` cũ do `pkm` ghi), ghi nguyên tử kèm bản sao lưu.
 //!
 //! Đặc tả: `scripts/kg/desktop_config.py` (`default_config`, phần ghi file ở cuối). Giữ nguyên mọi khoá và mục khác
 //! (gồm MCP `ohs`) theo đúng thứ tự, giữ CRLF nếu file đang dùng CRLF, thụt lề 2 và không thoát ký tự ngoài ASCII
@@ -13,8 +13,15 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::{Map, Value};
 
-/// Tên MCP của `pkm` trong `mcpServers`. Giữ `kg` để Project instructions cũ vẫn đúng (PRD Q2).
-pub const SERVER_NAME: &str = "kg";
+/// Tên MCP của `pkm` trong `mcpServers` (Q2: đổi từ `kg` ở đợt một cửa).
+pub const SERVER_NAME: &str = "pkm";
+
+/// Tên cũ của mục MCP mà `pkm` ghi trước khi đổi tên. Mục tên này do `pkm` ghi (xem `install::written_by_pkm`) được
+/// đổi thành [`SERVER_NAME`]; mục do Python hay người dùng ghi thì giữ.
+pub const LEGACY_SERVER_NAME: &str = "kg";
+
+/// Tên MCP riêng của OHS mà người dùng có thể tự thêm. `pkm` không ghi, không sửa, không xoá mục này.
+pub const OHS_SERVER_NAME: &str = "ohs";
 
 /// Tên file cấu hình của Claude Desktop.
 pub const CONFIG_FILE: &str = "claude_desktop_config.json";
@@ -301,6 +308,30 @@ impl ConfigDoc {
             }
             None => servers.shift_remove(name).is_some(),
         }
+    }
+
+    /// Thay mục `old` bằng mục `new` có nội dung `entry`, giữ đúng chỗ của `old` trong `mcpServers` (bỏ mục `new` cũ
+    /// nếu có ở chỗ khác). Không có `old` thì như [`ConfigDoc::set_server`]. Trả `true` khi nội dung đổi.
+    pub fn replace_server(&mut self, old: &str, new: &str, entry: Value) -> bool {
+        let Some(Value::Object(servers)) = self.root.get_mut("mcpServers") else {
+            return self.set_server(new, Some(entry));
+        };
+        if !servers.contains_key(old) {
+            return self.set_server(new, Some(entry));
+        }
+        let mut entry = Some(entry);
+        *servers = std::mem::take(servers)
+            .into_iter()
+            .filter(|(k, _)| k != new)
+            .map(|(k, v)| match (k == old, entry.take()) {
+                (true, Some(e)) => (new.to_owned(), e),
+                (_, e) => {
+                    entry = e;
+                    (k, v)
+                }
+            })
+            .collect();
+        true
     }
 
     /// Văn bản sẽ ghi: thụt lề 2, giữ ký tự ngoài ASCII, CRLF nếu file cũ dùng CRLF, không có dòng trống cuối file

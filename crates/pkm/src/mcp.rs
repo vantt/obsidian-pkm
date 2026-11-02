@@ -136,7 +136,7 @@ pub fn main(argv: Vec<OsString>) -> ExitCode {
     }
 }
 
-/// Biến môi trường mà `pkm mcp install --no-ohs` ghi vào mục `kg`: `1` là không chạy OHS.
+/// Biến môi trường mà `pkm mcp install --no-ohs` ghi vào mục `pkm`: `1` là không chạy OHS.
 pub const NO_OHS_ENV: &str = "PKM_NO_OHS";
 
 /// Khởi động OHS ở nền (không chặn) cho `related` chỉ có `query`: gói theo `--ohs`, rồi gói mà cờ cũ `--ohs-cli` trỏ

@@ -17,6 +17,9 @@ struct Fake {
     built: Cell<bool>,
     /// Nội dung trả cho từng URL khi tải gói OHS.
     served: Vec<(String, Vec<u8>)>,
+    /// Vault đã làm ấm index OHS, và trạng thái trả về.
+    warmed: RefCell<Vec<PathBuf>>,
+    warm_state: OhsState,
 }
 
 impl Fake {
@@ -30,6 +33,8 @@ impl Fake {
             running_after_build: None,
             built: Cell::new(false),
             served: Vec::new(),
+            warmed: RefCell::default(),
+            warm_state: OhsState::Ready,
         }
     }
 }
@@ -55,7 +60,7 @@ impl Hooks for Fake {
     fn handshake(&self, entry: &ServerEntry, _timeout: Duration) -> Result<Handshake, String> {
         self.handshakes.set(self.handshakes.get() + 1);
         Ok(Handshake {
-            server_name: "kg".into(),
+            server_name: "pkm".into(),
             server_version: "test".into(),
             tools: vec![format!("{}-tool", entry.args.len())],
         })
@@ -70,6 +75,18 @@ impl Hooks for Fake {
             Ok(b) => Ok(found(*b)),
             Err(e) => Err(io::Error::new(e.kind(), e.to_string())),
         }
+    }
+
+    fn warm_ohs(
+        &self,
+        _pkg: OhsPackage,
+        vault: &Path,
+        _timeout: Duration,
+        out: &mut dyn Write,
+    ) -> OhsState {
+        self.warmed.borrow_mut().push(vault.to_path_buf());
+        let _ = writeln!(out, "  OHS đang index: 1/2 note");
+        self.warm_state.clone()
     }
 
     fn fetch(&self, url: &str, out: &Path) -> Result<(), String> {
@@ -159,14 +176,14 @@ const EXISTING: &str = r#"{
       "args": ["cli.js", "serve"],
       "env": {"OBSIDIAN_VAULT_PATH": "C:\\Ghi chú"}
     },
-    "kg": {"command": "python.exe", "args": ["old"]},
+    "pkm": {"command": "python.exe", "args": ["old"]},
     "other": {"command": "x"}
   },
   "preferences": {"theme": "dark"}
 }"#;
 
 #[test]
-fn install_writes_kg_and_keeps_every_other_entry() {
+fn install_writes_pkm_and_keeps_every_other_entry() {
     let s = setup(Some(EXISTING));
     let hooks = Fake::new();
     let mut args = s.args();
@@ -185,10 +202,10 @@ fn install_writes_kg_and_keeps_every_other_entry() {
         .keys()
         .cloned()
         .collect();
-    assert_eq!(keys, ["ohs", "kg", "other"], "kg giữ chỗ cũ");
+    assert_eq!(keys, ["ohs", "pkm", "other"], "pkm giữ chỗ cũ");
     let db = s.inst.default_db(&s.vault);
     assert_eq!(
-        got["mcpServers"]["kg"],
+        got["mcpServers"]["pkm"],
         json!({
             "command": s.inst.exe.to_str().unwrap(),
             "args": [s.vault.to_str().unwrap(), "mcp", "--db", db.to_str().unwrap(),
@@ -208,7 +225,7 @@ fn install_writes_kg_and_keeps_every_other_entry() {
     );
     assert!(db.parent().unwrap().is_dir(), "thư mục index được tạo");
     assert_eq!(hooks.handshakes.get(), 1);
-    assert!(out.contains("servers: ohs, kg, other"), "{out}");
+    assert!(out.contains("servers: ohs, pkm, other"), "{out}");
     let files = s.files();
     assert_eq!(
         files.len(),
@@ -268,12 +285,12 @@ fn dry_run_writes_nothing_and_builds_nothing() {
     assert_eq!(hooks.handshakes.get(), 0);
     assert!(!s.inst.pkm_dir.exists(), "không tạo thư mục dữ liệu");
     assert!(out.contains("[dry-run]"), "{out}");
-    assert!(out.contains("-   \"kg\": {"), "{out}");
+    assert!(out.contains("-   \"pkm\": {"), "{out}");
     assert!(out.contains("+       \"mcp\","), "{out}");
 }
 
 #[test]
-fn remove_deletes_only_kg() {
+fn remove_deletes_only_pkm() {
     let s = setup(Some(EXISTING));
     let mut args = s.args();
     args.vault = None;
@@ -285,7 +302,7 @@ fn remove_deletes_only_kg() {
     want["mcpServers"]
         .as_object_mut()
         .unwrap()
-        .shift_remove("kg");
+        .shift_remove("pkm");
     assert_eq!(got, want);
     let keys: Vec<_> = got.as_object().unwrap().keys().cloned().collect();
     assert_eq!(keys, ["globalShortcut", "mcpServers", "preferences"]);
@@ -293,7 +310,7 @@ fn remove_deletes_only_kg() {
 }
 
 #[test]
-fn remove_dry_run_and_remove_without_kg_write_nothing() {
+fn remove_dry_run_and_remove_without_pkm_write_nothing() {
     let s = setup(Some(EXISTING));
     let mut args = s.args();
     args.remove = true;
@@ -401,14 +418,14 @@ fn check_handshakes_with_configured_entry_and_changes_nothing() {
     let hooks = Fake::new();
     let out = s.run(&args, &hooks).unwrap();
     assert_eq!(hooks.handshakes.get(), 1);
-    assert!(out.starts_with("python.exe: kg test, 1 tool"), "{out}");
+    assert!(out.starts_with("python.exe: pkm test, 1 tool"), "{out}");
     assert_eq!(fs::read_to_string(&s.config).unwrap(), EXISTING);
 
     let s = setup(Some("{}"));
     let err = s
         .run(&args_with_config(&s, true), &Fake::new())
         .unwrap_err();
-    assert!(err.contains("chưa có `kg`"), "{err}");
+    assert!(err.contains("chưa có `pkm`"), "{err}");
 }
 
 fn args_with_config(s: &Setup, check: bool) -> InstallArgs {
@@ -678,7 +695,7 @@ fn refuses_binary_outside_install_dir_without_allow_any_location() {
     let out = s.run(&args, &hooks).unwrap();
     assert!(out.starts_with("cảnh báo: pkm đang chạy từ"), "{out}");
     assert_eq!(
-        s.read()["mcpServers"]["kg"]["command"],
+        s.read()["mcpServers"]["pkm"]["command"],
         s.inst.exe.to_str().unwrap()
     );
 }
@@ -722,8 +739,8 @@ fn rereads_config_changed_while_building_and_keeps_that_change() {
     let got = s.read();
     assert_eq!(got["mcpServers"]["mới"], json!({"command": "y"}));
     assert_eq!(got["preferences"]["theme"], "light");
-    assert_eq!(got["mcpServers"]["kg"]["args"][1], "mcp");
-    assert!(out.contains("servers: ohs, kg, other, mới"), "{out}");
+    assert_eq!(got["mcpServers"]["pkm"]["args"][1], "mcp");
+    assert!(out.contains("servers: ohs, pkm, other, mới"), "{out}");
 }
 
 #[test]
@@ -746,7 +763,7 @@ fn no_ohs_is_recorded_in_the_entry_and_dropped_on_a_later_install() {
     let mut s = setup(Some(EXISTING));
     s.run(&s.args(), &Fake::new()).unwrap();
     assert_eq!(
-        s.read()["mcpServers"]["kg"]["env"],
+        s.read()["mcpServers"]["pkm"]["env"],
         json!({"PKM_NO_OHS": "1"})
     );
     // Lần cài sau có OHS (nguồn không tải được: chỉ cảnh báo) thì bỏ dấu `--no-ohs`.
@@ -758,8 +775,11 @@ fn no_ohs_is_recorded_in_the_entry_and_dropped_on_a_later_install() {
         out.contains("cảnh báo: chưa cài được gói OHS từ PKM_OHS_PACKAGE="),
         "{out}"
     );
-    assert!(out.contains("chỉ `related` khi không có `hits`"), "{out}");
-    assert!(s.read()["mcpServers"]["kg"].get("env").is_none());
+    assert!(
+        out.contains("chỉ `search` và `related` không có `hits`"),
+        "{out}"
+    );
+    assert!(s.read()["mcpServers"]["pkm"].get("env").is_none());
 }
 
 #[test]
@@ -865,4 +885,164 @@ fn reinstall_and_rebuild_args_come_from_the_entry() {
     );
     assert_eq!(reinstall_args(&["/v".into(), "serve".into()], false), None);
     assert_eq!(rebuild_args(&["--db".into()]), None);
+}
+
+/// Cấu hình của lần cài trước đổi tên: mục `kg` do pkm ghi, MCP `ohs` người dùng tự thêm, và mục khác.
+fn two_doors(s: &Setup) -> String {
+    let old = server_entry(
+        &s.inst.exe,
+        &s.vault,
+        &s.inst.default_db(&s.vault),
+        &[],
+        None,
+    )
+    .unwrap();
+    serde_json::to_string_pretty(&json!({"mcpServers": {
+        "ohs": {"command": "node", "args": ["cli.js", "serve"]},
+        "kg": old.to_value(),
+        "other": {"command": "x"},
+    }}))
+    .unwrap()
+}
+
+/// Mục `kg` do pkm ghi được đổi thành `pkm` tại đúng chỗ của nó; `ohs` người dùng tự thêm giữ nguyên, kèm câu báo.
+#[test]
+fn install_renames_the_kg_entry_written_by_pkm_and_keeps_ohs() {
+    let s = setup(None);
+    fs::write(&s.config, two_doors(&s)).unwrap();
+    let out = s.run(&s.args(), &Fake::new()).unwrap();
+    let got = s.read();
+    let keys: Vec<_> = got["mcpServers"]
+        .as_object()
+        .unwrap()
+        .keys()
+        .cloned()
+        .collect();
+    assert_eq!(keys, ["ohs", "pkm", "other"]);
+    assert_eq!(
+        got["mcpServers"]["ohs"],
+        json!({"command": "node", "args": ["cli.js", "serve"]})
+    );
+    assert_eq!(got["mcpServers"]["pkm"]["args"][1], "mcp");
+    assert!(out.contains("giữ nguyên mục `ohs` bạn tự thêm"), "{out}");
+
+    // Dry-run báo đổi tên.
+    fs::write(&s.config, two_doors(&s)).unwrap();
+    let mut args = s.args();
+    args.dry_run = true;
+    let out = s.run(&args, &Fake::new()).unwrap();
+    assert!(out.contains("đổi tên mục `kg` cũ do pkm ghi"), "{out}");
+}
+
+/// Mục `kg` không do pkm ghi (bản Python chạy song song) giữ nguyên; `pkm` được thêm bên cạnh.
+#[test]
+fn install_keeps_a_kg_entry_not_written_by_pkm() {
+    let python = r#"{"mcpServers": {"kg": {"command": "python.exe", "args": ["scripts/kg/mcp_server.py"]}}}"#;
+    let s = setup(Some(python));
+    s.run(&s.args(), &Fake::new()).unwrap();
+    let got = s.read();
+    let keys: Vec<_> = got["mcpServers"]
+        .as_object()
+        .unwrap()
+        .keys()
+        .cloned()
+        .collect();
+    assert_eq!(keys, ["kg", "pkm"]);
+    assert_eq!(got["mcpServers"]["kg"]["command"], "python.exe");
+}
+
+/// `--remove` xoá `pkm` và mục `kg` cũ do pkm ghi; không đụng `ohs`.
+#[test]
+fn remove_also_drops_the_old_kg_entry_written_by_pkm() {
+    let s = setup(None);
+    fs::write(&s.config, two_doors(&s)).unwrap();
+    let mut args = s.args();
+    args.vault = None;
+    args.remove = true;
+    s.run(&args, &Fake::new()).unwrap();
+    let got = s.read();
+    let keys: Vec<_> = got["mcpServers"]
+        .as_object()
+        .unwrap()
+        .keys()
+        .cloned()
+        .collect();
+    assert_eq!(keys, ["ohs", "other"]);
+}
+
+#[test]
+fn written_by_pkm_needs_the_pkm_binary_and_mcp_args() {
+    let e = |command: &str, args: &[&str]| ServerEntry {
+        command: command.to_owned(),
+        args: args.iter().map(|a| (*a).to_owned()).collect(),
+        env: vec![],
+    };
+    assert!(written_by_pkm(&e(
+        "/home/u/.local/bin/pkm",
+        &["/v", "mcp", "--db", "/d"]
+    )));
+    assert!(written_by_pkm(&e(
+        r"C:\Users\u\AppData\Local\pkm\bin\PKM.exe",
+        &["C:\\v", "mcp"]
+    )));
+    assert!(!written_by_pkm(&e(
+        "python.exe",
+        &["scripts/kg/mcp_server.py"]
+    )));
+    assert!(!written_by_pkm(&e("/bin/pkm", &["/v", "build"])));
+}
+
+/// Gói OHS có thì làm ấm index sau khi ghi cấu hình; `--no-warm` bỏ qua; index chưa xong chỉ là cảnh báo.
+#[test]
+fn install_warms_the_ohs_index_unless_told_not_to() {
+    let s = setup(Some(EXISTING));
+    let dir = s.inst.ohs_dir();
+    let node = if cfg!(windows) {
+        "node/node.exe"
+    } else {
+        "node/bin/node"
+    };
+    fs::create_dir_all(dir.join(node).parent().unwrap()).unwrap();
+    fs::write(dir.join(node), "").unwrap();
+    fs::create_dir_all(dir.join("app/dist/src")).unwrap();
+    fs::write(dir.join("app/dist/src/cli.js"), "").unwrap();
+    let mut args = s.args();
+    args.no_ohs = false;
+    let hooks = Fake::new();
+    let out = s.run(&args, &hooks).unwrap();
+    assert_eq!(*hooks.warmed.borrow(), std::slice::from_ref(&s.vault));
+    assert!(out.contains("OHS đang index: 1/2 note"), "{out}");
+    assert!(out.contains("index tìm kiếm sẵn sàng"), "{out}");
+    assert!(
+        out.trim_end()
+            .ends_with("Mở lại Claude Desktop để dùng `pkm`."),
+        "{out}"
+    );
+
+    let hooks = Fake {
+        warm_state: OhsState::ModelMissing {
+            detail: "không tải được".into(),
+        },
+        ..Fake::new()
+    };
+    let out = s.run(&args, &hooks).unwrap();
+    assert!(
+        out.contains("cảnh báo: index tìm kiếm chưa xong (model_missing)"),
+        "{out}"
+    );
+
+    args.no_warm = true;
+    let hooks = Fake::new();
+    let out = s.run(&args, &hooks).unwrap();
+    assert!(hooks.warmed.borrow().is_empty());
+    assert!(
+        out.contains("bỏ qua làm ấm index tìm kiếm (--no-warm)"),
+        "{out}"
+    );
+
+    // `--no-ohs`: không làm ấm, không nhắc gì.
+    let hooks = Fake::new();
+    let out = s.run(&s.args(), &hooks).unwrap();
+    assert!(hooks.warmed.borrow().is_empty());
+    assert!(!out.contains("làm ấm"), "{out}");
 }

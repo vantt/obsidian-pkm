@@ -181,7 +181,7 @@ struct VaultArgs {
 #[derive(Parser)]
 #[command(
     name = "pkm mcp install",
-    about = "Cài MCP `kg` trỏ vào binary pkm cho Claude Desktop"
+    about = "Cài MCP `pkm` trỏ vào binary pkm cho Claude Desktop"
 )]
 struct InstallCmd {
     #[command(flatten)]

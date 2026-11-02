@@ -1,4 +1,9 @@
-//! `pkm mcp install`: cài MCP `kg` trỏ vào binary `pkm` cho Claude Desktop, không cần Python (PRD mục 11).
+//! `pkm mcp install`: cài MCP `pkm` trỏ vào binary `pkm` cho Claude Desktop, không cần Python (PRD mục 11).
+//!
+//! Một cửa (Q2, R14): chỉ ghi mục `pkm`. Mục `kg` cũ do chính `pkm` ghi được đổi thành `pkm` tại chỗ; mục `kg` của
+//! Python hay của người dùng giữ nguyên (chạy song song lúc so khớp). Không bao giờ ghi, sửa hay xoá mục `ohs`: `pkm`
+//! đã có `search`, `read`, nhưng người dùng muốn giữ MCP `ohs` riêng thì vẫn được. Sau khi ghi, làm ấm index tìm kiếm
+//! của OHS (trừ khi `--no-warm` hoặc `--no-ohs`) để lần hỏi đầu trong Claude Desktop không gặp `ohs_not_ready`.
 //!
 //! Đặc tả: `scripts/kg/desktop_config.py` ở sha ghim. Khác Python ở chỗ không chép mã nào: `command` là chính binary
 //! `pkm` đang chạy, index dựng vào thư mục dữ liệu của `pkm` (ngoài vault), và gói OHS cài vào `<thư mục pkm>/ohs`.
@@ -16,13 +21,13 @@ pub mod shell;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use pkm_core::ohs::{Ohs, OhsConfig, OhsPackage, OhsState};
 use pkm_core::platform;
 use sha2::{Digest, Sha256};
 
-use config::{ConfigDoc, SERVER_NAME, ServerEntry};
+use config::{ConfigDoc, LEGACY_SERVER_NAME, OHS_SERVER_NAME, SERVER_NAME, ServerEntry};
 use handshake::Handshake;
 use ohs_bundle::{Bundle, Source};
 
@@ -56,13 +61,13 @@ pub struct InstallArgs {
     /// File cấu hình Claude Desktop; mặc định tự tìm.
     #[arg(long, value_name = "FILE")]
     pub config: Option<PathBuf>,
-    /// Chạy server `kg` đã cấu hình một lần (bắt tay, lấy danh sách tool), không đổi gì.
+    /// Chạy server `pkm` đã cấu hình một lần (bắt tay, lấy danh sách tool), không đổi gì.
     #[arg(long, conflicts_with_all = ["remove", "dry_run"])]
     pub check: bool,
     /// In kế hoạch và thay đổi của cấu hình, không ghi gì, không dựng index, không tải gì.
     #[arg(long)]
     pub dry_run: bool,
-    /// Xoá mục `kg` khỏi cấu hình (index và gói OHS vẫn giữ).
+    /// Xoá mục `pkm` (và mục `kg` cũ do pkm ghi) khỏi cấu hình (index và gói OHS vẫn giữ).
     #[arg(long)]
     pub remove: bool,
     /// Ghi kể cả khi Claude Desktop đang chạy (app sẽ ghi đè khi thoát) hoặc không kiểm được.
@@ -79,6 +84,9 @@ pub struct InstallArgs {
     /// Không cài hay kiểm gói OHS.
     #[arg(long, conflicts_with = "ohs_package")]
     pub no_ohs: bool,
+    /// Không làm ấm index tìm kiếm của OHS sau khi cài (OHS sẽ index lần đầu khi Claude Desktop mở pkm).
+    #[arg(long)]
+    pub no_warm: bool,
     /// Hạn giờ bắt tay với server, giây.
     #[arg(long, default_value_t = 120, value_name = "SECS")]
     pub timeout: u64,
@@ -156,6 +164,50 @@ pub trait Hooks {
         state
     }
 
+    /// Làm ấm index tìm kiếm: chạy gói `pkm` trên `vault` (cùng DB mà MCP `pkm` dùng) tới khi index xong, OHS hỏng,
+    /// hoặc hết `timeout`; in tiến độ ra `out` khi đổi. Trả trạng thái cuối.
+    fn warm_ohs(
+        &self,
+        pkg: OhsPackage,
+        vault: &Path,
+        timeout: Duration,
+        out: &mut dyn Write,
+    ) -> OhsState {
+        let ohs = Ohs::start(pkg, OhsConfig::new(vault));
+        let deadline = Instant::now() + timeout;
+        let mut last = String::new();
+        let state = loop {
+            let s = ohs.state();
+            if s.is_ready()
+                || s.is_terminal()
+                || matches!(s, OhsState::ModelMissing { .. })
+                || Instant::now() >= deadline
+            {
+                break s;
+            }
+            let line = match &s {
+                OhsState::Indexing {
+                    indexed,
+                    pending,
+                    eta_s,
+                    ..
+                } => format!(
+                    "  OHS đang index: {indexed}/{} note{}",
+                    indexed + pending,
+                    eta_s.map_or_else(String::new, |e| format!(", còn khoảng {e} giây"))
+                ),
+                other => format!("  OHS: {}", other.name()),
+            };
+            if line != last {
+                let _ = writeln!(out, "{line}");
+                last = line;
+            }
+            std::thread::sleep(Duration::from_secs(2));
+        };
+        ohs.shutdown();
+        state
+    }
+
     /// Windows có bật đường dẫn dài (`LongPathsEnabled`) không; `None` khi không phải Windows.
     fn long_paths_enabled(&self) -> Option<io::Result<bool>> {
         long_paths_enabled()
@@ -209,8 +261,10 @@ pub const INSTALL_DIR_ENV: &str = "PKM_INSTALL_DIR";
 pub const INSTALL_MARKER: &str = ".pkm-managed";
 /// Repo phát hành `pkm` (riêng tư: tải qua `gh` đã đăng nhập).
 pub const RELEASE_REPO: &str = "vantt/obsidian-pkm";
-/// Biến trong `env` của mục `kg` ghi rằng lần cài dùng `--no-ohs`, để `doctor` không cảnh báo thiếu gói OHS.
+/// Biến trong `env` của mục `pkm` ghi rằng lần cài dùng `--no-ohs`, để `doctor` không cảnh báo thiếu gói OHS.
 pub const NO_OHS_ENV: &str = "PKM_NO_OHS";
+/// Làm ấm index OHS khi cài chờ tối đa chừng này (vault vài nghìn note lần đầu mất khoảng 10 phút).
+const WARM_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 
 /// Thư mục cài chuẩn của binary trên máy này (xem [`STANDARD_BIN_DIR`]).
 pub fn standard_bin_dir() -> Option<PathBuf> {
@@ -256,7 +310,7 @@ impl Install {
     }
 
     /// Lời cảnh báo khi binary đang chạy không nằm ở chỗ cài ổn định (thư mục cài chuẩn, [`INSTALL_DIR_ENV`], hay
-    /// thư mục có [`INSTALL_MARKER`] của bộ cài): Claude Desktop sẽ gọi đúng file đó, xoá hay dời là `kg` hỏng.
+    /// thư mục có [`INSTALL_MARKER`] của bộ cài): Claude Desktop sẽ gọi đúng file đó, xoá hay dời là `pkm` hỏng.
     /// `rerun` là đối số của `pkm` để chạy lại đúng lệnh này từ chỗ chuẩn.
     pub fn exe_location_warning(&self, rerun: &[String]) -> Option<String> {
         let dir = self.exe.parent()?;
@@ -379,7 +433,11 @@ pub fn run_with(
         return check(&path, hooks, timeout, out);
     }
     let (mut doc, digest) = load_with_digest(&path)?;
-    let before = doc.server(SERVER_NAME).cloned();
+    let legacy = legacy_entry(&doc);
+    let before = doc
+        .server(SERVER_NAME)
+        .or_else(|| legacy.then(|| doc.server(LEGACY_SERVER_NAME)).flatten())
+        .cloned();
     if args.remove {
         return remove(&path, &mut doc, before, args, hooks, out);
     }
@@ -401,7 +459,7 @@ pub fn run_with(
         entry.env.push((NO_OHS_ENV.to_owned(), "1".to_owned()));
     }
     let after = entry.to_value();
-    let mut changed = doc.set_server(SERVER_NAME, Some(after.clone()));
+    let mut changed = put_entry(&mut doc, &after);
     let p = |out: &mut dyn Write, s: String| writeln!(out, "{s}").map_err(|e| e.to_string());
     let location = inst.exe_location_warning(&rerun_args(&entry.args, args));
 
@@ -422,6 +480,7 @@ pub fn run_with(
             )?;
         }
         p(out, format!("- {}", ohs_plan(inst, args)))?;
+        p(out, format!("- {}", warm_plan(args)))?;
         p(
             out,
             format!(
@@ -433,10 +492,18 @@ pub fn run_with(
         p(
             out,
             format!(
-                "- {} mục `{SERVER_NAME}`:",
-                if changed { "ghi" } else { "giữ nguyên" }
+                "- {} mục `{SERVER_NAME}`{}:",
+                if changed { "ghi" } else { "giữ nguyên" },
+                if legacy {
+                    format!(" (đổi tên mục `{LEGACY_SERVER_NAME}` cũ do pkm ghi)")
+                } else {
+                    String::new()
+                }
             ),
         )?;
+        if let Some(note) = ohs_note(&doc) {
+            p(out, format!("- {note}"))?;
+        }
         write!(
             out,
             "{}",
@@ -470,7 +537,7 @@ pub fn run_with(
         .map_err(|e| format!("{e}. Index đã dựng xong; cấu hình Claude Desktop chưa đổi"))?;
     if now != digest {
         doc = fresh;
-        changed = doc.set_server(SERVER_NAME, Some(after.clone()));
+        changed = put_entry(&mut doc, &after);
         p(
             out,
             format!(
@@ -502,21 +569,121 @@ pub fn run_with(
             ),
         )?;
     }
+    if let Some(note) = ohs_note(&doc) {
+        p(out, note)?;
+    }
     let hs = hooks
         .handshake(&entry, timeout)
         .map_err(|e| format!("cấu hình đã ghi nhưng server không bắt tay được: {e}"))?;
     p(
         out,
         format!(
-            "server trả lời: {} {}, {} tool. Mở lại Claude Desktop để dùng `{SERVER_NAME}`.",
+            "server trả lời: {} {}, {} tool.",
             hs.server_name,
             hs.server_version,
             hs.tools.len()
         ),
+    )?;
+    warm(inst, args, &vault, hooks, out)?;
+    p(
+        out,
+        format!("Mở lại Claude Desktop để dùng `{SERVER_NAME}`."),
     )
 }
 
-/// Mục `kg`: `command` là binary `pkm`, `args` là `VAULT mcp --db DB <cờ đọc> [--about TEXT]`.
+/// Mục `kg` của `doc` do `pkm` ghi (sẽ đổi tên thành `pkm`), khi chưa có mục `pkm`.
+fn legacy_entry(doc: &ConfigDoc) -> bool {
+    doc.server(SERVER_NAME).is_none()
+        && doc
+            .server(LEGACY_SERVER_NAME)
+            .and_then(|v| ServerEntry::from_value(v).ok())
+            .is_some_and(|e| written_by_pkm(&e))
+}
+
+/// Đặt mục `pkm` là `entry`: đổi tên mục `kg` cũ do `pkm` ghi tại chỗ của nó, không thì đặt mục `pkm`. Không đụng mục
+/// nào khác (`kg` của Python hay người dùng, `ohs`). Trả `true` khi nội dung đổi.
+fn put_entry(doc: &mut ConfigDoc, entry: &serde_json::Value) -> bool {
+    if legacy_entry(doc) {
+        doc.replace_server(LEGACY_SERVER_NAME, SERVER_NAME, entry.clone())
+    } else {
+        doc.set_server(SERVER_NAME, Some(entry.clone()))
+    }
+}
+
+/// Mục do `pkm mcp install` ghi: `command` là binary `pkm` (`pkm`, `pkm.exe`) và `args` là `VAULT mcp ...`. Mục `kg`
+/// của bản Python chạy `python` nên không khớp.
+pub fn written_by_pkm(entry: &ServerEntry) -> bool {
+    // Tách cả `/` lẫn `\`: cấu hình Windows đọc được trên mọi nền (test, WSL).
+    let name = entry.command.rsplit(['/', '\\']).next().unwrap_or_default();
+    let is_pkm = name.eq_ignore_ascii_case("pkm") || name.eq_ignore_ascii_case("pkm.exe");
+    is_pkm && reinstall_args(&entry.args, false).is_some()
+}
+
+/// Câu báo khi người dùng còn MCP `ohs` riêng: giữ nguyên, chỉ nói là không cần.
+fn ohs_note(doc: &ConfigDoc) -> Option<String> {
+    doc.server(OHS_SERVER_NAME).map(|_| {
+        format!(
+            "giữ nguyên mục `{OHS_SERVER_NAME}` bạn tự thêm; `{SERVER_NAME}` đã có search và read nên có thể bỏ              `{OHS_SERVER_NAME}` (không bắt buộc; để cả hai thì agent thấy hai tool search và OHS nạp model hai lần)"
+        )
+    })
+}
+
+/// Mô tả việc làm ấm index OHS (cho `--dry-run`).
+fn warm_plan(args: &InstallArgs) -> String {
+    if args.no_ohs {
+        "không làm ấm index tìm kiếm (--no-ohs)".to_owned()
+    } else if args.no_warm {
+        "không làm ấm index tìm kiếm (--no-warm)".to_owned()
+    } else {
+        "làm ấm index tìm kiếm của OHS (chạy OHS tới khi index xong, tối đa 30 phút)".to_owned()
+    }
+}
+
+/// Làm ấm index tìm kiếm của OHS sau khi cài. Không bao giờ làm lệnh cài thất bại: `pkm` vẫn chạy khi index chưa
+/// xong (`search` báo `ohs_not_ready` tới lúc đó).
+fn warm(
+    inst: &Install,
+    args: &InstallArgs,
+    vault: &Path,
+    hooks: &dyn Hooks,
+    out: &mut dyn Write,
+) -> Result<(), String> {
+    let w = |out: &mut dyn Write, s: String| writeln!(out, "{s}").map_err(|e| e.to_string());
+    if args.no_ohs {
+        return Ok(());
+    }
+    if args.no_warm {
+        return w(
+            out,
+            "bỏ qua làm ấm index tìm kiếm (--no-warm); OHS sẽ index lần đầu khi Claude Desktop mở pkm".to_owned(),
+        );
+    }
+    let Ok(pkg) = OhsPackage::from_dir(&inst.ohs_dir()) else {
+        return Ok(());
+    };
+    w(
+        out,
+        format!(
+            "làm ấm index tìm kiếm của OHS cho {} (lần đầu có thể mất vài phút; Ctrl+C để bỏ, OHS sẽ index tiếp khi              Claude Desktop mở pkm)…",
+            vault.display()
+        ),
+    )?;
+    let state = hooks.warm_ohs(pkg, vault, WARM_TIMEOUT, out);
+    if state.is_ready() {
+        w(out, "index tìm kiếm sẵn sàng".to_owned())
+    } else {
+        w(
+            out,
+            format!(
+                "cảnh báo: index tìm kiếm chưa xong ({}): {} `{SERVER_NAME}` vẫn chạy; search báo ohs_not_ready tới                  khi xong",
+                state.name(),
+                state.action()
+            ),
+        )
+    }
+}
+
+/// Mục `pkm`: `command` là binary `pkm`, `args` là `VAULT mcp --db DB <cờ đọc> [--about TEXT]`.
 pub fn server_entry(
     exe: &Path,
     vault: &Path,
@@ -541,7 +708,7 @@ pub fn server_entry(
     })
 }
 
-/// Đối số `pkm` để chạy lại `mcp install` cho mục `kg` có `entry_args` (dạng [`server_entry`] ghi):
+/// Đối số `pkm` để chạy lại `mcp install` cho mục `pkm` có `entry_args` (dạng [`server_entry`] ghi):
 /// `mcp install VAULT --db DB <cờ đọc> [--about TEXT] [--no-ohs]`. `None` khi `entry_args` không có dạng đó.
 pub fn reinstall_args(entry_args: &[String], no_ohs: bool) -> Option<Vec<String>> {
     let (vault, rest) = entry_args.split_first()?;
@@ -557,7 +724,7 @@ pub fn reinstall_args(entry_args: &[String], no_ohs: bool) -> Option<Vec<String>
     Some(out)
 }
 
-/// Đối số `pkm` để dựng lại index của mục `kg`: `VAULT build --db DB <cờ đọc>` (bỏ `--about`, cờ riêng của MCP).
+/// Đối số `pkm` để dựng lại index của mục `pkm`: `VAULT build --db DB <cờ đọc>` (bỏ `--about`, cờ riêng của MCP).
 pub fn rebuild_args(entry_args: &[String]) -> Option<Vec<String>> {
     let mut args = reinstall_args(entry_args, false)?.split_off(2);
     if let Some(i) = args.iter().position(|a| a == "--about") {
@@ -627,7 +794,7 @@ fn load_with_digest(path: &Path) -> Result<(ConfigDoc, Option<[u8; 32]>), String
     Ok((ConfigDoc::load(path)?, digest))
 }
 
-/// Vault và DB đọc ngược từ `args` của mục `kg` (dạng [`server_entry`] ghi).
+/// Vault và DB đọc ngược từ `args` của mục `pkm` (dạng [`server_entry`] ghi).
 pub fn entry_paths(args: &[String]) -> (Option<PathBuf>, Option<PathBuf>) {
     let vault = args
         .first()
@@ -648,12 +815,23 @@ fn check(
     out: &mut dyn Write,
 ) -> Result<(), String> {
     let doc = ConfigDoc::load(path)?;
-    let value = doc.server(SERVER_NAME).ok_or_else(|| {
-        format!(
-            "chưa có `{SERVER_NAME}` trong {}; chạy `pkm mcp install VAULT`",
-            path.display()
+    let legacy = legacy_entry(&doc);
+    let value = doc
+        .server(SERVER_NAME)
+        .or_else(|| legacy.then(|| doc.server(LEGACY_SERVER_NAME)).flatten())
+        .ok_or_else(|| {
+            format!(
+                "chưa có `{SERVER_NAME}` trong {}; chạy `pkm mcp install VAULT`",
+                path.display()
+            )
+        })?;
+    if legacy {
+        writeln!(
+            out,
+            "mục `{LEGACY_SERVER_NAME}` cũ do pkm ghi; chạy lại `pkm mcp install VAULT` để đổi tên thành `{SERVER_NAME}`"
         )
-    })?;
+        .map_err(|e| e.to_string())?;
+    }
     let entry = ServerEntry::from_value(value).map_err(|e| format!("mục `{SERVER_NAME}`: {e}"))?;
     let hs = hooks.handshake(&entry, timeout)?;
     writeln!(
@@ -687,6 +865,9 @@ fn remove(
         );
     }
     doc.set_server(SERVER_NAME, None);
+    if legacy_entry(doc) {
+        doc.set_server(LEGACY_SERVER_NAME, None);
+    }
     if args.dry_run {
         w(
             out,
@@ -767,7 +948,7 @@ fn ohs_plan(inst: &Install, args: &InstallArgs) -> String {
 }
 
 /// Cài gói OHS theo `args`. Gói chỉ ra bằng `--ohs-package` mà lỗi thì dừng; tự tải (từ
-/// [`ohs_bundle::PACKAGE_ENV`] nếu đặt, không thì gói ghim của bản phát hành) lỗi thì chỉ cảnh báo, vì `kg` vẫn chạy được không
+/// [`ohs_bundle::PACKAGE_ENV`] nếu đặt, không thì gói ghim của bản phát hành) lỗi thì chỉ cảnh báo, vì `pkm` vẫn chạy được không
 /// cần OHS (chỉ `related` không có `hits` cần OHS).
 fn install_ohs(
     inst: &Install,
@@ -784,7 +965,7 @@ fn install_ohs(
         ohs_bundle::install(source, inst.bundle, &dest, out, &fetch)
     };
     let w = |out: &mut dyn Write, s: String| writeln!(out, "{s}").map_err(|e| e.to_string());
-    let not_ready = "`kg` vẫn chạy; chỉ `related` khi không có `hits` cần OHS và sẽ báo ohs_not_ready tới khi cài gói";
+    let not_ready = "`pkm` vẫn chạy; chỉ `search` và `related` không có `hits` cần OHS và sẽ báo ohs_not_ready tới khi cài gói";
     if let Some(p) = &args.ohs_package {
         let source = match p.to_str() {
             Some(text) => Source::parse(text)?,

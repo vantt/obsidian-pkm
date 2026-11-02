@@ -1,5 +1,6 @@
-//! `pkm doctor`: chẩn đoán máy người dùng (PRD mục 10, "Thêm"): cấu hình Claude Desktop và mục `kg`, file index,
-//! gói OHS và trạng thái OHS (D7), đường dẫn dài trên Windows. Mỗi mục không ổn có câu "việc cần làm" (`action`) và,
+//! `pkm doctor`: chẩn đoán máy người dùng (PRD mục 10, "Thêm"): cấu hình Claude Desktop và mục `pkm` (mã kiểm vẫn là
+//! `kg_entry` để giữ hợp đồng `--json`), MCP `ohs` riêng, file index, gói OHS và trạng thái OHS (D7), đường dẫn dài
+//! trên Windows. Mỗi mục không ổn có câu "việc cần làm" (`action`) và,
 //! khi có, một lệnh chạy được không cần hỏi gì (`fix`).
 //!
 //! Chỉ đọc: không ghi file nào, không dựng index, không chạy OHS. Chạy thử OHS (có thể bắt đầu index và nạp model) chỉ
@@ -15,15 +16,17 @@ use std::time::Duration;
 use pkm_core::ohs::{OhsPackage, OhsState};
 use serde_json::{Value, json};
 
-use crate::install::config::{self, ConfigDoc, SERVER_NAME, ServerEntry};
+use crate::install::config::{
+    self, ConfigDoc, LEGACY_SERVER_NAME, OHS_SERVER_NAME, SERVER_NAME, ServerEntry,
+};
 use crate::install::{self, Hooks, shell};
 
 /// Phiên bản của envelope `--json`.
 pub const SCHEMA: u32 = 1;
 
-/// Không có OHS thì chỉ `related` khi không có `hits` bị ảnh hưởng.
-const WITHOUT_OHS: &str = "không có OHS thì chỉ `related` khi không có `hits` bị ảnh hưởng; mọi tool khác của \
-                           `kg` chạy bình thường";
+/// Không có OHS thì chỉ `search` và `related` không có `hits` bị ảnh hưởng.
+const WITHOUT_OHS: &str = "không có OHS thì chỉ `search` và `related` không có `hits` bị ảnh hưởng; mọi tool khác \
+                           của `pkm` (gồm `read`) chạy bình thường";
 
 /// Tuỳ chọn của `pkm doctor`.
 #[derive(clap::Args, Debug, Clone, Default)]
@@ -31,13 +34,13 @@ pub struct DoctorArgs {
     /// File cấu hình Claude Desktop; mặc định tự tìm.
     #[arg(long, value_name = "FILE")]
     pub config: Option<PathBuf>,
-    /// File index cần kiểm; mặc định lấy từ `--db` của mục `kg`.
+    /// File index cần kiểm; mặc định lấy từ `--db` của mục `pkm`.
     #[arg(long, value_name = "PATH")]
     pub db: Option<PathBuf>,
     /// Thư mục gói OHS; mặc định như `pkm` tìm (biến PKM_OHS_DIR, rồi thư mục của bộ cài).
     #[arg(long, value_name = "DIR")]
     pub ohs: Option<PathBuf>,
-    /// Chạy thử OHS trên vault của mục `kg` để xem trạng thái (OHS có thể bắt đầu index và nạp model). Mặc định chỉ
+    /// Chạy thử OHS trên vault của mục `pkm` để xem trạng thái (OHS có thể bắt đầu index và nạp model). Mặc định chỉ
     /// kiểm gói có đủ file và `node --version`, không ghi gì.
     #[arg(long)]
     pub deep: bool,
@@ -55,7 +58,7 @@ pub enum Status {
     Ok,
     /// Chạy được nhưng nên xử lý (hoặc đang chờ, ví dụ OHS đang index).
     Warn,
-    /// Hỏng: `kg` sẽ không chạy đúng.
+    /// Hỏng: `pkm` sẽ không chạy đúng.
     Fail,
     /// Không áp dụng hoặc không kiểm được vì mục trước đã hỏng.
     Skip,
@@ -222,7 +225,7 @@ pub fn run(args: &DoctorArgs, hooks: &dyn Hooks, out: &mut dyn Write) -> Result<
     run_with(args, hooks, &exe, out)
 }
 
-/// [`run`] với binary `pkm` truyền vào (dùng trong lệnh sửa khi mục `kg` không chỉ tới binary nào dùng được).
+/// [`run`] với binary `pkm` truyền vào (dùng trong lệnh sửa khi mục `pkm` không chỉ tới binary nào dùng được).
 pub fn run_with(
     args: &DoctorArgs,
     hooks: &dyn Hooks,
@@ -242,10 +245,10 @@ pub fn run_with(
     Ok(report.ok())
 }
 
-/// Lệnh sửa dựng từ mục `kg`: chạy bằng binary của mục đó nếu còn, không thì bằng `pkm` đang chạy.
+/// Lệnh sửa dựng từ mục `pkm`: chạy bằng binary của mục đó nếu còn, không thì bằng `pkm` đang chạy.
 struct Fixes {
     exe: String,
-    /// `args` của mục `kg` khi vault trong đó còn và `args` đúng dạng [`install::server_entry`] ghi.
+    /// `args` của mục `pkm` khi vault trong đó còn và `args` đúng dạng [`install::server_entry`] ghi.
     entry_args: Option<Vec<String>>,
     no_ohs: bool,
 }
@@ -270,12 +273,12 @@ impl Fixes {
         shell::command_line(&self.exe, &args)
     }
 
-    /// `pkm mcp install` lại với đúng vault và cờ của mục `kg` (từ chối khi Claude Desktop đang chạy).
+    /// `pkm mcp install` lại với đúng vault và cờ của mục `pkm` (từ chối khi Claude Desktop đang chạy).
     fn reinstall(&self) -> Option<String> {
         install::reinstall_args(self.entry_args.as_deref()?, self.no_ohs).map(|a| self.line(a))
     }
 
-    /// Dựng lại index của mục `kg` vào `db`.
+    /// Dựng lại index của mục `pkm` vào `db`.
     fn rebuild(&self, db: &Path) -> Option<String> {
         let mut args = install::rebuild_args(self.entry_args.as_deref()?)?;
         let db = db.to_string_lossy().into_owned();
@@ -287,7 +290,7 @@ impl Fixes {
     }
 }
 
-/// Mục `kg` được cài với `--no-ohs` (`env` có `PKM_NO_OHS=1`).
+/// Mục `pkm` được cài với `--no-ohs` (`env` có `PKM_NO_OHS=1`).
 fn installed_without_ohs(entry: &ServerEntry) -> bool {
     entry
         .env
@@ -295,14 +298,18 @@ fn installed_without_ohs(entry: &ServerEntry) -> bool {
         .any(|(k, v)| k == install::NO_OHS_ENV && v == "1")
 }
 
-/// Chạy mọi mục kiểm. `exe` là binary `pkm` dùng trong lệnh sửa khi mục `kg` không chỉ tới binary nào dùng được.
+/// Chạy mọi mục kiểm. `exe` là binary `pkm` dùng trong lệnh sửa khi mục `pkm` không chỉ tới binary nào dùng được.
 pub fn diagnose(args: &DoctorArgs, hooks: &dyn Hooks, exe: &Path) -> Report {
     let mut checks = Vec::new();
-    let entry = check_config(args.config.as_deref(), &mut checks);
+    let (entry, ohs_mcp) = check_config(args.config.as_deref(), &mut checks);
     let fixes = Fixes::new(entry.as_ref(), exe);
-    if let Some(c) = checks.last_mut().filter(|c| c.status == Status::Fail) {
+    if let Some(c) = checks
+        .last_mut()
+        .filter(|c| matches!(c.status, Status::Fail | Status::Warn))
+    {
         c.fix = fixes.reinstall();
     }
+    checks.push(ohs_mcp);
     let (vault, entry_db) = entry
         .as_ref()
         .map(|e| install::entry_paths(&e.args))
@@ -320,8 +327,40 @@ pub fn diagnose(args: &DoctorArgs, hooks: &dyn Hooks, exe: &Path) -> Report {
     Report { checks }
 }
 
-/// `claude_config` và `kg_entry`; trả mục `kg` khi đọc được.
-fn check_config(explicit: Option<&Path>, checks: &mut Vec<Check>) -> Option<ServerEntry> {
+/// `claude_config` và `kg_entry` (mục `pkm`, hoặc mục `kg` cũ do pkm ghi: cảnh báo đổi tên); trả mục đó khi đọc được,
+/// cùng mục kiểm `ohs_mcp`.
+fn check_config(explicit: Option<&Path>, checks: &mut Vec<Check>) -> (Option<ServerEntry>, Check) {
+    let (entry, doc) = check_entry(explicit, checks);
+    (entry, check_ohs_mcp(doc.as_ref()))
+}
+
+/// `ohs_mcp`: MCP `ohs` riêng còn đăng ký thì chỉ cảnh báo (không cấm dùng song song, không tự xoá).
+fn check_ohs_mcp(doc: Option<&ConfigDoc>) -> Check {
+    const ID: &str = "ohs_mcp";
+    let Some(doc) = doc else {
+        return Check::skip(ID, "không đọc được file cấu hình");
+    };
+    match doc.server(OHS_SERVER_NAME) {
+        None => Check::ok(ID, format!("không có MCP `{OHS_SERVER_NAME}` riêng")),
+        Some(_) => Check::bad(
+            ID,
+            Status::Warn,
+            format!(
+                "MCP `{OHS_SERVER_NAME}` riêng vẫn đăng ký cạnh `{SERVER_NAME}`: agent thấy hai tool search, OHS chạy hai \
+                 tiến trình và nạp model hai lần"
+            ),
+            format!(
+                "`{SERVER_NAME}` đã có search và read. Nếu không cần `{OHS_SERVER_NAME}` riêng, thoát hẳn Claude Desktop \
+                 rồi xoá mục `{OHS_SERVER_NAME}` trong file cấu hình; giữ cũng được."
+            ),
+        ),
+    }
+}
+
+fn check_entry(
+    explicit: Option<&Path>,
+    checks: &mut Vec<Check>,
+) -> (Option<ServerEntry>, Option<ConfigDoc>) {
     const CONFIG: &str = "claude_config";
     const ENTRY: &str = "kg_entry";
     let path = match config::locate(explicit) {
@@ -334,7 +373,7 @@ fn check_config(explicit: Option<&Path>, checks: &mut Vec<Check>) -> Option<Serv
                 "Cài và mở Claude Desktop một lần, hoặc chỉ file cấu hình bằng --config <file>.",
             ));
             checks.push(Check::skip(ENTRY, "không có file cấu hình"));
-            return None;
+            return (None, None);
         }
     };
     if !path.is_file() {
@@ -345,7 +384,7 @@ fn check_config(explicit: Option<&Path>, checks: &mut Vec<Check>) -> Option<Serv
             "Chạy `pkm mcp install VAULT` (bộ cài tạo file).",
         ));
         checks.push(Check::skip(ENTRY, "không có file cấu hình"));
-        return None;
+        return (None, None);
     }
     let doc = match ConfigDoc::load(&path) {
         Ok(doc) => doc,
@@ -357,7 +396,7 @@ fn check_config(explicit: Option<&Path>, checks: &mut Vec<Check>) -> Option<Serv
                 "Sửa JSON của file, hoặc chép lại bản sao lưu `.bak-*` cạnh nó (Claude Desktop đóng hẳn).",
             ));
             checks.push(Check::skip(ENTRY, "không đọc được file cấu hình"));
-            return None;
+            return (None, None);
         }
     };
     checks.push(Check::ok(
@@ -370,35 +409,56 @@ fn check_config(explicit: Option<&Path>, checks: &mut Vec<Check>) -> Option<Serv
     ));
     let reinstall =
         "Thoát hẳn Claude Desktop rồi chạy `pkm mcp install VAULT` bằng binary pkm cần dùng.";
-    let Some(value) = doc.server(SERVER_NAME) else {
-        checks.push(Check::bad(
-            ENTRY,
-            Status::Fail,
-            format!("chưa có mục `{SERVER_NAME}`"),
-            reinstall,
-        ));
-        return None;
+    let legacy = doc
+        .server(LEGACY_SERVER_NAME)
+        .and_then(|v| ServerEntry::from_value(v).ok())
+        .filter(install::written_by_pkm);
+    let (name, value) = match (doc.server(SERVER_NAME), legacy) {
+        (Some(v), _) => (SERVER_NAME, v.clone()),
+        (None, Some(e)) => (LEGACY_SERVER_NAME, e.to_value()),
+        (None, None) => {
+            checks.push(Check::bad(
+                ENTRY,
+                Status::Fail,
+                format!("chưa có mục `{SERVER_NAME}`"),
+                reinstall,
+            ));
+            return (None, Some(doc));
+        }
     };
-    let entry = match ServerEntry::from_value(value) {
+    let entry = match ServerEntry::from_value(&value) {
         Ok(e) => e,
         Err(e) => {
             checks.push(Check::bad(
                 ENTRY,
                 Status::Fail,
-                format!("mục `{SERVER_NAME}` sai: {e}"),
+                format!("mục `{name}` sai: {e}"),
                 reinstall,
             ));
-            return None;
+            return (None, Some(doc));
         }
     };
     checks.push(match entry_problem(&entry) {
         Some(problem) => Check::bad(ENTRY, Status::Fail, problem, reinstall),
+        None if name == LEGACY_SERVER_NAME => Check::bad(
+            ENTRY,
+            Status::Warn,
+            format!(
+                "mục `{LEGACY_SERVER_NAME}` cũ do pkm ghi ({} {}); tên MCP nay là `{SERVER_NAME}`",
+                entry.command,
+                entry.args.join(" ")
+            ),
+            format!(
+                "Thoát hẳn Claude Desktop rồi chạy lại `pkm mcp install VAULT`: mục `{LEGACY_SERVER_NAME}` được đổi tên \
+                 thành `{SERVER_NAME}`. Sửa câu nhắc `{LEGACY_SERVER_NAME}` trong Project instructions nếu có."
+            ),
+        ),
         None => Check::ok(ENTRY, format!("{} {}", entry.command, entry.args.join(" "))),
     });
-    Some(entry)
+    (Some(entry), Some(doc))
 }
 
-/// Lỗi của mục `kg` khiến Claude Desktop không chạy được server, nếu có.
+/// Lỗi của mục `pkm` khiến Claude Desktop không chạy được server, nếu có.
 fn entry_problem(entry: &ServerEntry) -> Option<String> {
     let command = Path::new(&entry.command);
     if !command.is_absolute() {
@@ -428,7 +488,7 @@ fn check_db(db: Option<PathBuf>, fixes: &Fixes, hooks: &dyn Hooks) -> Check {
     let Some(db) = db else {
         return Check::skip(
             ID,
-            "không biết file index nào (mục `kg` không có --db; dùng --db)",
+            "không biết file index nào (mục `pkm` không có --db; dùng --db)",
         );
     };
     let action =
@@ -522,7 +582,7 @@ fn check_ohs_state(
         );
     }
     let Some(vault) = vault else {
-        return Check::skip(ID, "không biết vault nào (mục `kg` chưa đúng)");
+        return Check::skip(ID, "không biết vault nào (mục `pkm` chưa đúng)");
     };
     let state = hooks.ohs_state(pkg, vault, Duration::from_secs(args.ohs_wait));
     let detail = format!("OHS trên {}: {}", vault.display(), state.name());

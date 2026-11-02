@@ -56,7 +56,7 @@ impl Hooks for Fake {
     }
 }
 
-/// Máy giả hoàn chỉnh: binary `pkm`, vault, index SQLite, gói OHS và cấu hình có `kg` cùng `ohs`.
+/// Máy giả hoàn chỉnh: binary `pkm`, vault, index SQLite, gói OHS và cấu hình có mục `pkm`.
 struct Machine {
     tmp: tempfile::TempDir,
     exe: PathBuf,
@@ -111,8 +111,13 @@ impl Machine {
         }
     }
 
-    /// Ghi cấu hình có `ohs` và mục `kg` như `pkm mcp install` ghi, với `env` cho mục `kg`.
+    /// Ghi cấu hình có mục `pkm` như `pkm mcp install` ghi, với `env` cho mục đó.
     fn write_entry(&self, env: &[(&str, &str)]) {
+        self.write_servers(env, |entry| serde_json::json!({"pkm": entry}));
+    }
+
+    /// Ghi cấu hình với `mcpServers` dựng từ mục mà `pkm mcp install` ghi.
+    fn write_servers(&self, env: &[(&str, &str)], servers: impl Fn(Value) -> Value) {
         let mut entry = install::server_entry(
             &self.exe,
             &self.vault,
@@ -125,8 +130,7 @@ impl Machine {
             .iter()
             .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
             .collect();
-        let doc =
-            serde_json::json!({"mcpServers": {"ohs": {"command": "node"}, "kg": entry.to_value()}});
+        let doc = serde_json::json!({"mcpServers": servers(entry.to_value())});
         fs::write(&self.config, doc.to_string()).unwrap();
     }
 
@@ -159,6 +163,7 @@ fn healthy_machine_passes_every_check_without_starting_ohs() {
         [
             ("claude_config", Status::Ok),
             ("kg_entry", Status::Ok),
+            ("ohs_mcp", Status::Ok),
             ("db", Status::Ok),
             ("ohs_package", Status::Ok),
             ("ohs_node", Status::Ok),
@@ -200,7 +205,8 @@ fn missing_ohs_package_only_warns_and_explains_the_impact() {
     let c = check(&report, "ohs_package");
     assert_eq!(c.status, Status::Warn);
     assert!(
-        c.detail.contains("chỉ `related` khi không có `hits`"),
+        c.detail
+            .contains("chỉ `search` và `related` không có `hits`"),
         "{c:?}"
     );
     assert!(c.action.as_deref().unwrap().contains("PKM_OHS_PACKAGE"));
@@ -289,7 +295,7 @@ fn every_problem_has_an_action_and_fail_fixes_go_to_next() {
     );
     assert_eq!(
         fix, want,
-        "dựng lại đúng index, cùng cờ đọc, bằng binary của `kg`"
+        "dựng lại đúng index, cùng cờ đọc, bằng binary của mục `pkm`"
     );
     assert!(
         check(&report, "long_paths")
@@ -330,7 +336,7 @@ fn kg_entry_with_missing_command_or_vault_fails() {
             args: vec![vault.to_string_lossy().into_owned(), "mcp".into()],
             env: vec![],
         };
-        let doc = serde_json::json!({"mcpServers": {"kg": entry.to_value()}});
+        let doc = serde_json::json!({"mcpServers": {"pkm": entry.to_value()}});
         fs::write(&m.config, doc.to_string()).unwrap();
         m.diagnose(&m.args(), &Fake::new())
     };
@@ -347,7 +353,7 @@ fn kg_entry_with_missing_command_or_vault_fails() {
             )
             .as_str()
         ),
-        "binary của `kg` mất thì cài lại bằng binary đang chạy doctor"
+        "binary của mục `pkm` mất thì cài lại bằng binary đang chạy doctor"
     );
     let r = set("pkm", &m.vault);
     assert!(
@@ -437,4 +443,46 @@ fn doctor_args_parse_deep_flag() {
     assert!(cli.args.deep && cli.args.json);
     assert!(!Cli::try_parse_from(["doctor"]).unwrap().args.deep);
     assert!(Cli::try_parse_from(["doctor", "--no-ohs-start"]).is_err());
+}
+
+/// Mục `kg` cũ do pkm ghi (trước khi đổi tên): vẫn kiểm vault và index theo mục đó, chỉ cảnh báo kèm lệnh cài lại
+/// (đổi tên thành `pkm`). Mục `kg` của Python (không phải binary pkm) không được tính là của pkm.
+#[test]
+fn legacy_kg_entry_written_by_pkm_warns_with_reinstall_fix() {
+    let m = machine();
+    m.write_servers(&[], |entry| serde_json::json!({"kg": entry}));
+    let report = m.diagnose(&m.args(), &Fake::new());
+    assert!(report.ok());
+    let c = check(&report, "kg_entry");
+    assert_eq!(c.status, Status::Warn, "{c:?}");
+    assert!(c.detail.contains("tên MCP nay là `pkm`"), "{c:?}");
+    let fix = c.fix.as_deref().unwrap();
+    assert!(fix.contains("mcp install") && fix.contains("e11"), "{fix}");
+    assert_eq!(status(&report, "db"), Status::Ok);
+
+    fs::write(
+        &m.config,
+        r#"{"mcpServers": {"kg": {"command": "python.exe", "args": ["scripts/kg/mcp_server.py"]}}}"#,
+    )
+    .unwrap();
+    let report = m.diagnose(&m.args(), &Fake::new());
+    assert_eq!(status(&report, "kg_entry"), Status::Fail);
+}
+
+/// MCP `ohs` riêng cạnh `pkm`: chỉ cảnh báo, không có lệnh sửa tự động (không xoá mục người dùng tự thêm).
+#[test]
+fn separate_ohs_mcp_only_warns() {
+    let m = machine();
+    m.write_servers(
+        &[],
+        |entry| serde_json::json!({"ohs": {"command": "node"}, "pkm": entry}),
+    );
+    let report = m.diagnose(&m.args(), &Fake::new());
+    assert!(report.ok());
+    let c = check(&report, "ohs_mcp");
+    assert_eq!(c.status, Status::Warn, "{c:?}");
+    assert!(c.detail.contains("hai tool search"), "{c:?}");
+    assert!(c.action.as_deref().unwrap().contains("giữ cũng được"));
+    assert_eq!(c.fix, None);
+    assert_eq!(status(&report, "kg_entry"), Status::Ok);
 }
