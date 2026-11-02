@@ -24,6 +24,17 @@ const PACK_REL: &str = "lang/ohs-lang-vi";
 /// OHS dựng lại bảng view qua lại.
 pub const LANGUAGE_PACK_ENV: &str = "OHS_LANGUAGE_PACK";
 
+/// Biến môi trường OHS đọc cho mẫu đường dẫn bỏ qua khi index.
+pub const IGNORE_PATTERNS_ENV: &str = "OBSIDIAN_IGNORE_PATTERNS";
+
+/// Mẫu bỏ qua đi cùng gói tiếng Việt: mặc định của upstream thêm `_ohs/**`, thư mục gói vi đọc từ điển
+/// (`_ohs/lexicon.md`, không phải note). Như `OHS_IGNORE` của `platform_paths.ohs_settings` (Python, `24f193a`): mọi
+/// tiến trình trên một index phải cùng giá trị, không thì OHS báo lệch content policy.
+pub const PACK_IGNORE_PATTERNS: &str = ".obsidian/**,templates/**,*.canvas,_ohs/**";
+
+/// File mô tả gói của fork, có `version`.
+const MANIFEST: &str = "MANIFEST.json";
+
 /// Không tìm thấy gói OHS, hoặc gói thiếu file. Thông điệp nêu thư mục đã thử.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PackageError(pub String);
@@ -98,6 +109,15 @@ impl OhsPackage {
             cli,
             pack,
         })
+    }
+}
+
+impl OhsPackage {
+    /// Phiên bản OHS ghi trong `MANIFEST.json` của gói (`0.17.2-vantt.3`…); `None` khi thiếu file hay khoá.
+    pub fn version(&self) -> Option<String> {
+        let text = std::fs::read_to_string(self.root.join(MANIFEST)).ok()?;
+        let manifest: serde_json::Value = serde_json::from_str(&text).ok()?;
+        manifest.get("version")?.as_str().map(str::to_owned)
     }
 }
 
@@ -183,6 +203,20 @@ mod tests {
             OhsPackage::from_dir(dir).unwrap().pack,
             Some(dir.join(PACK_REL))
         );
+    }
+
+    #[test]
+    fn reads_manifest_version() {
+        let tmp = tempfile::tempdir().unwrap();
+        make_package(tmp.path());
+        let pkg = OhsPackage::from_dir(tmp.path()).unwrap();
+        assert_eq!(pkg.version(), None);
+        fs::write(
+            tmp.path().join(MANIFEST),
+            r#"{"name":"ohs","version":"0.17.2-vantt.3"}"#,
+        )
+        .unwrap();
+        assert_eq!(pkg.version().as_deref(), Some("0.17.2-vantt.3"));
     }
 
     #[test]

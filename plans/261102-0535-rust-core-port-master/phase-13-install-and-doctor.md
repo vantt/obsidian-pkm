@@ -29,7 +29,7 @@ Thay `desktop_config.py`: cài MCP `kg` trỏ vào binary `pkm` cho Claude Deskt
 - [x] `pkm doctor`: kiểm DB, gói OHS, cấu hình Claude Desktop, đường dẫn dài trên Windows; mỗi lỗi có việc cần làm.
 
 ## Trạng thái (2026-11-02)
-Thư viện `install` và `doctor` xong, có test (`cargo test -p pkm`); gói OHS cài từ artifact ghim (qua `gh`) hoặc `--ohs-package`. Sau đó `cli` đã đăng ký `pkm mcp install`, `pkm doctor` và có lệnh `build`; chỉ còn thử trên Windows sạch. Báo cáo: `plans/reports/fullstack-developer-261102-1440-phase-13-install-doctor.md`.
+Thư viện `install` và `doctor` xong, có test (`cargo test -p pkm`); gói OHS cài từ Release ghim của fork (https, hiện `v0.17.2-vantt.3`, nâng gói cũ) hoặc `--ohs-package`; OHS chạy với gói tiếng Việt của gói (DECISIONS, mục "Gói OHS: ghim GitHub Release của fork"). Sau đó `cli` đã đăng ký `pkm mcp install`, `pkm doctor` và có lệnh `build`; chỉ còn thử trên Windows sạch. Báo cáo: `plans/reports/fullstack-developer-261102-1440-phase-13-install-doctor.md`.
 
 ## Nghiệm thu
 - Test đơn vị: ghi cấu hình vào file tạm giữ nguyên mục khác; `--dry-run` không ghi; `--remove` chỉ xoá mục `kg`.

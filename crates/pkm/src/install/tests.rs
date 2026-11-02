@@ -463,6 +463,108 @@ fn ohs_already_installed_is_kept() {
 }
 
 #[test]
+fn ohs_flag_points_kg_at_an_existing_package_without_installing_one() {
+    let s = setup(Some(EXISTING));
+    let shared = s.vault.parent().unwrap().join("tools-ohs");
+    let node = if cfg!(windows) {
+        "node/node.exe"
+    } else {
+        "node/bin/node"
+    };
+    fs::create_dir_all(shared.join(node).parent().unwrap()).unwrap();
+    fs::write(shared.join(node), "").unwrap();
+    fs::create_dir_all(shared.join("app/dist/src")).unwrap();
+    fs::write(shared.join("app/dist/src/cli.js"), "").unwrap();
+    let mut args = s.args();
+    args.no_ohs = false;
+    args.ohs = Some(shared.clone());
+    let out = s.run(&args, &Fake::new()).unwrap();
+    assert!(out.contains("dùng gói OHS có sẵn"), "{out}");
+    assert!(
+        !s.inst.ohs_dir().exists(),
+        "không cài gói vào thư mục của pkm"
+    );
+    let entry: Vec<String> =
+        serde_json::from_value(s.read()["mcpServers"]["kg"]["args"].clone()).unwrap();
+    let i = entry.iter().position(|a| a == "--ohs").unwrap();
+    assert_eq!(Path::new(&entry[i + 1]), shared);
+    assert_eq!(entry_ohs(&entry).as_deref(), Some(shared.as_path()));
+    assert!(!rebuild_args(&entry).unwrap().contains(&"--ohs".to_owned()));
+    assert!(
+        reinstall_args(&entry, false)
+            .unwrap()
+            .contains(&"--ohs".to_owned())
+    );
+    args.ohs = Some(s.vault.join("không có"));
+    assert!(
+        s.run(&args, &Fake::new())
+            .unwrap_err()
+            .starts_with("--ohs:")
+    );
+}
+
+#[test]
+fn ohs_older_than_the_pin_is_upgraded_and_the_pin_is_kept() {
+    let mut s = setup(Some(EXISTING));
+    let archive = ohs_tar_gz();
+    let sha = ohs_bundle::sha256_file(&{
+        let f = s.vault.parent().unwrap().join("pinned.tgz");
+        fs::write(&f, &archive).unwrap();
+        f
+    })
+    .unwrap();
+    let bundle: &'static Bundle = Box::leak(Box::new(Bundle {
+        platform: "linux-x64",
+        sha256: Box::leak(sha.into_boxed_str()),
+    }));
+    s.inst.bundle = Some(bundle);
+    let dir = s.inst.ohs_dir();
+    let node = if cfg!(windows) {
+        "node/node.exe"
+    } else {
+        "node/bin/node"
+    };
+    let old = |version: &str| {
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join(node).parent().unwrap()).unwrap();
+        fs::write(dir.join(node), "").unwrap();
+        fs::create_dir_all(dir.join("app/dist/src")).unwrap();
+        fs::write(dir.join("app/dist/src/cli.js"), "").unwrap();
+        fs::write(
+            dir.join("MANIFEST.json"),
+            format!(r#"{{"version":"{version}"}}"#),
+        )
+        .unwrap();
+    };
+    let hooks = Fake {
+        served: vec![(bundle.url(), archive)],
+        ..Fake::new()
+    };
+    let mut args = s.args();
+    args.no_ohs = false;
+
+    old(ohs_bundle::VERSION);
+    let out = s.run(&args, &hooks).unwrap();
+    assert!(
+        out.contains("gói OHS đã có") && out.contains(ohs_bundle::VERSION),
+        "{out}"
+    );
+
+    old("0.17.2-vantt.1");
+    args.dry_run = true;
+    let plan = s.run(&args, &hooks).unwrap();
+    assert!(
+        plan.contains(&format!("tải gói OHS {}", ohs_bundle::VERSION))
+            && plan.contains(&bundle.url()),
+        "{plan}"
+    );
+    args.dry_run = false;
+    let out = s.run(&args, &hooks).unwrap();
+    assert!(out.contains("đã cài gói OHS vào"), "{out}");
+    assert!(!dir.join("MANIFEST.json").exists(), "gói cũ đã bị thay");
+}
+
+#[test]
 fn entry_paths_reads_back_vault_and_db() {
     let e = server_entry(
         Path::new("/bin/pkm"),
