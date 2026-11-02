@@ -5,13 +5,14 @@
 //! làm được, `None` khi chưa. Mục trả `None` được khai trong `not_available` của manifest và báo
 //! "chưa có"; bộ so khớp không bao giờ tính chúng là khớp.
 
+mod index_tables;
 mod note_tables;
 
 use std::cell::OnceCell;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use serde_json::{Map, Value};
 
 use crate::dump::{CliCommand, Dump, Manifest, VaultInfo, Writer};
@@ -36,6 +37,8 @@ pub struct RustSide {
     run: Value,
     /// Bảng của `vault` và `schema`, dựng một lần khi được hỏi lần đầu.
     note_tables: OnceCell<HashMap<&'static str, note_tables::Rows>>,
+    /// Mọi bảng của index SQLite (build đủ rồi tăng dần), dựng một lần khi được hỏi lần đầu.
+    index_tables: OnceCell<index_tables::Built>,
 }
 
 impl RustSide {
@@ -44,6 +47,7 @@ impl RustSide {
             vault: vault.to_path_buf(),
             run: run.clone(),
             note_tables: OnceCell::new(),
+            index_tables: OnceCell::new(),
         }
     }
 
@@ -58,6 +62,9 @@ impl RustSide {
 
     /// Các dòng của một bảng index (hoặc view `v3_deviations`) sau khi build đủ rồi build tăng dần
     /// không đổi gì, mỗi dòng một object theo thứ tự cột của `columns`.
+    ///
+    /// Dòng lấy từ index SQLite mà `pkm-core::index` dựng. Bảng mà `vault` và `schema` quyết định còn được dựng thẳng
+    /// từ vault (`note_tables`) và phải giống hệt bảng trong DB.
     pub fn table(&self, name: &str, columns: &[String]) -> Result<Option<Vec<Map<String, Value>>>> {
         let tables = match self.note_tables.get() {
             Some(t) => t,
@@ -66,7 +73,49 @@ impl RustSide {
                 self.note_tables.get_or_init(|| built)
             }
         };
-        note_tables::rows(tables, name, columns)
+        let direct = note_tables::rows(tables, name, columns)?;
+        let Some(rows) = self.index_tables()?.tables.get(name) else {
+            return Ok(direct);
+        };
+        let rows: Vec<Map<String, Value>> = rows
+            .iter()
+            .map(|r| {
+                columns
+                    .iter()
+                    .map(|c| {
+                        let v = r
+                            .get(c)
+                            .cloned()
+                            .with_context(|| format!("bảng {name}: index không có cột {c}"))?;
+                        Ok((c.clone(), v))
+                    })
+                    .collect::<Result<Map<String, Value>>>()
+            })
+            .collect::<Result<_>>()?;
+        if let Some(direct) = direct {
+            let key = |rs: &[Map<String, Value>]| {
+                let mut v: Vec<String> = rs
+                    .iter()
+                    .map(|r| Value::Object(r.clone()).to_string())
+                    .collect();
+                v.sort();
+                v
+            };
+            if key(&direct) != key(&rows) {
+                bail!("bảng {name}: index SQLite khác bảng dựng thẳng từ vault");
+            }
+        }
+        Ok(Some(rows))
+    }
+
+    fn index_tables(&self) -> Result<&index_tables::Built> {
+        Ok(match self.index_tables.get() {
+            Some(t) => t,
+            None => {
+                let built = index_tables::build(&self.vault, &self.run)?;
+                self.index_tables.get_or_init(|| built)
+            }
+        })
     }
 
     /// Một câu của `.kg-answers.json`, chạy như `fixture_check.run` của repo đặc tả.
@@ -90,8 +139,9 @@ impl RustSide {
     }
 
     /// Số đo hiệu năng cùng khoá với `perf.json` của Python.
+    /// Hiện có `build_full_ms`, `build_noop_ms`.
     pub fn perf(&mut self) -> Result<Option<Value>> {
-        Ok(None)
+        Ok(Some(self.index_tables()?.perf.clone()))
     }
 }
 
