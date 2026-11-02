@@ -170,7 +170,7 @@ Giới hạn đã biết (không gặp trên kg-solo, bộ dữ liệu trên hay
 - `float()` (cột `score` của claim, `data.score` của đề xuất) chỉ nhận chữ số ASCII.
 - Adapter `e11`: file JSON có `NaN`, `Infinity` bị coi là hỏng (Python đọc được); khoá không phải chuỗi trong frontmatter của sổ so theo `repr` (Python còn coi `1 == 1.0 == True`).
 
-Nguồn: `scripts/kg/tests/test_kg.py` (15 test) và `scripts/e11/tests/test_kg_adapter.py` (16 test) ở sha ghim. Test nào kiểm qua `Graph`, `Tools`, CLI hay MCP thì chuyển cùng module đó; phần đọc cạnh của chúng đã kiểm ở đây bằng SQL. Chạy: `cargo test -p pkm-core` (lọc theo `index::`, `validate::`, `adapter::`).
+Nguồn: `scripts/kg/tests/test_kg.py` (15 test, đủ 15 dòng dưới đây) và `scripts/e11/tests/test_kg_adapter.py` (16 test) ở sha ghim. Test nào kiểm qua `Graph`, `Tools`, CLI hay MCP thì chuyển cùng module đó (`query`, `tools`: mục sau); phần đọc cạnh của chúng đã kiểm ở đây bằng SQL. Chạy: `cargo test -p pkm-core` (lọc theo `index::`, `validate::`, `adapter::`, `query::`, `tools::`).
 
 | Test Python | Test Rust | Trạng thái | Ghi chú |
 |---|---|---|---|
@@ -179,16 +179,43 @@ Nguồn: `scripts/kg/tests/test_kg.py` (15 test) và `scripts/e11/tests/test_kg_
 | `test_kg.Planted.test_clean_notes_have_no_deviation` | `validate::tests::clean_notes_have_no_deviation` | đã chuyển | |
 | `test_kg.Planted.test_r9_kinds` | `validate::tests::r9_kinds` | đã chuyển | |
 | `test_kg.Api.test_clean_vault_has_no_deviation` | `validate::tests::clean_vault_has_no_deviation` | đã chuyển | |
-| `test_kg.Api.test_two_layers_default_and_accepted_only` | `index::tests::two_layers_and_provenance` | một phần | Cột của cạnh (status, proposed_by, extracted_by, score); `neighbors`, `accepted_only` chuyển cùng `query` |
-| `test_kg.Api.test_claim_edge_window_source_and_alias` | `index::tests::claim_edge_window_source_and_alias` | một phần | Cạnh claim (source `#^q1`, đích qua alias, cửa sổ); `neighbors(as_of)` chuyển cùng `query` |
-| `test_kg.Api.test_contract_window`, `test_loops_need_start_and_report_polarity`, `test_paths_and_provenance`, `test_find_select`, `test_long_result_envelope` | — | chưa chuyển | Kiểm `Graph`, `Tools`: chuyển cùng `query`, `tools` |
-| `test_kg.Incremental.test_rebuild_after_edit_and_delete` | `index::tests::rebuild_after_edit_and_delete` | một phần | `mode`, `notes_read`, `notes_removed`, status của cạnh claim, cạnh của claim đã xoá biến mất; `loops` chuyển cùng `query` |
-| `test_kg.Fixture.test_answer_key` | — | chưa chuyển | Câu đáp án của kg-solo: tầng `answers` của bộ so khớp, chuyển cùng `query` |
+| `test_kg.Api.test_two_layers_default_and_accepted_only` | `query::tests::two_layers_default_and_accepted_only` | đã chuyển | Như Python, qua `Graph.neighbors`; `index::tests::two_layers_and_provenance` kiểm thêm các cột đó bằng SQL |
+| `test_kg.Api.test_claim_edge_window_source_and_alias` | `query::tests::claim_edge_window_source_and_alias` | đã chuyển | Như Python, qua `edge_of_claim` và `neighbors(as_of)`; `index::tests::claim_edge_window_source_and_alias` kiểm phần cạnh bằng SQL |
+| `test_kg.Api.test_contract_window` | `query::tests::contract_window` | đã chuyển | |
+| `test_kg.Api.test_loops_need_start_and_report_polarity` | `query::tests::loops_need_start_and_report_polarity` | đã chuyển | `loops(None, 5)` của Python thành `loops("", 5)`; kiểm thêm `max_len = 0` |
+| `test_kg.Api.test_paths_and_provenance` | `query::tests::paths_and_provenance` | đã chuyển | |
+| `test_kg.Api.test_find_select` | `query::tests::find_select` | đã chuyển | |
+| `test_kg.Api.test_long_result_envelope` | `tools::tests::long_result_envelope` | đã chuyển | Kiểm thêm thứ tự khoá của vỏ kết quả (`count`, `by_type`, `items`, `truncated`, `handle`) |
+| `test_kg.Incremental.test_rebuild_after_edit_and_delete` | `index::tests::rebuild_after_edit_and_delete`, `query::tests::rebuild_after_edit_and_delete` | đã chuyển | Phần build (`mode`, `notes_read`, `notes_removed`) ở `index`; status cạnh của claim qua `edge_of_claim` và `loops` rỗng ở `query` |
+| `test_kg.Fixture.test_answer_key` | `query::tests::answer_key` | đã chuyển | Cần `PKM_KG_SOLO=<vault kg-solo>` (không có thì bỏ qua, như Python khi thiếu node): 70/70 câu graph, 11/11 câu bảng. CI so từng câu với golden qua tầng `answers` của bộ so khớp |
 | `test_kg.Fixture.test_fixture_planted_errors` | `validate::tests::fixture_planted_errors` | đã chuyển | Cần `PKM_KG_SOLO=<vault kg-solo>` (không có thì bỏ qua, như Python khi thiếu node); CI so cả `v3_deviations` qua bộ so khớp |
 | `test_kg_adapter.AdapterEdges` (9 test: `folder_topic`, `proposal_waiting_is_proposed`, `rejected_and_accepted`, `applied_proposal_marks_vault_edge`, `who_and_fix_link`, `ohs_pairs`, `provenance_from_logs`, `proposal_body_links_dropped`, `counts`) | `adapter::tests::` cùng tên | đã chuyển | `counts` kiểm thêm `adapter_spec`, `hidden`, `schema_digest` |
 | `test_kg_adapter.Incremental.test_digest_and_pair_file` | `adapter::tests::digest_and_pair_file` | đã chuyển | Không ngủ 1,1 s: file cặp mới khác cỡ nên digest đổi |
-| `test_kg_adapter.HiddenAndLayers` (5 test) | — | chưa chuyển | Kiểm `Tools` (`system`, `statuses`, `related`): chuyển cùng `tools` |
+| `test_kg_adapter.HiddenAndLayers` (4 test: `system_hidden_unless_asked`, `paths_avoid_hubs`, `layers`, `select_skips_system`) | `tools::tests::` cùng tên | đã chuyển | Vault e11 chép từ `adapter::tests` (module đó riêng tư). `system_hidden_unless_asked` lấy đủ kết quả `reach` (`limit` 1000) thay vì 20 mục đầu |
+| `test_kg_adapter.HiddenAndLayers.test_related_skips_system` | — | chưa chuyển | Chuyển cùng `related` |
 | `test_kg_adapter.GraphIndexCli.test_commands` | — | chưa chuyển | `graph_index.py` gộp vào CLI `pkm` (PRD mục 2.1): chuyển cùng CLI |
 | `test_kg_adapter.OverMcp.test_proposed_edges_and_restart` | — | chưa chuyển | Chuyển cùng MCP |
 
 Test Rust thêm, không có bản Python: `index::tests::{noop_build_keeps_every_table, meta_like_python, counts_escape_non_ascii_status_like_json_dumps, changing_packs_or_options_rebuilds_everything, body_edges_and_edge_keys_links, options_pick_and_previous, ctx_add_and_drop_deduplicate_by_key, regexp_follows_python_re, missing_vault_is_an_error, empty_vault_builds_an_empty_index}`, `index::py::tests::*` (`float()`, `json.dumps`), `validate::tests::{rule_filter_and_limit, report_like_the_validate_command, views_are_recreated_and_sql_kept}`, `adapter::tests::{similar_file_replaces_both_pair_files, broken_private_data_is_an_error, load_and_system_pages}`.
+
+## Module `query`, `tools`
+
+`pkm_core::query::Graph` là `scripts/kg/query.py`: câu SQL (recursive CTE của `reach`, `paths`, `loops`, điều kiện lọc `_w`, `_hid`, `_parts`, thứ tự `ORDER BY`) chép nguyên, phần Rust chỉ ghép câu, đọc dòng và gộp (`_collapse`, Tarjan của `all_loops`). `pkm_core::tools::Tools` là `scripts/kg/tools.py` (vỏ kết quả dài, handle `sha1` của `json.dumps(..., sort_keys=True)`, bộ nhớ 64 kết quả cho `more`); `pkm_core::tools::call` là `Server.call` của `scripts/kg/mcp_server.py` (note id chuẩn hoá NFC, `did_you_mean`, `url` `obsidian://open`, `body`, các lỗi `{"error": ...}`), điểm vào chung cho MCP, CLI và bộ so khớp; `Err` là chỗ Python ném ngoại lệ, mang tên lớp ngoại lệ Python (`KeyError`, `ValueError`, `TypeError`, ...). `pkm_core::tools::defs` là `tool_defs` (mô tả, schema tham số của `tools/list`): so với Python theo từng ký tự cả thứ tự khoá, với `hidden` đúng và sai. Kết quả dạng `dict` giữ thứ tự khoá của Python (`serde_json` có `preserve_order`). `pkm_core::query::answers` là `scripts/kg/tests/fixture_check.py` (`run`, `norm`, `check`). `related` chưa có: `call` trả `NotImplementedError`, bộ so khớp báo "chưa có".
+
+Đối chiếu với Python ở sha ghim: bộ so khớp kg-solo (81 câu đáp án, 712 lời gọi tool trừ `related`, gồm 63 lời gọi `more`) khớp hết; thêm cùng bộ câu tự sinh của `dump-python.py` trên kg-solo đọc như bản B (`--no-aliases --edge-keys links --body-edges`), trên vault cài lỗi của `test_kg.py`, trên vault e11 với `--adapter e11` (trang hệ thống, `system`, lớp `proposed`, `rejected`), và 181 lời gọi lệch chuẩn trên kg-solo (tham số rỗng, sai kiểu, số âm, `limit` là `true`, `rels` là chuỗi, `max_depth` là số thực, `max_len` là chuỗi, note id dạng NFD hay là số, handle hết hạn, là số, là danh sách, `offset` âm hay vượt cỡ, tool lạ, thiếu tham số bắt buộc): giống hết, kể cả tên ngoại lệ.
+
+Giới hạn đã biết (không gặp trong bộ so khớp; MCP client gửi đúng kiểu theo schema):
+
+- Tham số sai kiểu mà Python vẫn chạy tiếp với giá trị lạ thì Rust trả `TypeError`: `as_of` không phải chuỗi (Python đưa số vào SQL, hoặc ném `ProgrammingError` với danh sách); phần tử không phải chuỗi trong `rels`, `statuses`; `type`, `as_of` của `valid` là số; `where` của `select` không phải object (Python nhận danh sách cặp); `limit`, `k`, `offset`, `body_chars` là số thực (Python chạy được khi kết quả không bị cắt); `max_depth`, `max_len` của `paths` là chuỗi (Python so số với chuỗi trong SQL: `reach` chạy không dừng).
+- `int()` của `max_len` (`loops`) chỉ nhận chữ số ASCII; số thực ngoài khoảng `i64` bị chặn.
+- `meta.hidden` không phải danh sách JSON thì coi như không có trang hệ thống (Python lặp trên chuỗi hay khoá); index luôn ghi danh sách.
+- `by_type`: số bằng nhau thì Python xếp theo thứ tự băm (đổi theo lần chạy), Rust theo tên type.
+
+| `fixture_check.py` | Rust | Ghi chú |
+|---|---|---|
+| `GRAPH_OPS`, `TABLE_OPS` | `query::answers::{GRAPH_OPS, TABLE_OPS}` | |
+| `norm` | `query::answers::norm` | So danh sách theo `json.dumps(sort_keys=True, ensure_ascii=False)` của từng mục |
+| `run` (9 phép: `neighbors`, `reach`, `paths`, `cycles`, `chain`, `provenance`, `find`, `select`, `valid`) | `query::answers::run` | Phép lạ: `KeyError`. Bộ so khớp chạy từng câu qua hàm này (tầng `answers`) |
+| `check` (70 câu graph, 11 câu bảng) | `query::answers::check` | `query::tests::answer_key` |
+
+Test Rust thêm, không có bản Python: `query::tests::{reach_depth_and_direction, note_card_counts_edges_by_relation_and_layer, all_loops_start_at_smallest_id, answers_like_fixture_check}`, `query::py::tests::*` (`json.dumps`, `str`, `repr`, `int()`, cắt danh sách, `bool`), `tools::tests::{handle_like_python, short_results_have_no_handle_and_cache_is_bounded, call_reports_unknown_notes_with_suggestions, default_vault_name_like_abspath_basename, call_note_has_link_and_body, call_errors_like_server_call, call_runs_each_tool_with_mcp_arguments, definitions_match_the_golden_tools_list, definitions_add_system_only_when_vault_has_system_pages}`.
