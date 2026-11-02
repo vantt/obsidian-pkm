@@ -133,18 +133,18 @@ pkm doctor --json
 
 ### A5. Gói OHS
 
-OHS là bản fork `vantt/obsidian-hybrid-search`, gói dựng sẵn có Node và gói tiếng Việt (`lang\ohs-lang-vi`) đi kèm, cài vào `%LOCALAPPDATA%\pkm\ohs`. `pkm` ghim Release `v0.17.2-vantt.3` và chạy mọi tiến trình OHS với `OHS_LANGUAGE_PACK` trỏ vào gói tiếng Việt của gói. Ba đường, theo thứ tự ưu tiên:
+OHS là bản fork `vantt/obsidian-hybrid-search`, gói dựng sẵn có Node và gói tiếng Việt (`lang\ohs-lang-vi`) đi kèm, cài vào `%LOCALAPPDATA%\pkm\ohs`. `pkm` ghim Release `v0.17.2-vantt.4` và chạy mọi tiến trình OHS với `OHS_LANGUAGE_PACK` trỏ vào gói tiếng Việt của gói. Ba đường, theo thứ tự ưu tiên:
 
-1. **Tự tải từ GitHub Release** (mặc định của `pkm mcp install` khi không có `--ohs-package`, `--no-ohs` hay `PKM_OHS_PACKAGE`): tải `ohs-0.17.2-vantt.3-win32-x64.zip` của Release `v0.17.2-vantt.3` (repo công khai, không cần đăng nhập, không cần `gh`) bằng `curl.exe` có sẵn trong Windows 10 trở lên, kiểm sha256 với bản ghim trong `pkm` (`ad63f1a59c06daa46d5c55c10d7eec1d912556b389f2c69062cbe46ed45e304d`). Ghi dòng `tải gói OHS … từ …` và `sha256 của gói khớp bản ghim` vào báo cáo.
-2. **File tải tay**, khi đường 1 hỏng (máy chặn GitHub, proxy…): tải file bằng trình duyệt ở https://github.com/vantt/obsidian-hybrid-search/releases/tag/v0.17.2-vantt.3, hoặc:
+1. **Tự tải từ GitHub Release** (mặc định của `pkm mcp install` khi không có `--ohs-package`, `--no-ohs` hay `PKM_OHS_PACKAGE`): tải `ohs-0.17.2-vantt.4-win32-x64.zip` của Release `v0.17.2-vantt.4` (repo công khai, không cần đăng nhập, không cần `gh`) bằng `curl.exe` có sẵn trong Windows 10 trở lên, kiểm sha256 với bản ghim trong `pkm` (`ad63f1a59c06daa46d5c55c10d7eec1d912556b389f2c69062cbe46ed45e304d`). Ghi dòng `tải gói OHS … từ …` và `sha256 của gói khớp bản ghim` vào báo cáo.
+2. **File tải tay**, khi đường 1 hỏng (máy chặn GitHub, proxy…): tải file bằng trình duyệt ở https://github.com/vantt/obsidian-hybrid-search/releases/tag/v0.17.2-vantt.4, hoặc:
    ```powershell
-   curl.exe -fL -o C:\pkm-test\ohs-0.17.2-vantt.3-win32-x64.zip https://github.com/vantt/obsidian-hybrid-search/releases/download/v0.17.2-vantt.3/ohs-0.17.2-vantt.3-win32-x64.zip
-   pkm mcp install C:\pkm-test\vault-thu --ohs-package C:\pkm-test\ohs-0.17.2-vantt.3-win32-x64.zip
+   curl.exe -fL -o C:\pkm-test\ohs-0.17.2-vantt.4-win32-x64.zip https://github.com/vantt/obsidian-hybrid-search/releases/download/v0.17.2-vantt.4/ohs-0.17.2-vantt.4-win32-x64.zip
+   pkm mcp install C:\pkm-test\vault-thu --ohs-package C:\pkm-test\ohs-0.17.2-vantt.4-win32-x64.zip
    ```
    `--ohs-package` nhận file gói (phải khớp sha256 ghim), thư mục gói đã giải nén (có `node\` và `app\dist\`), hoặc URL `https://` của file gói kèm `<URL>.sha256`.
 3. **Biến `PKM_OHS_PACKAGE`**: cùng dạng giá trị như `--ohs-package`, dùng khi không muốn sửa lệnh.
 
-Máy đã có OHS của dự án (bản B: `C:\tools\ohs`, cũng là `0.17.2-vantt.3` có gói tiếng Việt) thì **không** cài thêm gói thứ hai cho vault đó: dùng `--ohs C:\tools\ohs` (mục A7). Hai bản OHS khác cấu hình gói ngôn ngữ cùng chạy trên một vault làm bên làm chủ index dựng lại bảng view qua lại, kết quả tìm đổi theo bên chạy sau.
+Máy đã có OHS của dự án (bản B: `C:\tools\ohs`, cũng là `0.17.2-vantt.4` có gói tiếng Việt) thì **không** cài thêm gói thứ hai cho vault đó: dùng `--ohs C:\tools\ohs` (mục A7). Hai bản OHS khác cấu hình gói ngôn ngữ cùng chạy trên một vault làm bên làm chủ index dựng lại bảng view qua lại, kết quả tìm đổi theo bên chạy sau.
 
 `pkm doctor` báo ở `ohs_package` phiên bản gói và có gói tiếng Việt không; khác bản ghim hoặc thiếu gói tiếng Việt là `warn`. Ghi dòng này vào báo cáo.
 
@@ -178,7 +178,7 @@ pkm mcp install --check
 pkm doctor
 ```
 
-`--ohs C:\tools\ohs` ghi `--ohs` vào mục `kg`, không cài gói vào `%LOCALAPPDATA%\pkm\ohs`: `pkm`, MCP `ohs` và script dự án dùng chung một bản OHS và một gói tiếng Việt. `doctor` phải báo `ohs_package` là `C:\tools\ohs (0.17.2-vantt.3, có gói tiếng Việt)`. `doctor --deep` trên bản B chỉ ghi trạng thái (`ready` hay không), không ghi `action` nếu nó chứa đường dẫn vault.
+`--ohs C:\tools\ohs` ghi `--ohs` vào mục `kg`, không cài gói vào `%LOCALAPPDATA%\pkm\ohs`: `pkm`, MCP `ohs` và script dự án dùng chung một bản OHS và một gói tiếng Việt. `doctor` phải báo `ohs_package` là `C:\tools\ohs (0.17.2-vantt.4, có gói tiếng Việt)`. `doctor --deep` trên bản B chỉ ghi trạng thái (`ready` hay không), không ghi `action` nếu nó chứa đường dẫn vault.
 
 User tự hỏi Claude Desktop vài câu trên bản B và tự đánh giá. Báo cáo chỉ ghi: thời gian dựng index lần đầu, `--check` báo bao nhiêu tool, kết quả `doctor` theo mã mục, và user nói đúng hay sai (không chép câu hỏi hay câu trả lời).
 
@@ -279,7 +279,7 @@ Mỗi dòng ứng với một ô còn mở trong file phase. Ghi `pass`, `fail` 
 
 - **SmartScreen, Defender:** `pkm.exe` chưa ký mã. Cài bằng bộ cài thì không bị chặn (bộ cài gỡ dấu tải về). Mở file tải bằng trình duyệt có thể gặp "Windows protected your PC". Ghi lại nếu Defender chặn hay cách ly `pkm.exe` hoặc `node.exe` của gói OHS.
 - **Nhận diện Claude Code cài bằng winget chưa kiểm trên máy thật:** `pkm` tách Claude Code khỏi Claude Desktop theo đường dẫn exe; các thư mục `WinGet\Links` và `WinGet\Packages\Anthropic.ClaudeCode_*` suy từ cách winget đặt gói, chưa thử trên Windows. Nếu `pkm` nhận nhầm, ghi đường dẫn exe nó in ra.
-- **Gói OHS cho Windows:** `pkm` ghim gói win32-x64 của Release `v0.17.2-vantt.3`; smoke win32-x64 của fork qua ở bản này, nhưng `pkm` chưa chạy gói này trên Windows thật lần nào. OHS báo `ready` ngay khi mở DB, **trước** khi index xong; `pkm` vì vậy đọc `status` và trả `ohs_not_ready` (`starting`, `indexing`) tới khi index xong. Câu tìm ngay sau `ready` có thể rỗng mà không báo lỗi. OHS trả đường dẫn ở dạng NFD; `pkm` chuẩn hoá sang NFC trước khi tra index. Nếu thấy note có dấu bị báo "không có", đó là lỗi cần ghi.
+- **Gói OHS cho Windows:** `pkm` ghim gói win32-x64 của Release `v0.17.2-vantt.4`; smoke win32-x64 của fork qua ở bản này, nhưng `pkm` chưa chạy gói này trên Windows thật lần nào. OHS báo `ready` ngay khi mở DB, **trước** khi index xong; `pkm` vì vậy đọc `status` và trả `ohs_not_ready` (`starting`, `indexing`) tới khi index xong. Câu tìm ngay sau `ready` có thể rỗng mà không báo lỗi. OHS trả đường dẫn ở dạng NFD; `pkm` chuẩn hoá sang NFC trước khi tra index. Nếu thấy note có dấu bị báo "không có", đó là lỗi cần ghi.
 - **Artifact `release-assets` của `workflow_dispatch`** giữ theo hạn mặc định của repo; hết hạn thì chạy lại workflow.
 - **Trần `max_len` và hạn giờ:** `paths`, `loops`, `all_loops` từ chối `max_len` lớn hơn 12 và dừng sau 10 giây với lỗi `query too expensive`. Biến `PKM_QUERY_TIMEOUT` (giây, `0` là tắt) đổi hạn giờ. Đây là lệch có chủ ý so với Python, ghi trong `spec/PORTING.md`.
 - **`--force` khác `--allow-any-location`:** xem A3. Dùng nhầm `--force` khi Claude Desktop đang chạy thì app ghi đè cấu hình lúc thoát và mục `kg` mất.
