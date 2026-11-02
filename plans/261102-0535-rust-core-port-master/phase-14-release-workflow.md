@@ -1,6 +1,6 @@
 ---
 title: "Phase 14: Workflow release"
-status: in-progress
+status: done
 priority: P2
 effort: "0,25 ngày"
 prd: "mục 12 (release.yml)"
