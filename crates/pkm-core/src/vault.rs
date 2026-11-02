@@ -95,46 +95,90 @@ pub struct NoteFile {
 ///
 /// Hai file khác nhau chỉ ở dạng NFC/NFD (chỉ có được trên Linux) có cùng khoá: Python giữ file `os.scandir` trả
 /// sau (thứ tự của hệ thống file, không cố định); Rust giữ file đứng sau theo thứ tự tên đã sắp.
+///
+/// File hay thư mục con không đọc được (symlink gãy, file vừa bị xoá lúc đồng bộ, không có quyền) bị bỏ qua thay vì
+/// làm hỏng cả lần liệt kê; [`list_notes_reporting`] trả kèm danh sách đó. Chỉ lỗi đọc chính thư mục vault mới là
+/// `Err` (spec/PORTING.md, "Lệch có chủ ý").
 pub fn list_notes(
     vault: &Path,
     skip: Option<&dyn Fn(&str) -> bool>,
 ) -> io::Result<BTreeMap<String, NoteFile>> {
+    list_notes_reporting(vault, skip).map(|(notes, _)| notes)
+}
+
+/// Một file hay thư mục bị bỏ khi liệt kê vì đọc lỗi.
+#[derive(Debug)]
+pub struct Unreadable {
+    pub path: PathBuf,
+    pub error: io::Error,
+}
+
+/// Như [`list_notes`], trả thêm các mục bị bỏ vì đọc lỗi.
+pub fn list_notes_reporting(
+    vault: &Path,
+    skip: Option<&dyn Fn(&str) -> bool>,
+) -> io::Result<(BTreeMap<String, NoteFile>, Vec<Unreadable>)> {
     let mut out = BTreeMap::new();
-    walk(vault, "", &mut out)?;
+    let mut bad = Vec::new();
+    let entries = std::fs::read_dir(vault)?;
+    walk(entries, vault, "", &mut out, &mut bad);
     if let Some(skip) = skip {
         out.retain(|k, _| !skip(k));
     }
-    Ok(out)
+    Ok((out, bad))
 }
 
-fn walk(dir: &Path, prefix: &str, out: &mut BTreeMap<String, NoteFile>) -> io::Result<()> {
-    let mut entries = std::fs::read_dir(dir)?.collect::<io::Result<Vec<_>>>()?;
-    entries.sort_by_key(|e| e.file_name());
-    let mut subs = Vec::new();
+fn walk(
+    entries: std::fs::ReadDir,
+    dir: &Path,
+    prefix: &str,
+    out: &mut BTreeMap<String, NoteFile>,
+    bad: &mut Vec<Unreadable>,
+) {
+    let mut list = Vec::new();
     for e in entries {
+        match e {
+            Ok(e) => list.push(e),
+            Err(error) => bad.push(Unreadable {
+                path: dir.to_path_buf(),
+                error,
+            }),
+        }
+    }
+    list.sort_by_key(|e| e.file_name());
+    let mut subs = Vec::new();
+    for e in list {
         let name = e.file_name().to_string_lossy().into_owned();
         let path = e.path();
         // `DirEntry.is_dir()` của Python đi theo symlink; thư mục là symlink thì bỏ riêng.
         if path.is_dir() {
-            if !name.starts_with('.') && !e.file_type()?.is_symlink() {
-                subs.push((path, format!("{prefix}{name}/")));
+            if name.starts_with('.') {
+                continue;
+            }
+            match e.file_type() {
+                Ok(t) if t.is_symlink() => {}
+                Ok(_) => subs.push((path, format!("{prefix}{name}/"))),
+                Err(error) => bad.push(Unreadable { path, error }),
             }
         } else if name.ends_with(".md") && !name.ends_with(".excalidraw.md") {
-            let meta = std::fs::metadata(&path)?;
-            out.insert(
-                nfc(&format!("{prefix}{name}")),
-                NoteFile {
-                    mtime: mtime_ms(&meta)?,
-                    size: meta.len(),
-                    path,
-                },
-            );
+            let meta = std::fs::metadata(&path).and_then(|m| Ok((mtime_ms(&m)?, m.len())));
+            match meta {
+                Ok((mtime, size)) => {
+                    out.insert(
+                        nfc(&format!("{prefix}{name}")),
+                        NoteFile { path, mtime, size },
+                    );
+                }
+                Err(error) => bad.push(Unreadable { path, error }),
+            }
         }
     }
     for (path, prefix) in subs {
-        walk(&path, &prefix, out)?;
+        match std::fs::read_dir(&path) {
+            Ok(entries) => walk(entries, &path, &prefix, out, bad),
+            Err(error) => bad.push(Unreadable { path, error }),
+        }
     }
-    Ok(())
 }
 
 /// `int(os.stat(p).st_mtime * 1000)`: `st_mtime` là số thực `giây + nano * 1e-9`, nhân 1000 rồi cắt về 0.
@@ -317,21 +361,54 @@ fn md_links(text: &str) -> Vec<Link> {
     out
 }
 
+/// Số `props` tối đa của một note. Alias lồng nhau (`&b [*a, *a, ...]`) làm vài trăm byte YAML thành hàng chục triệu
+/// giá trị; quá ngân sách thì note nhận lỗi `MemoryError` thay vì làm hết bộ nhớ cả lần index (spec/PORTING.md,
+/// "Lệch có chủ ý").
+pub const NOTE_PROPS_LIMIT: usize = 1_000_000;
+/// Tổng số byte tối đa của khoá và giá trị `props` của một note (cùng lý do).
+pub const NOTE_BYTES_LIMIT: usize = yaml::REPR_LIMIT;
+
+/// Phần ngân sách còn lại của một note.
+struct Budget {
+    props: usize,
+    bytes: usize,
+}
+
+impl Budget {
+    fn spend(&mut self, props: usize, bytes: usize) -> Result<(), Fail> {
+        self.props = self.props.checked_sub(props).ok_or(yaml::MEMORY)?;
+        self.bytes = self.bytes.checked_sub(bytes).ok_or(yaml::MEMORY)?;
+        Ok(())
+    }
+
+    fn text(&mut self, v: Val<'_>) -> Result<String, Fail> {
+        let s = v.py_str_within(self.bytes)?;
+        self.spend(0, s.len())?;
+        Ok(s)
+    }
+}
+
 /// Vòng `props` của `vault.parse` trên frontmatter là dict.
 fn frontmatter(root: Val<'_>, props: &mut Props, links: &mut Vec<Link>) -> Result<(), Fail> {
+    let mut budget = Budget {
+        props: NOTE_PROPS_LIMIT,
+        bytes: NOTE_BYTES_LIMIT,
+    };
     for (k, v) in root.items().into_iter().flatten() {
-        let k = k.py_str()?;
+        let k = budget.text(k)?;
         if let Some(inner) = v.items() {
             for (k2, v2) in inner {
-                let key = format!("{k}.{}", k2.py_str()?);
+                let key = format!("{k}.{}", budget.text(k2)?);
                 let mut vals = Vec::new();
-                flat(v2, &mut vals, &mut Vec::new())?;
+                flat(v2, &mut vals, &mut Vec::new(), &mut budget)?;
+                budget.spend(0, key.len().saturating_mul(vals.len()))?;
                 props.extend(vals.into_iter().map(|x| (key.clone(), x)));
             }
             continue;
         }
         let mut vals = Vec::new();
-        flat(v, &mut vals, &mut Vec::new())?;
+        flat(v, &mut vals, &mut Vec::new(), &mut budget)?;
+        budget.spend(0, k.len().saturating_mul(vals.len()))?;
         for x in vals {
             for c in WIKI.captures_iter(x.as_deref().unwrap_or("")) {
                 links.push(wiki_link(&c, &k, Origin::Frontmatter));
@@ -342,9 +419,21 @@ fn frontmatter(root: Val<'_>, props: &mut Props, links: &mut Vec<Link>) -> Resul
     Ok(())
 }
 
-/// `vault.flat`: mỗi lá của list một giá trị; `None` giữ `None`. List chứa chính nó (alias vòng) làm Python
-/// đệ quy tới `RecursionError`.
-fn flat(v: Val<'_>, out: &mut Vec<Option<String>>, open: &mut Vec<*const Obj>) -> Result<(), Fail> {
+/// List lồng từ mức này trở đi làm `vault.flat` của Python ném `RecursionError` (đo với Python 3.14 gọi
+/// `vault.parse` thẳng từ một script: 996 cấp đọc được, 997 thì không; gọi qua `index.build` thì sớm hơn vài cấp).
+const FLAT_DEPTH: usize = 997;
+
+/// `vault.flat`: mỗi lá của list một giá trị; `None` giữ `None`. List chứa chính nó (alias vòng) hoặc lồng quá
+/// [`FLAT_DEPTH`] cấp làm Python đệ quy tới `RecursionError`.
+fn flat(
+    v: Val<'_>,
+    out: &mut Vec<Option<String>>,
+    open: &mut Vec<*const Obj>,
+    budget: &mut Budget,
+) -> Result<(), Fail> {
+    if !matches!(v.obj(), Obj::List(_)) {
+        budget.spend(1, 0)?;
+    }
     match v.obj() {
         Obj::None => out.push(None),
         Obj::Bool(b) => out.push(Some(if *b { "true" } else { "false" }.into())),
@@ -352,16 +441,16 @@ fn flat(v: Val<'_>, out: &mut Vec<Option<String>>, open: &mut Vec<*const Obj>) -
         Obj::DateTime(dt) => out.push(Some(yaml::repr::datetime_iso(dt, 'T'))),
         Obj::List(_) => {
             let me: *const Obj = v.obj();
-            if open.contains(&me) || open.len() >= yaml::MAX_DEPTH {
+            if open.contains(&me) || open.len() + 1 >= FLAT_DEPTH {
                 return Err(Fail::Crash("RecursionError"));
             }
             open.push(me);
             for x in v.list().into_iter().flatten() {
-                flat(x, out, open)?;
+                flat(x, out, open, budget)?;
             }
             open.pop();
         }
-        _ => out.push(Some(v.py_str()?)),
+        _ => out.push(Some(budget.text(v)?)),
     }
     Ok(())
 }

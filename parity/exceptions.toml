@@ -15,3 +15,10 @@ layer = "index"
 item = "nodes"
 fields = ["/yaml_error"]
 reason = "Các dạng YAML làm Python dừng cả lần build (`!!bool maybe`, `!!timestamp soon`, `!!int \"\"`, alias vòng trong list, ...): Rust ghi `YAML lỗi: <tên ngoại lệ>` cho riêng note"
+
+[[exception]]
+name = "yaml-ngan-sach-note"
+layer = "index"
+item = "nodes"
+fields = ["/yaml_error"]
+reason = "Alias lồng nhau vượt ngân sách của note (1 triệu props hoặc 64 MiB): Rust ghi `YAML lỗi: MemoryError` thay vì hết bộ nhớ"

@@ -234,3 +234,86 @@ fn read_keeps_crlf_bom_and_replaces_bad_bytes() {
     fs::write(&p, b"\xef\xbb\xbf---\r\na: caf\xe9\r\n").unwrap();
     assert_eq!(read(&p).unwrap(), "\u{feff}---\r\na: caf\u{fffd}\r\n");
 }
+
+fn nested(open: &str, close: &str, n: usize) -> String {
+    format!("{}1{}", open.repeat(n), close.repeat(n))
+}
+
+/// Mốc biên đo bằng Python 3.14 + PyYAML 6.0.3 (libyaml) gọi `vault.parse` thẳng: list lồng 996 cấp đọc được, từ
+/// 997 cấp `vault.flat` ném `RecursionError` (cả khi list nằm trong dict); dict lồng 999, 1000, 1001, 3000 cấp đều
+/// đọc được, giá trị là `repr` của dict.
+#[test]
+fn nesting_boundaries_match_python() {
+    let lists = |n| {
+        [
+            format!("a: {}", nested("[", "]", n)),
+            format!("a: {{b: {}}}", nested("[", "]", n)),
+        ]
+    };
+    for n in [990, 996] {
+        for fm in lists(n) {
+            let p = parse(&format!("---\n{fm}\n---\n"));
+            assert_eq!((p.error, p.props.len()), (None, 1), "list {n}");
+        }
+    }
+    for n in [997, 999, 1000, 1001, 3000] {
+        for fm in lists(n) {
+            let p = parse(&format!("---\n{fm}\n---\n"));
+            assert_eq!(
+                p.error.as_deref(),
+                Some("YAML lỗi: RecursionError"),
+                "list {n}"
+            );
+        }
+    }
+    for n in [999, 1000, 1001, 3000] {
+        let p = parse(&format!("---\na:\n  b: {}\n---\n", nested("{x: ", "}", n)));
+        assert_eq!(p.error, None, "dict {n}");
+        let want = nested("{'x': ", "}", n);
+        assert_eq!(props(&p), [("a.b", Some(want.as_str()))], "dict {n}");
+        let p = parse(&format!("---\na: [{}]\n---\n", nested("{x: ", "}", n)));
+        assert_eq!((p.error, p.props.len()), (None, 1), "dict trong list {n}");
+    }
+}
+
+/// Alias lồng nhau: vài trăm byte YAML thành hàng chục triệu `props`. Python làm theo tới khi hết bộ nhớ; Rust dừng
+/// ở ngân sách của note và ghi lỗi cho riêng note đó.
+#[test]
+fn alias_bomb_is_a_yaml_error_for_that_note() {
+    let chain = |first: &str, levels: usize| {
+        let mut y = String::from(first);
+        for i in 1..=levels {
+            let refs = vec![format!("*a{}", i - 1); 10].join(", ");
+            y.push_str(&format!("a{i}: &a{i} [{refs}]\n"));
+        }
+        y
+    };
+    let small = parse(&format!("---\n{}---\n", chain("a0: &a0 x\n", 3)));
+    assert_eq!(small.error, None);
+    assert_eq!(small.props.len(), 1 + 10 + 100 + 1000);
+    let p = parse(&format!("---\n{}---\nthân [[A]]", chain("a0: &a0 x\n", 8)));
+    assert_eq!(p.error.as_deref(), Some("YAML lỗi: MemoryError"));
+    assert!(p.props.is_empty());
+    assert_eq!(p.links, [link("link", "A", "", Origin::Body, false)]);
+    // Chuỗi `repr` khổng lồ (dict lồng chứa bom) cũng dừng ở ngân sách.
+    let long = format!("a0: &a0 \"{}\"\n", "x".repeat(1000));
+    let p = parse(&format!(
+        "---\n{}m: {{k: {{deep: *a5}}}}\n---\n",
+        chain(&long, 5)
+    ));
+    assert_eq!(p.error.as_deref(), Some("YAML lỗi: MemoryError"));
+}
+
+#[cfg(unix)]
+#[test]
+fn unreadable_entries_are_skipped_and_reported() {
+    let d = tempfile::tempdir().unwrap();
+    fs::write(d.path().join("ok.md"), "").unwrap();
+    std::os::unix::fs::symlink(d.path().join("không có.md"), d.path().join("gãy.md")).unwrap();
+    let (notes, bad) = list_notes_reporting(d.path(), None).unwrap();
+    assert_eq!(notes.keys().collect::<Vec<_>>(), ["ok.md"]);
+    assert_eq!(bad.len(), 1);
+    assert_eq!(bad[0].path, d.path().join("gãy.md"));
+    assert_eq!(list_notes(d.path(), None).unwrap().len(), 1);
+    assert!(list_notes(&d.path().join("không có"), None).is_err());
+}

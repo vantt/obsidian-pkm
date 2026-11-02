@@ -97,7 +97,7 @@ impl<'a> Parser<'a> {
                 let e = ev.assume_init_mut();
                 let out = convert(e);
                 unsafe_libyaml::yaml_event_delete(e);
-                if let Some(out) = out {
+                if let Some(out) = out? {
                     return Ok(out);
                 }
             }
@@ -105,15 +105,16 @@ impl<'a> Parser<'a> {
     }
 }
 
-/// Chép một sự kiện libyaml ra [`Event`]; `None` với `STREAM-START` (composer không cần).
+/// Chép một sự kiện libyaml ra [`Event`]; `None` với `STREAM-START` (composer không cần). `Err` khi độ dài scalar
+/// không vừa `usize` (chỉ có thể trên nền dưới 64 bit), thay vì bỏ lặng lẽ scalar đó.
 ///
 /// # Safety
 /// `e` là sự kiện hợp lệ vừa được `yaml_parser_parse` ghi, chưa bị xoá.
-unsafe fn convert(e: &unsafe_libyaml::yaml_event_t) -> Option<Event> {
+unsafe fn convert(e: &unsafe_libyaml::yaml_event_t) -> Result<Option<Event>, String> {
     use unsafe_libyaml::yaml_event_type_t as T;
     // SAFETY: trường của union được đọc theo đúng `type_`; chuỗi là NUL-terminated hoặc null (bảo đảm của caller).
     unsafe {
-        match e.type_ {
+        Ok(match e.type_ {
             T::YAML_STREAM_END_EVENT => Some(Event::StreamEnd),
             T::YAML_DOCUMENT_START_EVENT => Some(Event::DocStart),
             T::YAML_DOCUMENT_END_EVENT => Some(Event::DocEnd),
@@ -125,7 +126,10 @@ unsafe fn convert(e: &unsafe_libyaml::yaml_event_t) -> Option<Event> {
                 let bytes = if s.value.is_null() || s.length == 0 {
                     &[][..]
                 } else {
-                    std::slice::from_raw_parts(s.value, usize::try_from(s.length).ok()?)
+                    let len = usize::try_from(s.length).map_err(|_| {
+                        format!("scalar dài {} byte, vượt usize của nền này", s.length)
+                    })?;
+                    std::slice::from_raw_parts(s.value, len)
                 };
                 Some(Event::Scalar {
                     anchor: c_string(s.anchor.cast()),
@@ -145,7 +149,7 @@ unsafe fn convert(e: &unsafe_libyaml::yaml_event_t) -> Option<Event> {
             }),
             T::YAML_MAPPING_END_EVENT => Some(Event::MapEnd),
             _ => None,
-        }
+        })
     }
 }
 

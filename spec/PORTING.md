@@ -38,12 +38,32 @@ Chỗ bản Python sai rõ ràng và Rust không làm theo (PRD mục 4). Mỗi 
   - `!!bool` với chữ lạ (`!!bool maybe`): `KeyError`;
   - `!!timestamp` không đúng dạng (`!!timestamp soon`): `AttributeError`;
   - `!!int` hoặc `!!float` rỗng, `!!int` chỉ có dấu (`!!int ""`, `!!int "-"`): `IndexError`;
-  - list chứa chính nó qua alias (`a: &r [1, *r]`), hoặc list lồng khoảng 1000 cấp: `RecursionError` trong `flat`;
+  - list chứa chính nó qua alias (`a: &r [1, *r]`), hoặc list lồng từ 997 cấp (đo khi gọi `vault.parse` thẳng; qua `index.build` thì sớm hơn vài cấp): `RecursionError` trong `flat`;
   - số nguyên dựng từ cơ số 2, 8, 16 dài quá 4300 chữ số thập phân: `ValueError` khi `str()` (ngoài khối `try`).
-- **Rust** (`pkm_core::vault::parse`, lớp `vault::yaml`): không dừng; ghi `nodes.yaml_error` = `YAML lỗi: <tên kiểu ngoại lệ>` (ví dụ `YAML lỗi: KeyError`) cho riêng note, frontmatter coi như rỗng (không `props`, không link frontmatter), thân note vẫn đọc như mọi lỗi YAML khác. Mọi container lồng quá 1000 cấp (`vault::yaml::MAX_DEPTH`) đều báo `RecursionError`; Python chỉ dừng khi list lồng quá sâu, dict lồng sâu tới giới hạn ngăn xếp C (vài nghìn cấp) vẫn đọc được.
+- **Rust** (`pkm_core::vault::parse`, lớp `vault::yaml`): không dừng; ghi `nodes.yaml_error` = `YAML lỗi: <tên kiểu ngoại lệ>` (ví dụ `YAML lỗi: KeyError`) cho riêng note, frontmatter coi như rỗng (không `props`, không link frontmatter), thân note vẫn đọc như mọi lỗi YAML khác. Mốc list lồng của Rust cố định ở 997 cấp (`FLAT_DEPTH` trong `vault.rs`); dict lồng thì đọc và in như Python ở mọi độ sâu (`repr` viết dạng vòng lặp), Python chỉ hỏng khi hết ngăn xếp C (khoảng 100.000 cấp).
 - **Lý do:** user chọn (docs/DECISIONS.md, "Bốn dạng YAML làm Python crash: Rust ghi lỗi cho note"). Một note gõ sai không được làm hỏng index của cả vault; validator báo lỗi R0 như mọi lỗi YAML.
 - **Ngoại lệ trong bộ so khớp:** `yaml-python-dung-build` (tầng `index`, bảng `nodes`, cột `yaml_error`). Trên vault có các dạng này bản Python không dựng được dump, nên ngoại lệ chủ yếu để ghi nhận; kg-solo không có dạng nào. Ca biên nằm trong `crates/pkm-core/tests/yaml-cases/` (`crash-*.md`).
 - **Issue ở repo đặc tả:** chưa mở (user chưa cho phép).
+
+### `yaml-ngan-sach-note`: alias lồng nhau làm nổ bộ nhớ
+
+- **Python** (`5a3eb2f`, `scripts/kg/vault.py`, `flat` và `str()`): alias lồng nhau (`a1: &a1 [*a0, *a0, ...]`, `a2: &a2 [*a1, ...]`) dùng chung object khi đọc, nhưng `flat` và `str()` mở rộng ra hết. Vài trăm byte YAML thành hàng chục triệu `props` (7 tầng × 10: 11 triệu dòng, khoảng 900 MB) hoặc chuỗi `repr` hàng GB; thêm một tầng là hết bộ nhớ và cả lần index chết.
+- **Rust** (`pkm_core::vault::parse`): mỗi note có ngân sách `NOTE_PROPS_LIMIT` = 1.000.000 giá trị `props` và `NOTE_BYTES_LIMIT` = 64 MiB cho tổng khoá, giá trị và chuỗi `str()`/`repr()`; `Val::py_str`/`py_repr` công khai cũng dừng ở 64 MiB (`yaml::REPR_LIMIT`). Quá ngân sách: `nodes.yaml_error` = `YAML lỗi: MemoryError`, frontmatter coi như rỗng, thân note vẫn đọc.
+- **Lý do:** lead quyết định (review 2026-11-02): một note độc trong vault đồng bộ không được làm chết cả lần index. Note bình thường cách ngân sách hàng nghìn lần.
+- **Ngoại lệ trong bộ so khớp:** `yaml-ngan-sach-note` (tầng `index`, bảng `nodes`, cột `yaml_error`). Các dòng `props`, `raw_links` của chính note đó cũng khác (Rust không có); chỉ gặp với dữ liệu cố tình hoặc hỏng, kg-solo không có.
+- **Issue ở repo đặc tả:** chưa mở (user chưa cho phép).
+
+### `list_notes` bỏ qua file không đọc được
+
+- **Python** (`5a3eb2f`, `scripts/kg/vault.py`, `list_notes`): `os.scandir`/`e.stat()` lỗi (symlink `.md` gãy, file bị xoá giữa lúc liệt kê khi Obsidian hay dịch vụ đồng bộ đang ghi, thư mục con không có quyền) thì ngoại lệ lan ra và cả lần build dừng.
+- **Rust** (`pkm_core::vault::list_notes`, `list_notes_reporting`): bỏ qua đúng file hay thư mục con đó và ghi vào danh sách `Unreadable` (đường dẫn, lỗi) mà `list_notes_reporting` trả kèm; chỉ lỗi đọc chính thư mục vault mới là `Err`.
+- **Lý do:** lead quyết định (review 2026-11-02): đua với đồng bộ là chuyện thường, một file không được làm hỏng cả index.
+- **Ngoại lệ trong bộ so khớp:** không cần; khi gặp trường hợp này bản Python không dựng được dump để so.
+- **Issue ở repo đặc tả:** chưa mở (user chưa cho phép).
+
+### Không chuyển `list_windows_drive` (WSL)
+
+`vault.list_notes` của Python liệt kê vault trên ổ Windows nhìn từ WSL bằng PowerShell (`platform_paths.list_windows_drive`). Rust chạy native trên Windows nên không cần; WSL nằm ngoài phạm vi (PRD mục 2.2, bảng test `platform`: các dòng WSL "không áp dụng"). Kết quả liệt kê giống nhánh `os.scandir`, trừ việc nhánh PowerShell bỏ cả file bắt đầu bằng `.` còn nhánh `scandir` chỉ bỏ thư mục chấm; Rust theo nhánh `scandir`.
 
 ## Test `platform` chuyển từ Python
 
@@ -100,6 +120,6 @@ Nguồn ở sha ghim: `scripts/kg/tests/test_kg.py` không có test riêng cho `
 | `ListNotes.test_same_set_as_walk` | `vault::tests::list_notes_same_set_as_walk` | đã chuyển | Thêm `list_notes_applies_the_skip_rule`, `list_notes_skips_symlinked_folders` (Unix) |
 | `WindowsText.test_block_id_in_crlf_note` | `vault::tests::block_id_in_crlf_note` | đã chuyển | Thêm `crlf_note_keeps_frontmatter_and_body`, `blocks_are_sorted_unique_and_need_line_end` |
 | 58 ca biên của bài thử S1 (`probes/s1-yaml/cases/`, kết quả `CSafeLoader`) | `tests/yaml_cases.rs::every_edge_case_matches_pyyaml` | đã chuyển | Cùng `props` và câu lỗi YAML; bốn ca `crash-*` thành lỗi YAML của note (lệch có chủ ý `yaml-python-dung-build`) |
-| `vault.parse`, `vault.Resolver`, `vault.fold` (hành vi) | `vault::tests::*`, `vault::resolve::tests::*`, `vault::pystr::tests::*` | đã chuyển | Giá trị mong đợi đã đối chiếu với `vault.py` ở sha ghim |
+| `vault.parse`, `vault.Resolver`, `vault.fold` (hành vi) | `vault::tests::*`, `vault::resolve::tests::*`, `vault::pystr::tests::*` | đã chuyển | Giá trị mong đợi đã đối chiếu với `vault.py` ở sha ghim; `nesting_boundaries_match_python` giữ mốc list 996/997 và dict 999/1000/1001/3000 đo bằng Python 3.14 |
 | PyYAML `SafeConstructor` (hành vi) | `vault::yaml::tests::*`, `vault::yaml::scalar::tests::*`, `vault::yaml::repr::tests::*` | đã chuyển | Khoá dict so như Python, alias vòng in `{...}`, `<<`, `=`, câu lỗi `int()`, `float()`, `binascii`, `datetime` của Python 3.14 |
 | `schema.resolve`, `schema.load`, `schema.digest` (hành vi) | `schema::tests::*` | đã chuyển | Schema nhúng có digest `bbaa9f0197ef` như golden; schema tự viết đối chiếu với `schema.py` (gói, `extends` vòng, `widen`, `required_if`, `enum_of_edges`) |

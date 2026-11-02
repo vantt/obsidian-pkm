@@ -13,7 +13,7 @@ mod libyaml;
 pub(crate) mod repr;
 mod scalar;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
 
 use regex::Regex;
@@ -37,10 +37,14 @@ const OMAP: &str = "tag:yaml.org,2002:omap";
 const PAIRS: &str = "tag:yaml.org,2002:pairs";
 const SET: &str = "tag:yaml.org,2002:set";
 
-/// Độ sâu tối đa (lồng container, chuỗi `<<`, đệ quy khi in). Python dừng bằng `RecursionError` quanh mức
-/// `sys.getrecursionlimit()` = 1000 (list lồng trong `vault.flat`); Rust báo cùng lỗi ở đúng mức này thay vì tràn
-/// ngăn xếp.
+/// Độ sâu tối đa của những chỗ PyYAML đệ quy bằng mã Python (chuỗi `<<` trong `flatten_mapping`, chuỗi khoá `=`
+/// trong `construct_scalar`): quá `sys.getrecursionlimit()` = 1000 thì Python ném `RecursionError`. Lồng container
+/// thì không giới hạn: composer của `CParser` và `repr` của dict, list viết bằng C, Rust viết dạng vòng lặp.
 pub(crate) const MAX_DEPTH: usize = 1000;
+
+/// Trần độ dài (byte) của một chuỗi `str()`/`repr()` khi gọi qua API công khai. Alias lồng nhau (`&a [*b, *b, ...]`)
+/// làm chuỗi in ra lớn theo cấp số nhân từ vài trăm byte YAML; quá trần thì báo `MemoryError` thay vì hết bộ nhớ.
+pub const REPR_LIMIT: usize = 64 << 20;
 
 /// Lỗi khi đọc YAML.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -69,8 +73,11 @@ fn err<T>(msg: impl Into<String>) -> Result<T, Fail> {
 
 const RECURSION: Fail = Fail::Crash("RecursionError");
 
+/// Vượt ngân sách bộ nhớ của một note (spec/PORTING.md, "Lệch có chủ ý").
+pub(crate) const MEMORY: Fail = Fail::Crash("MemoryError");
+
 /// Múi giờ của `datetime.timezone`: `Utc` là `timezone.utc` (từ `Z` hoặc độ lệch 0), `Offset` tính bằng giây.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Tz {
     Utc,
     Offset(i32),
@@ -86,7 +93,7 @@ impl Tz {
 }
 
 /// `datetime.date`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Date {
     pub year: i32,
     pub month: u32,
@@ -94,7 +101,7 @@ pub struct Date {
 }
 
 /// `datetime.datetime`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct DateTime {
     pub date: Date,
     pub hour: u32,
@@ -266,6 +273,8 @@ impl<'a> Val<'a> {
 
     /// `==` của Python giữa hai khoá dict (`1 == 1.0 == True`, `datetime` có múi giờ so theo UTC).
     fn key_eq(&self, other: &Val<'_>) -> bool {
+        #[cfg(test)]
+        KEY_EQ_CALLS.with(|c| c.set(c.get() + 1));
         if self.same(other) {
             return true;
         }
@@ -292,117 +301,170 @@ impl<'a> Val<'a> {
         }
     }
 
-    /// `str(x)`. `Err` khi Python cũng ném lỗi: số nguyên quá 4300 chữ số (`ValueError`), lồng quá sâu.
-    pub fn py_str(&self) -> Result<String, Fail> {
+    /// Khoá băm của một khoá dict: hai khoá bằng nhau theo `==` của Python thì có cùng khoá băm (`1`, `1.0`,
+    /// `True` cùng một số; `datetime` có múi giờ theo UTC; NaN theo object). Chỉ để chia nhóm; trong nhóm vẫn so
+    /// bằng [`Val::key_eq`].
+    fn key_index(&self) -> KeyIndex {
         match self.obj() {
-            Obj::Str(s) => Ok(s.clone()),
-            Obj::Date(d) => Ok(date_iso(d)),
-            Obj::DateTime(dt) => Ok(datetime_iso(dt, ' ')),
-            _ => self.py_repr(),
+            Obj::None => KeyIndex::None,
+            Obj::Str(s) => KeyIndex::Str(s.clone()),
+            Obj::Bytes(b) => KeyIndex::Bytes(b.clone()),
+            Obj::Date(d) => KeyIndex::Date(*d),
+            Obj::DateTime(dt) if dt.tz.is_none() => KeyIndex::NaiveDateTime(*dt),
+            Obj::DateTime(dt) => KeyIndex::Instant(dt.instant()),
+            Obj::Float(f) if f.is_nan() => KeyIndex::Nan(self.id),
+            o => match number(o) {
+                Some(Num::Int(i)) => KeyIndex::Int(i.into_owned()),
+                Some(Num::Float(f)) => KeyIndex::Float(f.to_bits()),
+                None => KeyIndex::Other,
+            },
         }
+    }
+
+    /// `str(x)`. `Err` khi Python cũng ném lỗi (số nguyên quá 4300 chữ số: `ValueError`) hoặc chuỗi in ra dài quá
+    /// [`REPR_LIMIT`] (`MemoryError`).
+    pub fn py_str(&self) -> Result<String, Fail> {
+        self.py_str_within(REPR_LIMIT)
+    }
+
+    /// [`Val::py_str`] với trần độ dài `limit` byte.
+    pub(crate) fn py_str_within(&self, limit: usize) -> Result<String, Fail> {
+        let s = match self.obj() {
+            Obj::Str(s) => s.clone(),
+            Obj::Date(d) => date_iso(d),
+            Obj::DateTime(dt) => datetime_iso(dt, ' '),
+            _ => return self.py_repr_within(limit),
+        };
+        if s.len() > limit {
+            return Err(MEMORY);
+        }
+        Ok(s)
     }
 
     /// `repr(x)`. Container đang in mà gặp lại chính nó thì in `[...]`, `{...}`, `(...)` như Python.
     pub fn py_repr(&self) -> Result<String, Fail> {
-        let mut out = String::new();
-        self.repr_into(&mut out, &mut Vec::new())?;
-        Ok(out)
+        self.py_repr_within(REPR_LIMIT)
     }
 
-    fn repr_into(&self, out: &mut String, open: &mut Vec<usize>) -> Result<(), Fail> {
-        let (start, end, ids): (&str, &str, &[usize]) = match self.obj() {
-            Obj::None => {
-                out.push_str("None");
-                return Ok(());
-            }
-            Obj::Bool(b) => {
-                out.push_str(if *b { "True" } else { "False" });
-                return Ok(());
-            }
-            Obj::Int(s) => {
-                if !scalar::int_str_ok(s) {
-                    return Err(Fail::Crash("ValueError"));
-                }
-                out.push_str(s);
-                return Ok(());
-            }
-            Obj::Float(f) => {
-                out.push_str(&float_repr(*f));
-                return Ok(());
-            }
-            Obj::Str(s) => {
-                out.push_str(&str_repr(s));
-                return Ok(());
-            }
-            Obj::Bytes(b) => {
-                out.push_str(&bytes_repr(b));
-                return Ok(());
-            }
-            Obj::Date(d) => {
-                out.push_str(&date_repr(d));
-                return Ok(());
-            }
-            Obj::DateTime(dt) => {
-                out.push_str(&datetime_repr(dt));
-                return Ok(());
-            }
-            Obj::Pending => {
-                out.push_str("[]");
-                return Ok(());
-            }
-            Obj::List(ids) => ("[", "]", ids),
-            Obj::Tuple(ids) => ("(", ")", ids),
-            Obj::Set(ids) if ids.is_empty() => {
-                out.push_str("set()");
-                return Ok(());
-            }
-            // Python in set theo thứ tự băm (đổi theo PYTHONHASHSEED); Rust giữ thứ tự chèn.
-            Obj::Set(ids) => ("{", "}", ids),
-            Obj::Dict(pairs) => {
-                if open.contains(&self.id) {
-                    out.push_str("{...}");
-                    return Ok(());
-                }
-                if open.len() >= MAX_DEPTH {
-                    return Err(RECURSION);
-                }
-                open.push(self.id);
-                out.push('{');
-                for (i, &(k, v)) in pairs.iter().enumerate() {
-                    if i > 0 {
-                        out.push_str(", ");
+    /// [`Val::py_repr`] với trần độ dài `limit` byte. Viết dạng vòng lặp với ngăn xếp riêng: dict lồng vài nghìn
+    /// cấp vẫn in được như Python (`repr` của dict viết bằng C, không bị `sys.getrecursionlimit` chặn).
+    pub(crate) fn py_repr_within(&self, limit: usize) -> Result<String, Fail> {
+        enum Step {
+            Val(usize),
+            Lit(&'static str),
+            Close(usize),
+        }
+        let mut out = String::new();
+        let mut open: HashSet<usize> = HashSet::new();
+        let mut work = vec![Step::Val(self.id)];
+        while let Some(step) = work.pop() {
+            let id = match step {
+                Step::Lit(s) => {
+                    out.push_str(s);
+                    if out.len() > limit {
+                        return Err(MEMORY);
                     }
-                    self.at(k).repr_into(out, open)?;
-                    out.push_str(": ");
-                    self.at(v).repr_into(out, open)?;
+                    continue;
                 }
-                out.push('}');
-                open.pop();
-                return Ok(());
+                Step::Close(id) => {
+                    open.remove(&id);
+                    continue;
+                }
+                Step::Val(id) => id,
+            };
+            let v = self.at(id);
+            let (start, end, recursive): (&'static str, &'static str, &'static str) = match v.obj()
+            {
+                Obj::List(_) | Obj::Pending => ("[", "]", "[...]"),
+                Obj::Tuple(_) => ("(", ")", "(...)"),
+                // Python in set theo thứ tự băm (đổi theo PYTHONHASHSEED); Rust giữ thứ tự chèn.
+                Obj::Set(ids) if !ids.is_empty() => ("{", "}", "{...}"),
+                Obj::Dict(_) => ("{", "}", "{...}"),
+                o => {
+                    scalar_repr(o, &mut out)?;
+                    if out.len() > limit {
+                        return Err(MEMORY);
+                    }
+                    continue;
+                }
+            };
+            if !open.insert(id) {
+                out.push_str(recursive);
+                continue;
             }
-        };
-        if open.contains(&self.id) {
-            out.push_str(&format!("{start}...{end}"));
-            return Ok(());
-        }
-        if open.len() >= MAX_DEPTH {
-            return Err(RECURSION);
-        }
-        open.push(self.id);
-        out.push_str(start);
-        for (i, &id) in ids.iter().enumerate() {
-            if i > 0 {
-                out.push_str(", ");
+            out.push_str(start);
+            work.push(Step::Close(id));
+            work.push(Step::Lit(end));
+            match v.obj() {
+                Obj::Dict(pairs) => {
+                    for (i, &(k, x)) in pairs.iter().enumerate().rev() {
+                        work.push(Step::Val(x));
+                        work.push(Step::Lit(": "));
+                        work.push(Step::Val(k));
+                        if i > 0 {
+                            work.push(Step::Lit(", "));
+                        }
+                    }
+                }
+                Obj::List(ids) | Obj::Tuple(ids) | Obj::Set(ids) => {
+                    if matches!(v.obj(), Obj::Tuple(_)) && ids.len() == 1 {
+                        work.push(Step::Lit(","));
+                    }
+                    for (i, &x) in ids.iter().enumerate().rev() {
+                        work.push(Step::Val(x));
+                        if i > 0 {
+                            work.push(Step::Lit(", "));
+                        }
+                    }
+                }
+                _ => {}
             }
-            self.at(id).repr_into(out, open)?;
         }
-        if matches!(self.obj(), Obj::Tuple(_)) && ids.len() == 1 {
-            out.push(',');
-        }
-        out.push_str(end);
-        open.pop();
-        Ok(())
+        Ok(out)
     }
+}
+
+/// `repr()` của một object không phải container (set rỗng in `set()`).
+fn scalar_repr(o: &Obj, out: &mut String) -> Result<(), Fail> {
+    match o {
+        Obj::None => out.push_str("None"),
+        Obj::Bool(b) => out.push_str(if *b { "True" } else { "False" }),
+        Obj::Int(s) => {
+            if !scalar::int_str_ok(s) {
+                return Err(Fail::Crash("ValueError"));
+            }
+            out.push_str(s);
+        }
+        Obj::Float(f) => out.push_str(&float_repr(*f)),
+        Obj::Str(s) => out.push_str(&str_repr(s)),
+        Obj::Bytes(b) => out.push_str(&bytes_repr(b)),
+        Obj::Date(d) => out.push_str(&date_repr(d)),
+        Obj::DateTime(dt) => out.push_str(&datetime_repr(dt)),
+        Obj::Set(_) => out.push_str("set()"),
+        Obj::List(_) | Obj::Tuple(_) | Obj::Dict(_) | Obj::Pending => {}
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Số lần so khoá dict, để test kiểm việc gộp khoá trùng là tuyến tính.
+    static KEY_EQ_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Khoá băm của khoá dict (xem [`Val::key_index`]).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum KeyIndex {
+    None,
+    Int(String),
+    Float(u64),
+    Nan(usize),
+    Str(String),
+    Bytes(Vec<u8>),
+    Date(Date),
+    NaiveDateTime(DateTime),
+    Instant((i64, u32)),
+    Other,
 }
 
 /// Giá trị số của `bool`, `int`, `float` để so khoá (`True == 1 == 1.0`). Số nguyên so chính xác với số thực
@@ -597,9 +659,6 @@ impl Composer<'_> {
                 None => {}
             }
             if starts {
-                if open.len() >= MAX_DEPTH {
-                    return Err(RECURSION);
-                }
                 open.push((id, None));
             }
         }
@@ -807,18 +866,25 @@ impl Ctor {
         self.flatten(id, 0)?;
         let pairs = self.map_pairs(id).to_vec();
         let mut out: Vec<(usize, usize)> = Vec::new();
+        // Như dict băm của Python: tìm khoá trùng trong nhóm cùng khoá băm, không quét cả dict.
+        let mut index: HashMap<KeyIndex, Vec<usize>> = HashMap::new();
         for (k, v) in pairs {
             let key = self.object(k)?;
             if !self.at(key).hashable() {
                 return err("while constructing a mapping");
             }
             let val = self.object(v)?;
-            let hit = out
+            let bucket = index.entry(self.at(key).key_index()).or_default();
+            let hit = bucket
                 .iter()
-                .position(|&(e, _)| self.at(e).key_eq(&self.at(key)));
+                .copied()
+                .find(|&i| self.at(out[i].0).key_eq(&self.at(key)));
             match hit {
                 Some(i) => out[i].1 = val,
-                None => out.push((key, val)),
+                None => {
+                    bucket.push(out.len());
+                    out.push((key, val));
+                }
             }
         }
         Ok(out)
@@ -1017,11 +1083,49 @@ mod tests {
     }
 
     #[test]
-    fn deep_nesting_is_a_recursion_error_not_a_stack_overflow() {
-        let deep = format!("a: {}{}", "[".repeat(5000), "]".repeat(5000));
-        assert_eq!(load(&deep, Loader::Frontmatter).unwrap_err(), RECURSION);
-        let ok = format!("a: {}{}", "[".repeat(900), "]".repeat(900));
-        assert!(load(&ok, Loader::Frontmatter).is_ok());
+    fn deep_nesting_loads_and_prints_without_stack_overflow() {
+        for n in [3000, 5000] {
+            let lists = format!("a: {}1{}", "[".repeat(n), "]".repeat(n));
+            let d = fm(&lists);
+            let r = repr_of(&d, "a");
+            assert_eq!(r.len(), 2 * n + 1);
+            let dicts = format!("a: {}1{}", "{x: ".repeat(n), "}".repeat(n));
+            let d = fm(&dicts);
+            assert_eq!(
+                repr_of(&d, "a"),
+                format!("{}1{}", "{'x': ".repeat(n), "}".repeat(n))
+            );
+        }
+    }
+
+    #[test]
+    fn printing_an_alias_bomb_stops_at_the_limit() {
+        let mut y = format!("a0: &a0 \"{}\"\n", "x".repeat(1000));
+        for i in 1..=5 {
+            let refs = vec![format!("*a{}", i - 1); 10].join(", ");
+            y.push_str(&format!("a{i}: &a{i} [{refs}]\n"));
+        }
+        let d = fm(&y);
+        let a5 = d.root().get("a5").unwrap();
+        assert_eq!(a5.py_repr(), Err(MEMORY));
+        assert_eq!(repr_of(&d, "a1").len(), 10 * 1002 + 9 * 2 + 2);
+    }
+
+    fn key_eq_calls(text: &str) -> (usize, usize) {
+        KEY_EQ_CALLS.with(|c| c.set(0));
+        let d = fm(text);
+        let n = d.root().items().unwrap().count();
+        (n, KEY_EQ_CALLS.with(|c| c.get()))
+    }
+
+    #[test]
+    fn duplicate_keys_are_found_by_hash_not_by_scanning() {
+        let distinct: String = (0..20_000).map(|i| format!("k{i}: {i}\n")).collect();
+        assert_eq!(key_eq_calls(&distinct), (20_000, 0));
+        let same: String = (0..20_000).map(|i| format!("k: {i}\n")).collect();
+        assert_eq!(key_eq_calls(&same), (1, 19_999));
+        let numbers: String = (0..5_000).map(|i| format!("{i}: a\n{i}.0: b\n")).collect();
+        assert_eq!(key_eq_calls(&numbers), (5_000, 5_000));
     }
 
     #[test]
