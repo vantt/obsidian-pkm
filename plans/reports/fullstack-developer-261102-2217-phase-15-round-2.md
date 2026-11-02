@@ -26,7 +26,7 @@ Không có lệch có chủ ý mới. Golden không đổi nội dung vì kg-sol
 - `cargo test --workspace --locked`: qua hết.
 - Golden ở `da62ecb` (`parity.py golden --sha`): dump Python hai lần khớp (64 mục, 0 lệch chưa có tên, 0 mục chưa có), `fixture_check` graph 70/70, table 11/11.
 - Rust với golden mới, chạy như CI (vault `npx github:vantt/obsidian-test-fixture#v0.7.0 generate --preset kg-solo --seed 11 --out <tmp>/kg-solo`, `parity check --dump-out <tmp>/rust-dump`): 64 mục, 0 lệch chưa có tên, 0 mục chưa có, mã 0.
-- CI trên `main` sau khi đẩy: xem mục cuối.
+- CI trên `main` (run `41471264331`, commit `91c6172`): xanh trên ubuntu, macOS, Windows và bốn job asset.
 
 ## File đổi
 
