@@ -116,7 +116,7 @@ Xem mục 16 PRD. Với lead, ba rủi ro cần theo dõi: YAML đọc khác PyY
 
 ## Trạng thái thực hiện (2026-11-02)
 
-Mã của phase 01–14 đã xong tới bộ cài. Chưa có tag hay Release nào. Chạy thử Release bằng `workflow_dispatch` (run 41417342596, commit 93d1251) ra đủ 7 file, `sha256sum -c checksums.txt` qua hết, binary Windows không cần `vcruntime140.dll`, `install.ps1` và `install.sh` qua bài thử trên runner; CI xanh trên ba nền, bộ so khớp kg-solo 64 mục, 0 lệch, 0 mục chưa có. Việc còn lại của 02–13 chỉ kiểm được trên Windows thật và trên bản B; agent Windows làm theo [handoff-windows-test.md](./handoff-windows-test.md).
+Mã của phase 01–14 đã xong tới bộ cài. Đã phát hành thử `v0.1.0-rc.1` (pre-release, commit b8995f7, run 41424573303): đủ 7 file, `sha256sum -c checksums.txt` qua hết trên bản tải về. Trước đó chạy thử Release bằng `workflow_dispatch` (run 41417342596, commit 93d1251) ra đủ 7 file, `sha256sum -c checksums.txt` qua hết, binary Windows không cần `vcruntime140.dll`, `install.ps1` và `install.sh` qua bài thử trên runner; CI xanh trên ba nền, bộ so khớp kg-solo 64 mục, 0 lệch, 0 mục chưa có. Việc còn lại của 02–13 chỉ kiểm được trên Windows thật và trên bản B; agent Windows làm theo [handoff-windows-test.md](./handoff-windows-test.md).
 
 | Nhóm | Phase | Còn lại |
 |---|---|---|

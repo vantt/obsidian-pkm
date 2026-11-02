@@ -21,7 +21,7 @@ needs_user: true
 ## Việc của lead
 - [ ] Kiểm điều kiện 1: bộ so khớp sạch trên kg-solo (CI) và bản B (máy user) ở sha ghim mới nhất.
 - [ ] Kiểm điều kiện 2: `follow` báo 0 (phase 15, điểm C3).
-- [ ] Tạo bản phát hành thử qua `release.yml` (cần user đồng ý tag), hướng dẫn user cài bằng `pkm mcp install`.
+- [x] Tạo bản phát hành thử qua `release.yml` (cần user đồng ý tag), hướng dẫn user cài bằng `pkm mcp install`. Xong: `v0.1.0-rc.1`, pre-release, run 41424573303, checksums khớp.
 - [ ] Ghi điểm của nhóm A–C, F playbook khi dùng Python (nếu chưa có) để làm mốc so.
 - [ ] Sau một tuần: thu điểm khi dùng `pkm`, so với mốc. Điều kiện 3 đạt khi không thấp hơn.
 - [ ] Hỏi user đồng ý (điều kiện 4).
