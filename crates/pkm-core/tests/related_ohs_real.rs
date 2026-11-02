@@ -1,4 +1,4 @@
-//! Tool `related` chỉ có câu hỏi với gói OHS thật. Bỏ qua mặc định (CI không có Node, gói hay model). Chạy:
+//! Tool `related` gieo bằng câu hỏi hay note, và tool `search`, với gói OHS thật. Bỏ qua mặc định (CI không có Node, gói hay model). Chạy:
 //!
 //! ```text
 //! PKM_OHS_DIR=<thư mục gói> PKM_OHS_TEST_VAULT=<vault kg-solo> cargo test -p pkm-core --test related_ohs_real -- --ignored
@@ -43,13 +43,44 @@ fn real_ohs_seeds_related_from_a_question() {
         json!({"query": "khách hàng hợp đồng", "k": 10}),
     )
     .unwrap();
-    assert_eq!(r["seed_source"], "ohs-cli", "{r}");
+    assert_eq!(r["seed_source"], "query", "{r}");
     let seeds = r["seeds"].as_array().unwrap();
     assert!(!seeds.is_empty() && seeds.len() <= 10, "{r}");
     assert!(seeds.iter().all(|s| s["found_by"] == "ohs"));
+    assert!(
+        seeds
+            .iter()
+            .any(|s| s["snippet"].as_str().is_some_and(|x| !x.is_empty())),
+        "{r}"
+    );
     // Đường dẫn OHS trả (NFD) đã chuẩn hoá NFC nên tra được trong index; chỉ file không phải note mới vào `missing`.
     for m in r["missing"].as_array().unwrap() {
         assert!(!m.as_str().unwrap().ends_with(".md"), "{m}");
     }
     assert!(!r["related"].as_array().unwrap().is_empty(), "{r}");
+
+    // `search` qua cùng OHS: kết quả gọn, id có trong index (type từ index), hai câu (song ngữ) gộp được.
+    let r = tools::call(
+        &mut c,
+        "search",
+        json!({"query": "hợp đồng", "queries": ["contract"], "limit": 5}),
+    )
+    .unwrap();
+    let items = r["items"].as_array().unwrap();
+    assert!(!items.is_empty() && items.len() <= 5, "{r}");
+    assert_eq!(r["count"], items.len());
+    for it in items {
+        let keys: Vec<&str> = it.as_object().unwrap().keys().map(String::as_str).collect();
+        assert_eq!(keys, ["id", "title", "type", "score", "snippet"], "{it}");
+        assert!(it["type"].is_string(), "{it}");
+    }
+    // `search(path)` và `related(node)`: note giống nghĩa với một note, không gồm chính note đó.
+    let first = items[0]["id"].as_str().unwrap().to_owned();
+    let r = tools::call(&mut c, "search", json!({"path": first, "limit": 5})).unwrap();
+    let similar = r["items"].as_array().unwrap();
+    assert!(!similar.is_empty(), "{r}");
+    assert!(similar.iter().all(|x| x["id"] != first.as_str()), "{r}");
+    let r = tools::call(&mut c, "related", json!({"node": first, "k": 5})).unwrap();
+    assert_eq!(r["seed_source"], "node", "{r}");
+    assert!(!r["seeds"].as_array().unwrap().is_empty(), "{r}");
 }
