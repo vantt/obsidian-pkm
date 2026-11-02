@@ -1,6 +1,6 @@
 ---
 title: "Phase 10: query, tools, more"
-status: todo
+status: done
 priority: P1
 effort: "2,5 ngày"
 prd: R08
@@ -24,16 +24,16 @@ JSON của mọi tool trừ `related` khớp Python: `find`, `note`, `neighbors`
 - Thêm dòng vào `spec/PORTING.md`.
 
 ## Việc cần làm
-- [ ] Recursive CTE chép nguyên; phần Rust chỉ ghép câu và lọc (`as_of`, `statuses`, `accepted_only`, `system`, `limit`).
-- [ ] Mỗi tool trả JSON đúng từng khoá như Python, gồm tóm tắt kết quả dài (`count`, `by_type`, `handle`) và `more` để lấy tiếp.
-- [ ] Link `obsidian://open` trong kết quả như Python.
-- [ ] Một điểm vào chung cho mọi tool (ví dụ `tools::call(name, args)`) để MCP (phase 12) và bộ so khớp dùng. `related` thêm vào điểm vào này ở phase 11.
-- [ ] Chuyển `fixture_check.py` (70 phép graph cộng các phép bảng) và đủ 15 test của `test_kg.py` (các test chưa chuyển ở phase 08, 09).
+- [x] Recursive CTE chép nguyên; phần Rust chỉ ghép câu và lọc (`as_of`, `statuses`, `accepted_only`, `system`, `limit`).
+- [x] Mỗi tool trả JSON đúng từng khoá như Python, gồm tóm tắt kết quả dài (`count`, `by_type`, `handle`) và `more` để lấy tiếp.
+- [x] Link `obsidian://open` trong kết quả như Python.
+- [x] Một điểm vào chung cho mọi tool (ví dụ `tools::call(name, args)`) để MCP (phase 12) và bộ so khớp dùng. `related` thêm vào điểm vào này ở phase 11.
+- [x] Chuyển `fixture_check.py` (70 phép graph cộng các phép bảng) và đủ 15 test của `test_kg.py` (các test chưa chuyển ở phase 08, 09).
 
 ## Nghiệm thu
-- Bộ so khớp tầng Tool trên kg-solo: mọi câu của `.kg-answers.json` khớp golden, 0 lệch chưa có tên (CI).
-- Bộ câu sinh tự động trên bản B (máy user): 0 lệch chưa có tên.
-- `spec/PORTING.md` có bảng 15 test `test_kg.py` ↔ test Rust, đủ 15 dòng.
+- [x] Bộ so khớp tầng Tool trên kg-solo: mọi câu của `.kg-answers.json` khớp golden, 0 lệch chưa có tên (CI). Tầng `answers` 81/81 câu, tầng `tools` 712/712 lời gọi (trừ 15 lời gọi `related`, phase 11).
+- [ ] Bộ câu sinh tự động trên bản B (máy user): 0 lệch chưa có tên (user hoãn bản B).
+- [x] `spec/PORTING.md` có bảng 15 test `test_kg.py` ↔ test Rust, đủ 15 dòng.
 
 ## Cần user
 Chạy bản B.
