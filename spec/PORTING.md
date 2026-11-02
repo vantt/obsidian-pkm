@@ -81,6 +81,26 @@ Chỗ bản Python sai rõ ràng và Rust không làm theo (PRD mục 4). Mỗi 
 - **Ngoại lệ trong bộ so khớp:** không cần; trên các dòng này bản Python không dựng được index để so.
 - **Issue ở repo đặc tả:** đề xuất (bắt cả `ValueError` trong `_log_keys`), chưa mở.
 
+### Build hỏng giữa chừng: lần sau vẫn tính lại cạnh
+
+- **Python** (`5a3eb2f`, `scripts/kg/index.py`, `build`): bảng note được commit ở giao dịch đầu, cạnh ở giao dịch sau. Nếu bước tính cạnh lỗi (adapter ném lỗi, schema hỏng, tiến trình bị dừng), lần build tăng dần sau thấy mtime đã khớp và `schema_digest` cũ, nên giữ `links`, `edges` cũ mãi, tới khi chạy `--full`.
+- **Rust** (`pkm_core::index::build`): giao dịch ghi bảng note ghi thêm dòng `meta.dirty`; dòng này chỉ mất khi ghi `meta` cuối build. Lần sau còn thấy `dirty` thì tính lại cạnh. Build thành công cho `meta` và mọi bảng giống hệt Python (dòng `dirty` không còn).
+- **Lý do:** index lệch vĩnh viễn mà không báo gì là lỗi rõ ràng (review mã ngày 2026-11-02, mục H1).
+- **Ngoại lệ trong bộ so khớp:** không cần (chỉ khác khi build hỏng).
+- **Issue ở repo đặc tả:** đề xuất, chưa mở.
+
+### Build đồng thời, chế độ WAL, file biến mất
+
+- **Python** (`5a3eb2f`, `scripts/kg/index.py`, `build`): đọc và parse note bên trong giao dịch ghi; hai build cùng lúc trên một DB có thể lỗi `database is locked`; `PRAGMA journal_mode=WAL` chạy mỗi lần build, không đổi được thì build lỗi; file mất giữa lúc liệt kê và lúc đọc làm cả build lỗi.
+- **Rust** (`pkm_core::index::build`):
+  - Mỗi lúc chỉ một build ghi một DB: khoá file `<db>.lock` cạnh DB (`File::try_lock`, chờ tối đa 5 phút; hệ thống file không có khoá thì build không khoá như Python). MCP tự build lại và CLI chạy cùng lúc thì lần lượt.
+  - Đọc và parse note trước khi mở giao dịch; giao dịch ghi là `IMMEDIATE`, chờ khoá SQLite tối đa 30 s.
+  - Chỉ chuyển sang WAL khi DB chưa ở WAL; không chuyển được (kết nối khác đang đọc ở chế độ rollback, ổ mạng) thì giữ chế độ cũ và build tiếp.
+  - File mất giữa lúc liệt kê và lúc đọc (`NotFound`) coi như note đã xoá: không vào `notes`, `notes_read`; nếu đã có trong index thì tính vào `notes_removed` và bị xoá khỏi index.
+- **Lý do:** review mã ngày 2026-11-02 (mục H2, M1, M3): MCP và CLI dùng chung một DB, kể cả trên Windows; Obsidian ghi note bằng cách đổi tên file.
+- **Ngoại lệ trong bộ so khớp:** không cần (kết quả của build thành công trên vault không đổi giữa chừng giống hệt Python).
+- **Issue ở repo đặc tả:** đề xuất, chưa mở.
+
 ## Test `platform` chuyển từ Python
 
 Nguồn: `scripts/tests/test_platform_paths.py` ở sha ghim, 19 test. Test Rust nằm trong `crates/pkm-core/src/platform.rs` (`platform::tests::…`), chạy bằng `cargo test -p pkm-core platform` trên cả ba nền. Test có `#[cfg(...)]` chỉ chạy trên nền tương ứng (Python giả nền bằng mock; Rust kiểm nền thật trong CI).
@@ -166,6 +186,10 @@ Khác Python (cố ý, vì binary thay cho bản chép mã Python):
 
 Giới hạn đã biết (không gặp trên kg-solo, bộ dữ liệu trên hay schema nhúng):
 
+- Build tăng dần nhận ra note đổi chỉ qua (mtime tính bằng ms, cỡ file), như Python; không băm nội dung. Sửa giữ nguyên số byte mà mtime không đổi thì bị bỏ sót: trên FAT, exFAT (USB, thẻ nhớ; mtime theo bước 2 s) khi sửa hai lần trong cùng 2 s, hay khi công cụ đồng bộ (iCloud, Dropbox, Syncthing) ghi lại mtime gốc. Cách chữa: `build --full` (đọc lại mọi note). Đổi gói hoặc cách đọc tự dựng lại hết.
+- `previous` (gói, adapter, cách đọc của lần trước) mở DB chỉ đọc; không mở được (thư mục không tạo được file `-shm` của WAL) thì thử mở đọc ghi, vẫn không được thì trả giá trị mặc định. `try_previous` báo lỗi thay vì trả mặc định, cho lệnh nào cần phân biệt.
+- Id note luôn ở dạng NFC (`vault::list_notes`); `data.to` của đề xuất `fix-link` cũng được đưa về NFC trước khi so, nên tên file NFD (macOS) vẫn khớp (test `adapter::tests::fix_link_target_in_nfd_matches_nfc_note_id`).
+
 - `regexp` của view R9 (mẫu `pattern` của schema) chạy bằng crate `regex`: `$` và `\Z` đổi theo nghĩa của Python, `[`, `&`, `~` trong lớp ký tự là chữ thường; mẫu dùng nhìn trước, nhìn lùi, tham chiếu ngược làm truy vấn view báo lỗi (Python chạy được). Schema nhúng chỉ có `^.+@schema_v[0-9]+$`.
 - `float()` (cột `score` của claim, `data.score` của đề xuất) chỉ nhận chữ số ASCII.
 - Adapter `e11`: file JSON có `NaN`, `Infinity` bị coi là hỏng (Python đọc được); khoá không phải chuỗi trong frontmatter của sổ so theo `repr` (Python còn coi `1 == 1.0 == True`).
@@ -191,4 +215,4 @@ Nguồn: `scripts/kg/tests/test_kg.py` (15 test) và `scripts/e11/tests/test_kg_
 | `test_kg_adapter.GraphIndexCli.test_commands` | — | chưa chuyển | `graph_index.py` gộp vào CLI `pkm` (PRD mục 2.1): chuyển cùng CLI |
 | `test_kg_adapter.OverMcp.test_proposed_edges_and_restart` | — | chưa chuyển | Chuyển cùng MCP |
 
-Test Rust thêm, không có bản Python: `index::tests::{noop_build_keeps_every_table, meta_like_python, counts_escape_non_ascii_status_like_json_dumps, changing_packs_or_options_rebuilds_everything, body_edges_and_edge_keys_links, options_pick_and_previous, ctx_add_and_drop_deduplicate_by_key, regexp_follows_python_re, missing_vault_is_an_error, empty_vault_builds_an_empty_index}`, `index::py::tests::*` (`float()`, `json.dumps`), `validate::tests::{rule_filter_and_limit, report_like_the_validate_command, views_are_recreated_and_sql_kept}`, `adapter::tests::{similar_file_replaces_both_pair_files, broken_private_data_is_an_error, load_and_system_pages}`.
+Test Rust thêm, không có bản Python: `index::tests::{noop_build_keeps_every_table, meta_like_python, counts_escape_non_ascii_status_like_json_dumps, changing_packs_or_options_rebuilds_everything, body_edges_and_edge_keys_links, options_pick_and_previous, ctx_add_and_drop_deduplicate_by_key, regexp_follows_python_re, missing_vault_is_an_error, empty_vault_builds_an_empty_index, failed_build_is_rederived_next_time, vanished_file_counts_as_removed, concurrent_builds_take_turns, wal_switch_failure_is_not_fatal, try_previous_reports_unreadable_db}`, `index::py::tests::*` (`float()`, `json.dumps`), `validate::tests::{rule_filter_and_limit, report_like_the_validate_command, views_are_recreated_and_sql_kept}`, `adapter::tests::{similar_file_replaces_both_pair_files, broken_private_data_is_an_error, load_and_system_pages, fix_link_target_in_nfd_matches_nfc_note_id}`.

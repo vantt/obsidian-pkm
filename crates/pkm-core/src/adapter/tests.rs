@@ -599,3 +599,48 @@ fn load_and_system_pages() {
     assert!(is_system("_E11/x.md") && is_system("Trang chủ.md") && is_system("_Đề xuất/P1.md"));
     assert!(!is_system("Trang chủ 2.md") && !is_system("Dự án/_E11/x.md"));
 }
+
+/// Tên file dạng NFD (macOS, đồng bộ từ máy khác) có id NFC trong index; `data.to` viết NFD vẫn trỏ đúng note.
+#[test]
+fn fix_link_target_in_nfd_matches_nfc_note_id() {
+    use unicode_normalization::UnicodeNormalization;
+    let tmp = tempfile::tempdir().unwrap();
+    let (vault, db) = (tmp.path().join("v"), tmp.path().join("g.db"));
+    make_vault(&vault);
+    let nfd = |s: &str| s.nfd().collect::<String>();
+    write(
+        &vault,
+        &nfd("Dự án/Alpha/Bản đồ.md"),
+        "---\ntype: note\n---\n",
+    );
+    let src = format!("{P}P9 sửa link NFD.md");
+    write(
+        &vault,
+        &src,
+        &prop(
+            "fix-link",
+            "chờ",
+            &["Dự án/Alpha/a1"],
+            "rule",
+            Some(json!({"to": nfd("Dự án/Alpha/Bản đồ.md")})),
+            "",
+        ),
+    );
+    build_with(&vault, &db, &E11::new(None));
+    let c = index::connect(&db, true).unwrap();
+    let id: String = c
+        .query_row("SELECT id FROM nodes WHERE title LIKE 'B%'", [], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    assert_eq!(id, "Dự án/Alpha/Bản đồ.md");
+    let e = edges(&c, &[("source", &src), ("origin", "proposal")]);
+    assert_eq!(e.len(), 1);
+    assert_eq!(
+        (&e[0]["dst"], &e[0]["dst_text"]),
+        (
+            &json!("Dự án/Alpha/Bản đồ.md"),
+            &json!("Dự án/Alpha/Bản đồ.md")
+        )
+    );
+}

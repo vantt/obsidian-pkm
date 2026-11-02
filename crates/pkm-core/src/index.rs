@@ -25,13 +25,13 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use indexmap::IndexMap;
 use regex::Regex;
 use rusqlite::functions::FunctionFlags;
 use rusqlite::types::{Value as SqlValue, ValueRef};
-use rusqlite::{Connection, OpenFlags, params};
+use rusqlite::{Connection, OpenFlags, TransactionBehavior, params};
 
 use crate::adapter::Adapter;
 use crate::schema::{self, Cell, EdgeKind, Schema, Source};
@@ -244,13 +244,21 @@ impl Options {
 }
 
 /// Giá trị `meta` của lần build trước (gói, adapter, cách đọc), để lệnh sau không phải ghi lại. DB không có hay
-/// không đọc được thì trả `default`.
+/// không đọc được thì trả `default` (cần phân biệt hai trường hợp: [`try_previous`]).
 pub fn previous(db: &Path, key: &str, default: &str) -> String {
-    if !db.exists() {
-        return default.to_owned();
+    match try_previous(db, key) {
+        Ok(Some(v)) => v,
+        _ => default.to_owned(),
     }
-    let read = || -> Result<Option<String>, IndexError> {
-        let c = connect(db, true)?;
+}
+
+/// Như [`previous`] nhưng báo lỗi: `Ok(None)` khi DB chưa có hay không có khoá, `Err` khi DB có mà không đọc được.
+/// Mở chỉ đọc trước; DB WAL trong thư mục không tạo được `-shm` thì thử mở đọc ghi (không tạo DB mới) rồi mới chịu.
+pub fn try_previous(db: &Path, key: &str) -> Result<Option<String>, IndexError> {
+    if !db.exists() {
+        return Ok(None);
+    }
+    let read = |c: Connection| -> Result<Option<String>, IndexError> {
         let mut st = c.prepare("SELECT key, value FROM meta")?;
         let rows = st.query_map([], |r| {
             Ok((
@@ -268,9 +276,16 @@ pub fn previous(db: &Path, key: &str, default: &str) -> String {
         // `dict(...).get(key, default)`: giá trị NULL thì Python trả `None`; ở đây coi như chuỗi rỗng.
         Ok(found.map(Option::unwrap_or_default))
     };
-    match read() {
-        Ok(Some(v)) => v,
-        _ => default.to_owned(),
+    match connect(db, true).and_then(read) {
+        Ok(v) => Ok(v),
+        Err(first) => {
+            let rw = Connection::open_with_flags(
+                db,
+                OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+            )
+            .map_err(IndexError::Sql);
+            rw.and_then(read).map_err(|_| first)
+        }
     }
 }
 
@@ -291,8 +306,83 @@ pub fn connect(path: &Path, readonly: bool) -> Result<Connection, IndexError> {
         }
         Connection::open(path)?
     };
+    db.busy_timeout(BUSY_TIMEOUT)?;
     add_regexp(&db)?;
     Ok(db)
+}
+
+/// Thời gian chờ khi DB đang bị kết nối khác khoá (đọc ghi đồng thời của MCP và CLI).
+const BUSY_TIMEOUT: Duration = Duration::from_secs(30);
+/// Thời gian chờ build khác (cùng DB) xong.
+const LOCK_TIMEOUT: Duration = Duration::from_secs(300);
+/// Khoá `meta` đánh dấu bảng note đã đổi mà cạnh chưa tính lại; xoá khi ghi `meta` cuối build.
+const DIRTY: &str = "dirty";
+
+/// Khoá file `<db>.lock` cạnh DB: mỗi lúc chỉ một build ghi một DB (MCP tự build lại và CLI có thể chạy cùng lúc).
+/// Hệ điều hành nhả khoá khi file đóng hay tiến trình chết; file không bị xoá để tránh tranh chấp.
+struct BuildLock(Option<std::fs::File>);
+
+impl BuildLock {
+    fn acquire(db: &Path) -> Result<Self, IndexError> {
+        let abs = std::path::absolute(db).map_err(io_err(db))?;
+        if let Some(dir) = abs.parent() {
+            std::fs::create_dir_all(dir).map_err(io_err(dir))?;
+        }
+        let mut name = abs.file_name().unwrap_or_default().to_os_string();
+        name.push(".lock");
+        let path = abs.with_file_name(name);
+        let f = std::fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(&path)
+            .map_err(io_err(&path))?;
+        let start = Instant::now();
+        loop {
+            match f.try_lock() {
+                Ok(()) => return Ok(BuildLock(Some(f))),
+                Err(std::fs::TryLockError::WouldBlock) if start.elapsed() < LOCK_TIMEOUT => {
+                    std::thread::sleep(Duration::from_millis(50));
+                }
+                Err(std::fs::TryLockError::WouldBlock) => {
+                    return Err(IndexError::Io {
+                        path,
+                        source: std::io::Error::new(
+                            std::io::ErrorKind::TimedOut,
+                            "build khác đang ghi index này quá lâu",
+                        ),
+                    });
+                }
+                // Hệ thống file không có khoá (vài ổ mạng): build như bản Python, không khoá.
+                Err(std::fs::TryLockError::Error(e))
+                    if e.kind() == std::io::ErrorKind::Unsupported =>
+                {
+                    return Ok(BuildLock(None));
+                }
+                Err(std::fs::TryLockError::Error(e)) => return Err(io_err(&path)(e)),
+            }
+        }
+    }
+}
+
+impl Drop for BuildLock {
+    fn drop(&mut self) {
+        if let Some(f) = &self.0 {
+            let _ = f.unlock();
+        }
+    }
+}
+
+/// `PRAGMA journal_mode=WAL` của DDL, chỉ khi DB chưa ở WAL. Không đổi được (kết nối khác đang mở DB ở chế độ
+/// rollback, ổ mạng không có bộ nhớ chung) thì giữ chế độ cũ và build tiếp.
+fn set_wal(db: &Connection) {
+    let mode: Option<String> = db.query_row("PRAGMA journal_mode", [], |r| r.get(0)).ok();
+    if !mode.is_some_and(|m| m.eq_ignore_ascii_case("wal")) {
+        // Không chờ: đổi chế độ cần khoá riêng, kết nối khác đang đọc thì bỏ qua ngay.
+        let _ = db.busy_timeout(Duration::ZERO);
+        let _ = db.query_row("PRAGMA journal_mode=WAL", [], |r| r.get::<_, String>(0));
+        let _ = db.busy_timeout(BUSY_TIMEOUT);
+    }
 }
 
 /// Mẫu `re` của Python thành mẫu của crate `regex`: `$` ngoài lớp ký tự khớp ở cuối chuỗi hoặc trước `\n` cuối
@@ -610,13 +700,15 @@ fn abspath(p: &Path) -> Result<PathBuf, IndexError> {
 /// Dựng hoặc cập nhật index của `vault` vào `db`. Đổi gói hoặc cách đọc so với lần trước thì dựng lại hết.
 pub fn build(vault: &Path, db_path: &Path, b: &Build<'_>) -> Result<BuildInfo, IndexError> {
     let t0 = Instant::now();
+    let _lock = BuildLock::acquire(db_path)?;
     let files: Cow<'_, BTreeMap<String, NoteFile>> = match b.files {
         Some(f) => Cow::Borrowed(f),
         None => Cow::Owned(vault::list_notes(vault, b.skip).map_err(io_err(vault))?),
     };
     let t_list = t0.elapsed();
     let mut db = connect(db_path, false)?;
-    db.execute_batch(DDL)?;
+    set_wal(&db);
+    db.execute_batch(DDL.replacen("PRAGMA journal_mode=WAL;", "", 1).as_str())?;
     let meta: HashMap<String, Option<String>> = {
         let mut st = db.prepare("SELECT key, value FROM meta")?;
         st.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
@@ -638,7 +730,7 @@ pub fn build(vault: &Path, db_path: &Path, b: &Build<'_>) -> Result<BuildInfo, I
         st.query_map([], |r| Ok((r.get(0)?, (r.get(1)?, r.get(2)?))))?
             .collect::<rusqlite::Result<_>>()?
     };
-    let changed: Vec<&String> = files
+    let mut changed: Vec<&String> = files
         .iter()
         .filter(|(p, f)| {
             old.get(*p)
@@ -649,11 +741,30 @@ pub fn build(vault: &Path, db_path: &Path, b: &Build<'_>) -> Result<BuildInfo, I
         })
         .map(|(p, _)| p)
         .collect();
-    let removed: Vec<&String> = old.keys().filter(|p| !files.contains_key(*p)).collect();
 
     let t1 = Instant::now();
+    // Đọc và parse trước khi mở giao dịch ghi, để không giữ khoá ghi trong lúc đọc đĩa. File biến mất giữa lúc
+    // liệt kê và lúc đọc (Obsidian ghi đè bằng rename, công cụ đồng bộ) coi như note đã xoá.
+    let mut parsed = Vec::with_capacity(changed.len());
+    let mut vanished: HashSet<&String> = HashSet::new();
+    for p in &changed {
+        let f = &files[*p];
+        match vault::read(&f.path) {
+            Ok(text) => parsed.push((*p, f, vault::parse(&text))),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                vanished.insert(*p);
+            }
+            Err(e) => return Err(io_err(&f.path)(e)),
+        }
+    }
+    changed.retain(|p| !vanished.contains(p));
+    let removed: Vec<&String> = old
+        .keys()
+        .filter(|p| !files.contains_key(*p) || vanished.contains(p))
+        .collect();
+    let dirty = meta_get(DIRTY).is_some();
     {
-        let tx = db.transaction()?;
+        let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
         if full {
             for t in NOTE_TABLES {
                 tx.execute(&format!("DELETE FROM {t}"), [])?;
@@ -672,8 +783,12 @@ pub fn build(vault: &Path, db_path: &Path, b: &Build<'_>) -> Result<BuildInfo, I
                 }
             }
         }
-        for p in &changed {
-            write_note(&tx, p, &files[*p])?;
+        for (p, f, r) in &parsed {
+            write_note(&tx, p, f, r)?;
+        }
+        if full || !changed.is_empty() || !removed.is_empty() {
+            // Cạnh sẽ được tính lại ở giao dịch sau; build hỏng giữa chừng thì lần sau vẫn phải tính lại.
+            tx.execute("INSERT OR REPLACE INTO meta VALUES (?, '1')", [DIRTY])?;
         }
         tx.commit()?;
     }
@@ -693,13 +808,14 @@ pub fn build(vault: &Path, db_path: &Path, b: &Build<'_>) -> Result<BuildInfo, I
     let (counts, version, problems) = if !changed.is_empty()
         || !removed.is_empty()
         || full
+        || dirty
         || meta_get("schema_digest") != Some(Some(&sdig))
         || matches!(adapter_digest, Some(None))
     {
         let pack_refs: Vec<&str> = b.packs.iter().map(String::as_str).collect();
         let (s, tables) = schema::load(&b.schema, &pack_refs)?;
         db.execute_batch(schema::DDL)?;
-        let tx = db.transaction()?;
+        let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
         write_schema(&tx, &tables)?;
         let counts = derive(&tx, vault, &s, &b.opts, b.adapter)?;
         validate::create_views(&tx)?;
@@ -768,7 +884,7 @@ pub fn build(vault: &Path, db_path: &Path, b: &Build<'_>) -> Result<BuildInfo, I
             chrono::Local::now().format("%Y-%m-%dT%H:%M:%S").to_string(),
         ),
         ("mode", mode.to_owned()),
-        ("notes", files.len().to_string()),
+        ("notes", (files.len() - vanished.len()).to_string()),
         ("notes_read", changed.len().to_string()),
         ("notes_removed", removed.len().to_string()),
         ("adapter", name),
@@ -779,7 +895,7 @@ pub fn build(vault: &Path, db_path: &Path, b: &Build<'_>) -> Result<BuildInfo, I
         ("schema_problems", problems.join("; ")),
     ];
     {
-        let tx = db.transaction()?;
+        let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
         tx.execute("DELETE FROM meta", [])?;
         {
             let mut st = tx.prepare("INSERT INTO meta VALUES (?, ?)")?;
@@ -794,10 +910,8 @@ pub fn build(vault: &Path, db_path: &Path, b: &Build<'_>) -> Result<BuildInfo, I
     Ok(BuildInfo { entries, counts })
 }
 
-/// Đọc một note và ghi các dòng của nó vào `nodes`, `props`, `raw_links`, `blocks`, `names`.
-fn write_note(tx: &Connection, p: &str, f: &NoteFile) -> Result<(), IndexError> {
-    let text = vault::read(&f.path).map_err(io_err(&f.path))?;
-    let r = vault::parse(&text);
+/// Ghi các dòng của một note đã parse vào `nodes`, `props`, `raw_links`, `blocks`, `names`.
+fn write_note(tx: &Connection, p: &str, f: &NoteFile, r: &vault::Parsed) -> Result<(), IndexError> {
     let types = r.types();
     let title = vault::title(p);
     tx.prepare_cached("INSERT INTO nodes VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")?

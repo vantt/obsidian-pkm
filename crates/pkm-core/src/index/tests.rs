@@ -479,3 +479,174 @@ fn empty_vault_builds_an_empty_index() {
         Some("full")
     );
 }
+
+/// Adapter có digest, lỗi khi được bảo: giả một build hỏng sau khi bảng note đã ghi.
+struct Flaky(std::sync::atomic::AtomicBool);
+
+impl crate::adapter::Adapter for Flaky {
+    fn name(&self) -> Option<&str> {
+        Some("flaky")
+    }
+
+    fn digest(&self, _vault: &Path) -> Option<String> {
+        Some("x".into())
+    }
+
+    fn edges(&self, _ctx: &mut Ctx<'_>) -> Result<(), IndexError> {
+        if self.0.load(std::sync::atomic::Ordering::SeqCst) {
+            return Err(IndexError::Adapter("hỏng có chủ ý".into()));
+        }
+        Ok(())
+    }
+}
+
+#[test]
+fn failed_build_is_rederived_next_time() {
+    let v = TestVault::new(&clean_notes());
+    let a = Flaky(std::sync::atomic::AtomicBool::new(false));
+    let run = || {
+        let b = Build {
+            packs: vec!["business".into()],
+            adapter: Some(&a),
+            ..Build::default()
+        };
+        build(v.path(), &v.db(), &b)
+    };
+    run().unwrap();
+    let p = v.path().join("Claim").join("Mệt giảm doanh thu.md");
+    let txt = std::fs::read_to_string(&p)
+        .unwrap()
+        .replace("status: proposed", "status: accepted");
+    std::fs::write(&p, txt).unwrap();
+    a.0.store(true, std::sync::atomic::Ordering::SeqCst);
+    assert!(run().is_err());
+    a.0.store(false, std::sync::atomic::Ordering::SeqCst);
+    // Bảng note đã nhận bản sửa nên lần này không còn note nào đổi; cờ `dirty` buộc tính lại cạnh.
+    let info = run().unwrap();
+    assert_eq!(info.get("notes_read"), Some("0"));
+    let db = v.open();
+    assert_eq!(
+        claim_edge(&db, "Claim/Mệt giảm doanh thu.md")["status"],
+        "accepted"
+    );
+    assert_eq!(
+        count(&db, "SELECT count(*) FROM meta WHERE key = 'dirty'"),
+        0
+    );
+    assert_eq!(count(&db, "SELECT count(*) FROM meta"), 16);
+}
+
+#[test]
+fn vanished_file_counts_as_removed() {
+    let v = TestVault::new(&clean_notes());
+    v.build(&["business"]);
+    let mut files = vault::list_notes(v.path(), None).unwrap();
+    let gone = "Claim/Ngân sách tăng lead.md";
+    std::fs::remove_file(v.path().join(gone)).unwrap();
+    // Danh sách liệt kê trước khi file mất (mtime đổi nên phải đọc lại); thêm một note "mới" không có trên đĩa.
+    let ghost = files[gone].clone();
+    let mut f = ghost.clone();
+    f.mtime += 1;
+    files.insert(gone.to_owned(), f);
+    files.insert("Ma/không có.md".to_owned(), ghost);
+    let b = Build {
+        packs: vec!["business".into()],
+        files: Some(&files),
+        ..Build::default()
+    };
+    let info = build(v.path(), &v.db(), &b).unwrap();
+    assert_eq!(
+        (
+            info.get("notes"),
+            info.get("notes_read"),
+            info.get("notes_removed")
+        ),
+        (Some("19"), Some("0"), Some("1"))
+    );
+    let db = v.open();
+    assert_eq!(count(&db, "SELECT count(*) FROM nodes"), 19);
+    assert_eq!(
+        count(
+            &db,
+            &format!("SELECT count(*) FROM edges WHERE claim = '{gone}'")
+        ),
+        0
+    );
+}
+
+#[test]
+fn concurrent_builds_take_turns() {
+    let v = TestVault::new(&clean_notes());
+    v.build(&["business"]);
+    let db = v.db();
+    let mut name = db.file_name().unwrap().to_os_string();
+    name.push(".lock");
+    let lock = std::fs::OpenOptions::new()
+        .write(true)
+        .open(db.with_file_name(name))
+        .unwrap();
+    lock.lock().unwrap();
+    let done = std::sync::atomic::AtomicBool::new(false);
+    std::thread::scope(|s| {
+        let h = s.spawn(|| {
+            let info = v.build(&["business"]);
+            done.store(true, std::sync::atomic::Ordering::SeqCst);
+            info
+        });
+        std::thread::sleep(Duration::from_millis(300));
+        assert!(
+            !done.load(std::sync::atomic::Ordering::SeqCst),
+            "build phải chờ khoá"
+        );
+        lock.unlock().unwrap();
+        assert_eq!(h.join().unwrap().get("notes_read"), Some("0"));
+    });
+    // Nhiều build cùng lúc trên một DB đều xong, không lỗi SQLITE_BUSY.
+    std::thread::scope(|s| {
+        let hs: Vec<_> = (0..4).map(|_| s.spawn(|| v.build(&["business"]))).collect();
+        for h in hs {
+            h.join().unwrap();
+        }
+    });
+}
+
+#[test]
+fn wal_switch_failure_is_not_fatal() {
+    let tmp = tempfile::tempdir().unwrap();
+    let path = tmp.path().join("g.db");
+    let other = Connection::open(&path).unwrap();
+    other
+        .execute_batch(
+            "PRAGMA journal_mode=DELETE; CREATE TABLE t(x); INSERT INTO t VALUES (1); BEGIN;",
+        )
+        .unwrap();
+    let _: i64 = other
+        .query_row("SELECT x FROM t", [], |r| r.get(0))
+        .unwrap();
+    let db = connect(&path, false).unwrap();
+    let t = Instant::now();
+    set_wal(&db);
+    assert!(t.elapsed() < Duration::from_secs(5));
+    let mode: String = db
+        .query_row("PRAGMA journal_mode", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(mode, "delete");
+    other.execute_batch("COMMIT").unwrap();
+    drop(other);
+    set_wal(&db);
+    let mode: String = db
+        .query_row("PRAGMA journal_mode", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(mode, "wal");
+}
+
+#[test]
+fn try_previous_reports_unreadable_db() {
+    let tmp = tempfile::tempdir().unwrap();
+    let missing = tmp.path().join("không có.db");
+    assert!(try_previous(&missing, "packs").unwrap().is_none());
+    let junk = tmp.path().join("rác.db");
+    std::fs::write(&junk, "không phải SQLite ".repeat(20)).unwrap();
+    assert!(try_previous(&junk, "packs").is_err());
+    assert_eq!(previous(&junk, "packs", "mặc định"), "mặc định");
+}

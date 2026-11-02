@@ -120,3 +120,21 @@ Bộ so khớp chạy bản debug (`cargo run`), nên số nó in (khoảng 110 
 1. Bản B chưa chạy (user hoãn). Lệnh chạy: `python3 parity/parity.py run --private <bản B> --adapter e11 --packs capture --no-aliases --edge-keys links --body-edges`. Cần xem đủ 20 mục index.
 2. Python dừng cả lần build khi `data.score` của một đề xuất không đọc được thành số, hoặc file cặp, sổ, manifest hỏng JSON. Rust làm giống: `build` trả lỗi. Có muốn đổi sang chỉ báo lỗi cho riêng mục đó, như cách user đã chọn cho YAML không? Việc này cần user quyết.
 3. Có mở issue ở repo đặc tả cho `_log_keys` (bắt cả `ValueError`) không? Việc này cần user cho phép.
+
+## 6. Sửa theo review mã (`plans/reports/code-reviewer-261102-1500-index.md`)
+
+Các lỗi sau đã sửa trong một commit riêng. Mọi chỗ hành vi khác Python khi build gặp lỗi đều ghi trong mục "Lệch có chủ ý" của `spec/PORTING.md`. Build thành công vẫn cho DB giống Python từng byte: tôi so lại kg-solo, vault cài lỗi và vault e11, mỗi vault qua 5 bước build như mục 1. Bộ so khớp kg-solo vẫn 0 lệch chưa có tên.
+
+- **H1:** giao dịch ghi bảng note ghi thêm `meta.dirty`, chỉ xoá khi ghi `meta` cuối build. Lần build sau còn thấy cờ này thì tính lại cạnh. Test `failed_build_is_rederived_next_time` cố ý cho adapter lỗi để kiểm.
+- **H2:** sửa bốn chỗ.
+  - Đọc và parse note trước khi mở giao dịch.
+  - Giao dịch ghi dùng `IMMEDIATE`; `busy_timeout` đặt rõ 30 s.
+  - Thêm khoá file `<db>.lock` cạnh DB (`File::try_lock`, chờ tối đa 5 phút), nên mỗi lúc chỉ một build. Vì vậy `old` và `meta` đọc dưới khoá là nhất quán.
+  - Test: `concurrent_builds_take_turns`.
+- **M1:** chỉ chuyển sang WAL khi DB chưa ở WAL, và không chờ khoá khi chuyển. Không chuyển được thì build tiếp ở chế độ cũ (`wal_switch_failure_is_not_fatal`).
+- **M2:** ghi giới hạn của cách nhận note đổi bằng (mtime, cỡ) và lối thoát `--full` vào PORTING.
+- **M3:** file mất giữa lúc liệt kê và lúc đọc (`NotFound`) được coi như note đã xoá (`vanished_file_counts_as_removed`).
+- **L1:**
+  - `previous` không mở được DB ở chế độ chỉ đọc thì thử mở đọc ghi, không tạo DB mới.
+  - Thêm `try_previous`, trả lỗi thay vì giá trị mặc định (API chỉ thêm, không đổi).
+- **L2:** id note luôn ở dạng NFC và `data.to` được đưa về NFC trước khi so. Test `fix_link_target_in_nfd_matches_nfc_note_id` dùng tên file NFD.
