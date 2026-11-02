@@ -61,12 +61,13 @@ impl Hooks for Fake {
         })
     }
 
-    fn desktop_running(&self) -> io::Result<bool> {
+    fn desktop_process(&self) -> io::Result<Option<String>> {
+        let found = |b: bool| b.then(|| DESKTOP_EXE.to_owned());
         if let Some(b) = self.running_after_build.filter(|_| self.built.get()) {
-            return Ok(b);
+            return Ok(found(b));
         }
         match &self.running {
-            Ok(b) => Ok(*b),
+            Ok(b) => Ok(found(*b)),
             Err(e) => Err(io::Error::new(e.kind(), e.to_string())),
         }
     }
@@ -80,6 +81,9 @@ impl Hooks for Fake {
         fs::write(out, body).map_err(|e| e.to_string())
     }
 }
+
+/// Đường dẫn Claude Desktop mà [`Fake`] báo khi app "đang chạy".
+const DESKTOP_EXE: &str = r"C:\Users\u\AppData\Local\AnthropicClaude\app-1.0.0\claude.exe";
 
 struct Setup {
     _tmp: tempfile::TempDir,
@@ -315,8 +319,20 @@ fn refuses_to_write_while_desktop_runs() {
     };
     let err = s.run(&s.args(), &hooks).unwrap_err();
     assert!(err.contains("Claude Desktop đang chạy"), "{err}");
+    assert!(
+        err.contains(DESKTOP_EXE),
+        "in exe bị coi là Claude Desktop: {err}"
+    );
+    assert!(err.contains("--force"), "{err}");
     assert_eq!(fs::read_to_string(&s.config).unwrap(), EXISTING);
     assert!(hooks.builds.borrow().is_empty());
+
+    // Chấp nhận chỗ đặt binary không bỏ qua kiểm Claude Desktop.
+    let mut args = s.args();
+    args.allow_any_location = true;
+    let err = s.run(&args, &hooks).unwrap_err();
+    assert!(err.contains("Claude Desktop đang chạy"), "{err}");
+    assert_eq!(fs::read_to_string(&s.config).unwrap(), EXISTING);
 
     let mut args = s.args();
     args.vault = None;
@@ -484,6 +500,51 @@ fn default_db_is_outside_vault_and_stable() {
 }
 
 #[test]
+fn default_db_ignores_trailing_separator_and_symlinks() {
+    let s = setup(None);
+    let a = s.inst.default_db(&s.vault);
+    let mut slash = s.vault.clone().into_os_string();
+    slash.push(std::path::MAIN_SEPARATOR_STR);
+    assert_eq!(s.inst.default_db(Path::new(&slash)), a);
+    #[cfg(unix)]
+    {
+        let link = s.vault.with_file_name("lối tắt");
+        std::os::unix::fs::symlink(&s.vault, &link).unwrap();
+        assert_eq!(s.inst.default_db(&link), a);
+    }
+}
+
+#[test]
+fn default_db_keeps_index_named_by_old_hash() {
+    let s = setup(None);
+    let mut slash = s.vault.clone().into_os_string();
+    slash.push(std::path::MAIN_SEPARATOR_STR);
+    let slash = PathBuf::from(slash);
+    let old = s.inst.legacy_default_db(&slash);
+    assert_ne!(old, s.inst.default_db(&slash), "khoá mới khác khoá cũ");
+    fs::create_dir_all(old.parent().unwrap()).unwrap();
+    fs::write(&old, b"SQLite format 3\0").unwrap();
+    assert_eq!(s.inst.default_db(&slash), old);
+}
+
+#[test]
+fn vault_key_normalizes_spelling_of_one_path() {
+    assert_eq!(vault_key("/home/u/Kho/", false), "/home/u/Kho");
+    assert_eq!(vault_key("/", false), "/");
+    assert_eq!(vault_key(r"C:\", true), r"c:\");
+    assert_eq!(vault_key(r"\\?\D:\Vault\", true), r"d:\vault");
+    assert_eq!(
+        vault_key(r"\\?\UNC\server\share\Vault", false),
+        r"\\server\share\Vault"
+    );
+    // NFD (macOS) và NFC cho cùng khoá; gộp hoa thường chỉ khi được yêu cầu.
+    let nfd = "/Users/u/Ghi chu\u{301}";
+    assert_eq!(vault_key(nfd, false), "/Users/u/Ghi chú");
+    assert_eq!(vault_key("/Users/u/GHI CHÚ", true), vault_key(nfd, true));
+    assert_ne!(vault_key("/a/Kho", false), vault_key("/a/kho", false));
+}
+
+#[test]
 fn read_args_follow_python_order() {
     let args = InstallArgs {
         packs: Some("capture".into()),
@@ -575,7 +636,7 @@ fn ohs_tar_gz() -> Vec<u8> {
 }
 
 #[test]
-fn refuses_binary_outside_install_dir_without_force() {
+fn refuses_binary_outside_install_dir_without_allow_any_location() {
     let mut s = setup(Some(EXISTING));
     s.inst.exe = s.vault.parent().unwrap().join("Downloads").join("pkm");
     let hooks = Fake::new();
@@ -589,20 +650,27 @@ fn refuses_binary_outside_install_dir_without_force() {
         err.contains("mcp install"),
         "lệnh chạy lại từ chỗ chuẩn: {err}"
     );
-    assert!(err.contains("--force"), "{err}");
+    assert!(err.contains("--allow-any-location"), "{err}");
     assert_eq!(fs::read_to_string(&s.config).unwrap(), EXISTING);
     assert!(hooks.builds.borrow().is_empty());
+
+    // `--force` chỉ bỏ qua kiểm Claude Desktop, không chấp nhận chỗ đặt binary.
+    let mut args = s.args();
+    args.force = true;
+    let err = s.run(&args, &hooks).unwrap_err();
+    assert!(err.contains("--allow-any-location"), "{err}");
+    assert_eq!(fs::read_to_string(&s.config).unwrap(), EXISTING);
 
     let mut args = s.args();
     args.dry_run = true;
     let out = s.run(&args, &hooks).unwrap();
     assert!(
-        out.contains("cảnh báo (sẽ từ chối nếu không có --force)"),
+        out.contains("cảnh báo (sẽ từ chối nếu không có --allow-any-location)"),
         "{out}"
     );
 
     let mut args = s.args();
-    args.force = true;
+    args.allow_any_location = true;
     let out = s.run(&args, &hooks).unwrap();
     assert!(out.starts_with("cảnh báo: pkm đang chạy từ"), "{out}");
     assert_eq!(

@@ -342,42 +342,105 @@ pub fn entry_diff(name: &str, before: Option<&Value>, after: Option<&Value>) -> 
     out
 }
 
-/// Ghi `text` vào `path` nguyên tử: sao lưu file cũ thành `<file>.bak-<thời điểm UTC>`, ghi file tạm cùng thư mục,
-/// `fsync`, rồi đổi tên đè lên file cũ. Trả đường dẫn bản sao lưu (nếu có file cũ).
+/// Ghi `text` vào `path` nguyên tử: sao lưu file cũ thành `<file>.bak-<thời điểm UTC>`, ghi file tạm mới tạo (tên
+/// ngẫu nhiên, không bao giờ mở file có sẵn) cùng thư mục với file đích, `fsync`, rồi đổi tên đè lên file đích. `path`
+/// là symlink (cấu hình đồng bộ bằng dotfiles) thì ghi vào file nó trỏ tới và giữ nguyên symlink. Trên Unix, file
+/// mới giữ quyền của file cũ (ví dụ `0600` khi `env` của MCP khác có token). Trả đường dẫn bản sao lưu (nếu có file
+/// cũ).
 pub fn write_atomic(path: &Path, text: &str) -> Result<Option<PathBuf>, String> {
-    let dir = path
+    let target = write_target(path)?;
+    let dir = target
         .parent()
         .filter(|d| !d.as_os_str().is_empty())
         .unwrap_or(Path::new("."));
     if !dir.is_dir() {
         return Err(format!("thư mục {} không tồn tại", dir.display()));
     }
-    let backup = if path.exists() {
+    let original = fs::metadata(&target).ok();
+    let backup = if original.is_some() {
         let bak = backup_path(path, SystemTime::now());
-        fs::copy(path, &bak).map_err(|e| format!("sao lưu {}: {e}", path.display()))?;
+        fs::copy(&target, &bak).map_err(|e| format!("sao lưu {}: {e}", path.display()))?;
         Some(bak)
     } else {
         None
     };
-    let name = path.file_name().map_or_else(
+    let name = target.file_name().map_or_else(
         || OsString::from(CONFIG_FILE),
         std::ffi::OsStr::to_os_string,
     );
-    let mut tmp_name = name;
-    tmp_name.push(format!(".tmp-{}", std::process::id()));
-    let tmp = dir.join(tmp_name);
+    let (mut f, tmp) = create_temp(dir, &name, original.is_some())
+        .map_err(|e| format!("tạo file tạm trong {}: {e}", dir.display()))?;
     let result = (|| -> io::Result<()> {
-        let mut f = fs::File::create(&tmp)?;
         f.write_all(text.as_bytes())?;
+        #[cfg(unix)]
+        if let Some(m) = &original {
+            f.set_permissions(m.permissions())?;
+        }
         f.sync_all()?;
         drop(f);
-        fs::rename(&tmp, path)
+        fs::rename(&tmp, &target)
     })();
     if let Err(e) = result {
         let _ = fs::remove_file(&tmp);
         return Err(format!("ghi {}: {e}", path.display()));
     }
     Ok(backup)
+}
+
+/// File thật cần ghi: `path`, hoặc file mà `path` (symlink) trỏ tới. Symlink gãy là lỗi: ghi đè nó sẽ thay symlink
+/// bằng file thường và cắt đứt đồng bộ mà không ai biết.
+fn write_target(path: &Path) -> Result<PathBuf, String> {
+    match fs::symlink_metadata(path) {
+        Ok(m) if m.file_type().is_symlink() => fs::canonicalize(path).map_err(|e| {
+            format!(
+                "{} là symlink nhưng không theo được tới file đích ({e}); sửa symlink rồi chạy lại",
+                path.display()
+            )
+        }),
+        _ => Ok(path.to_path_buf()),
+    }
+}
+
+/// Tạo mới (không mở file có sẵn, không theo symlink có sẵn) `<name>.tmp-<pid>-<ngẫu nhiên>` trong `dir`. `private`:
+/// trên Unix tạo với quyền `0600` (quyền của file cũ được chép sang sau), để nội dung không lộ trong lúc ghi.
+fn create_temp(
+    dir: &Path,
+    name: &std::ffi::OsStr,
+    private: bool,
+) -> io::Result<(fs::File, PathBuf)> {
+    let mut last = None;
+    for _ in 0..16 {
+        let mut tmp_name = name.to_os_string();
+        tmp_name.push(format!(".tmp-{}-{:016x}", std::process::id(), random_u64()));
+        let tmp = dir.join(tmp_name);
+        let mut opts = fs::OpenOptions::new();
+        opts.write(true).create_new(true);
+        #[cfg(unix)]
+        if private {
+            use std::os::unix::fs::OpenOptionsExt;
+            opts.mode(0o600);
+        }
+        #[cfg(not(unix))]
+        let _ = private;
+        match opts.open(&tmp) {
+            Ok(f) => return Ok((f, tmp)),
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => last = Some(e),
+            Err(e) => return Err(e),
+        }
+    }
+    Err(last.unwrap_or_else(|| io::Error::other("không tạo được tên file tạm")))
+}
+
+/// Số ngẫu nhiên cho tên file tạm: khoá ngẫu nhiên của `RandomState` trộn với thời điểm hiện tại.
+fn random_u64() -> u64 {
+    use std::hash::{BuildHasher, Hasher};
+    let mut h = std::collections::hash_map::RandomState::new().build_hasher();
+    h.write_u128(
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_or(0, |d| d.as_nanos()),
+    );
+    h.finish()
 }
 
 /// `<file>.bak-YYYYMMDDTHHMMSSZ`, thêm `-2`, `-3`… nếu trùng.
@@ -581,6 +644,92 @@ mod tests {
         assert_ne!(bak, bak2, "bản sao lưu cùng giây không đè nhau");
         assert_eq!(fs::read_dir(tmp.path()).unwrap().count(), 3);
         assert!(write_atomic(&tmp.path().join("mất").join(CONFIG_FILE), "x").is_err());
+    }
+
+    #[test]
+    fn temp_files_are_new_and_distinct() {
+        let tmp = tempfile::tempdir().unwrap();
+        let name = std::ffi::OsStr::new(CONFIG_FILE);
+        let (_a, pa) = create_temp(tmp.path(), name, true).unwrap();
+        let (_b, pb) = create_temp(tmp.path(), name, false).unwrap();
+        assert_ne!(pa, pb);
+        assert!(pa.parent() == Some(tmp.path()) && pb.parent() == Some(tmp.path()));
+        assert!(
+            pa.file_name()
+                .unwrap()
+                .to_string_lossy()
+                .starts_with(&format!("{CONFIG_FILE}.tmp-{}-", std::process::id()))
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_atomic_keeps_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = tempfile::tempdir().unwrap();
+        let p = tmp.path().join(CONFIG_FILE);
+        fs::write(&p, "one").unwrap();
+        fs::set_permissions(&p, fs::Permissions::from_mode(0o600)).unwrap();
+        write_atomic(&p, "two").unwrap();
+        assert_eq!(fs::read_to_string(&p).unwrap(), "two");
+        assert_eq!(
+            fs::metadata(&p).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        fs::set_permissions(&p, fs::Permissions::from_mode(0o640)).unwrap();
+        write_atomic(&p, "three").unwrap();
+        assert_eq!(
+            fs::metadata(&p).unwrap().permissions().mode() & 0o777,
+            0o640
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_atomic_writes_through_symlink() {
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = tempfile::tempdir().unwrap();
+        let dotfiles = tmp.path().join("dotfiles");
+        let claude = tmp.path().join("Claude");
+        fs::create_dir_all(&dotfiles).unwrap();
+        fs::create_dir_all(&claude).unwrap();
+        let real = dotfiles.join(CONFIG_FILE);
+        fs::write(&real, "one").unwrap();
+        fs::set_permissions(&real, fs::Permissions::from_mode(0o600)).unwrap();
+        let link = claude.join(CONFIG_FILE);
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+
+        let bak = write_atomic(&link, "two").unwrap().unwrap();
+        assert!(
+            fs::symlink_metadata(&link)
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
+        assert_eq!(fs::read_link(&link).unwrap(), real);
+        assert_eq!(fs::read_to_string(&real).unwrap(), "two");
+        assert_eq!(
+            fs::metadata(&real).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        assert_eq!(fs::read_to_string(&bak).unwrap(), "one");
+        assert_eq!(
+            fs::read_dir(&dotfiles).unwrap().count(),
+            1,
+            "không sót file tạm"
+        );
+
+        // Symlink gãy: từ chối, giữ nguyên symlink.
+        fs::remove_file(&real).unwrap();
+        let err = write_atomic(&link, "three").unwrap_err();
+        assert!(err.contains("symlink"), "{err}");
+        assert!(
+            fs::symlink_metadata(&link)
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
+        assert!(!real.exists());
     }
 
     #[test]
