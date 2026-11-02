@@ -28,6 +28,9 @@ const STDERR_TAIL_LINES: usize = 40;
 /// Số ký tự tối đa giữ lại của một dòng stderr.
 const STDERR_LINE_CHARS: usize = 2000;
 
+/// Thời gian tối đa `close` chờ luồng đọc stderr đọc hết pipe sau khi tiến trình đã thoát hoặc bị giết.
+const STDERR_DRAIN: Duration = Duration::from_secs(1);
+
 /// Việc xảy ra với tiến trình, gửi về luồng giám sát. Số là lần khởi động (`generation`) của tiến trình.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum Event {
@@ -112,6 +115,8 @@ pub(crate) struct Proc {
     waiters: Arc<Mutex<Waiters>>,
     next_id: AtomicU64,
     stderr_tail: Arc<Mutex<VecDeque<String>>>,
+    /// Đóng (sender bị drop) khi luồng đọc stderr đã đọc tới EOF. `None` sau khi `close` đã chờ một lần.
+    stderr_done: Mutex<Option<Receiver<()>>>,
 }
 
 impl Proc {
@@ -138,6 +143,7 @@ impl Proc {
         let waiters: Arc<Mutex<Waiters>> = Arc::default();
         let stderr_tail: Arc<Mutex<VecDeque<String>>> = Arc::default();
         let (writer, queue) = mpsc::channel();
+        let (stderr_eof, stderr_done) = mpsc::channel();
         let started = start_threads(
             generation,
             Pipes {
@@ -148,6 +154,7 @@ impl Proc {
             queue,
             Arc::clone(&waiters),
             Arc::clone(&stderr_tail),
+            stderr_eof,
             events,
         );
         if let Err(e) = started {
@@ -163,6 +170,7 @@ impl Proc {
             waiters,
             next_id: AtomicU64::new(1),
             stderr_tail,
+            stderr_done: Mutex::new(Some(stderr_done)),
         })
     }
 
@@ -254,7 +262,16 @@ impl Proc {
     /// Đóng stdin để OHS tự thoát, chờ tối đa `timeout`; quá hạn thì giết cả nhóm. Luôn reap tiến trình (không để
     /// zombie). Không cần lock nào mà luồng ghi có thể giữ: luồng ghi đang chặn sẽ nhận lỗi khi tiến trình bị giết.
     /// Trả mã thoát, kèm `true` nếu tiến trình tự thoát.
+    ///
+    /// Trước khi trả, chờ luồng đọc stderr đọc hết pipe (tối đa [`STDERR_DRAIN`]), để [`Proc::stderr_tail`] gọi sau
+    /// đó thấy cả những dòng cuối OHS ghi trước khi chết.
     pub(crate) fn close(&self, timeout: Duration) -> (Option<ExitStatus>, bool) {
+        let closed = self.close_process(timeout);
+        self.wait_stderr_eof();
+        closed
+    }
+
+    fn close_process(&self, timeout: Duration) -> (Option<ExitStatus>, bool) {
         drop(lock(&self.writer).take());
         let deadline = Instant::now() + timeout;
         loop {
@@ -270,6 +287,15 @@ impl Proc {
         let (child, reaped) = &mut *guard;
         *reaped = true;
         (kill_and_reap(&self.tree, child), false)
+    }
+
+    /// Chờ luồng đọc stderr gặp EOF. Có giới hạn: một tiến trình con lọt khỏi nhóm (Windows không có Job Object) có
+    /// thể giữ stderr mở mãi.
+    fn wait_stderr_eof(&self) {
+        let Some(done) = lock(&self.stderr_done).take() else {
+            return;
+        };
+        let _ = done.recv_timeout(STDERR_DRAIN);
     }
 }
 
@@ -297,13 +323,14 @@ struct Pipes {
 }
 
 /// Ba luồng nền của một tiến trình. Chúng tự kết thúc khi pipe đóng (tiến trình thoát hoặc bị giết) hoặc hàng đợi
-/// ghi bị đóng; không cần join.
+/// ghi bị đóng; không cần join. Riêng luồng stderr báo qua `stderr_eof` khi đọc xong để `close` chờ.
 fn start_threads(
     generation: u64,
     pipes: Pipes,
     queue: Receiver<Vec<u8>>,
     waiters: Arc<Mutex<Waiters>>,
     stderr_tail: Arc<Mutex<VecDeque<String>>>,
+    stderr_eof: Sender<()>,
     events: Sender<Event>,
 ) -> io::Result<()> {
     let Pipes {
@@ -321,6 +348,8 @@ fn start_threads(
                 }
                 t.push_back(line.chars().take(STDERR_LINE_CHARS).collect());
             });
+            // `stderr_eof` bị drop ở đây: `close` thôi chờ.
+            drop(stderr_eof);
         })?;
     thread::Builder::new()
         .name("ohs-stdin".into())
