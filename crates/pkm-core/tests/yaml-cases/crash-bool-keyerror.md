@@ -1,0 +1,4 @@
+---
+b: !!bool maybe
+---
+body

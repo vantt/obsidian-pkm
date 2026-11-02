@@ -32,6 +32,19 @@ Chỗ bản Python sai rõ ràng và Rust không làm theo (PRD mục 4). Mỗi 
 - **Ngoại lệ trong bộ so khớp:** không cần (không thuộc tầng nào).
 - **Issue ở repo đặc tả:** đề xuất, chưa mở.
 
+### `yaml-python-dung-build`: YAML làm bản Python dừng cả lần build
+
+- **Python** (`5a3eb2f`, `scripts/kg/vault.py`, `parse`): chỉ bắt `yaml.YAMLError` và `ValueError`. Một số frontmatter làm PyYAML hoặc `vault.flat` ném ngoại lệ khác, không ai bắt, nên `build` dừng ở note đó và không có index nào:
+  - `!!bool` với chữ lạ (`!!bool maybe`): `KeyError`;
+  - `!!timestamp` không đúng dạng (`!!timestamp soon`): `AttributeError`;
+  - `!!int` hoặc `!!float` rỗng, `!!int` chỉ có dấu (`!!int ""`, `!!int "-"`): `IndexError`;
+  - list chứa chính nó qua alias (`a: &r [1, *r]`), hoặc list lồng khoảng 1000 cấp: `RecursionError` trong `flat`;
+  - số nguyên dựng từ cơ số 2, 8, 16 dài quá 4300 chữ số thập phân: `ValueError` khi `str()` (ngoài khối `try`).
+- **Rust** (`pkm_core::vault::parse`, lớp `vault::yaml`): không dừng; ghi `nodes.yaml_error` = `YAML lỗi: <tên kiểu ngoại lệ>` (ví dụ `YAML lỗi: KeyError`) cho riêng note, frontmatter coi như rỗng (không `props`, không link frontmatter), thân note vẫn đọc như mọi lỗi YAML khác. Mọi container lồng quá 1000 cấp (`vault::yaml::MAX_DEPTH`) đều báo `RecursionError`; Python chỉ dừng khi list lồng quá sâu, dict lồng sâu tới giới hạn ngăn xếp C (vài nghìn cấp) vẫn đọc được.
+- **Lý do:** user chọn (docs/DECISIONS.md, "Bốn dạng YAML làm Python crash: Rust ghi lỗi cho note"). Một note gõ sai không được làm hỏng index của cả vault; validator báo lỗi R0 như mọi lỗi YAML.
+- **Ngoại lệ trong bộ so khớp:** `yaml-python-dung-build` (tầng `index`, bảng `nodes`, cột `yaml_error`). Trên vault có các dạng này bản Python không dựng được dump, nên ngoại lệ chủ yếu để ghi nhận; kg-solo không có dạng nào. Ca biên nằm trong `crates/pkm-core/tests/yaml-cases/` (`crash-*.md`).
+- **Issue ở repo đặc tả:** chưa mở (user chưa cho phép).
+
 ## Test `platform` chuyển từ Python
 
 Nguồn: `scripts/tests/test_platform_paths.py` ở sha ghim, 19 test. Test Rust nằm trong `crates/pkm-core/src/platform.rs` (`platform::tests::…`), chạy bằng `cargo test -p pkm-core platform` trên cả ba nền. Test có `#[cfg(...)]` chỉ chạy trên nền tương ứng (Python giả nền bằng mock; Rust kiểm nền thật trong CI).
@@ -54,10 +67,23 @@ Nguồn: `scripts/tests/test_platform_paths.py` ở sha ghim, 19 test. Test Rust
 | 14 | `Move.test_case_only_rename_of_itself` | `move_allows_case_only_rename_of_itself` | đã chuyển | |
 | 15 | `Move.test_retries_while_file_is_held` | `move_retries_while_file_is_held` | đã chuyển | Hàm đổi tên được truyền vào thay cho mock `os.rename` |
 | 16 | `Move.test_gives_up_after_tries` | `move_gives_up_after_tries`; thêm `move_does_not_retry_other_errors`, `sharing_violation_counts_as_held` (Windows) | đã chuyển | |
-| 17 | `ListNotes.test_same_set_as_walk` | — | chuyển cùng module `vault` | Test của `kg.vault.list_notes`, không phải của `platform_paths` |
-| 18 | `WindowsText.test_block_id_in_crlf_note` | — | chuyển cùng module `vault` | Test regex `BLOCK` của `kg.vault` trên note CRLF |
+| 17 | `ListNotes.test_same_set_as_walk` | `vault::tests::list_notes_same_set_as_walk` | đã chuyển | Test của `kg.vault.list_notes`, chuyển cùng module `vault` |
+| 18 | `WindowsText.test_block_id_in_crlf_note` | `vault::tests::block_id_in_crlf_note` | đã chuyển | Test regex `BLOCK` của `kg.vault` trên note CRLF, chuyển cùng module `vault` |
 | 19 | `WindowsText.test_utf8_stdio_on_an_ansi_pipe` | — | không áp dụng | `utf8_stdio` là phần Python thuần (PRD mục 5.4): Rust luôn ghi UTF-8, không phụ thuộc code page |
 
 Test Rust thêm, không có bản Python: `move_with_zero_tries_still_tries_once` (lệch có chủ ý ở trên), `move_renames_into_vietnamese_name`, `name_taken_in_missing_folder_is_none`, `name_taken_resolves_dot_segments_of_src`, `verbatim_prefixes_drive_and_unc_paths` (Windows: tiền tố `\\?\` cho đường dẫn dài).
 
 Trên Windows, Rust đổi tên bằng `MoveFileExW` không cờ (như `os.rename` của Python), vì `std::fs::rename` của Rust đè đích trên Windows.
+
+## Test `vault` và `schema`
+
+Nguồn ở sha ghim: `scripts/kg/tests/test_kg.py` không có test riêng cho `vault.py` hay `schema.py` (15 test của nó kiểm qua `build`, validator, truy vấn và tool, nên chuyển cùng các module đó); hai test của `vault` nằm trong `scripts/tests/test_platform_paths.py` (dòng 17, 18 ở bảng trên). Hành vi còn lại so trực tiếp với Python: bộ so khớp (bảng `nodes`, `props`, `raw_links`, `links`, `blocks`, `names`, `schema_*` trên kg-solo) và ca biên YAML có kết quả PyYAML ghi sẵn. Chạy: `cargo test -p pkm-core`.
+
+| Nguồn Python | Test Rust | Trạng thái | Ghi chú |
+|---|---|---|---|
+| `ListNotes.test_same_set_as_walk` | `vault::tests::list_notes_same_set_as_walk` | đã chuyển | Thêm `list_notes_applies_the_skip_rule`, `list_notes_skips_symlinked_folders` (Unix) |
+| `WindowsText.test_block_id_in_crlf_note` | `vault::tests::block_id_in_crlf_note` | đã chuyển | Thêm `crlf_note_keeps_frontmatter_and_body`, `blocks_are_sorted_unique_and_need_line_end` |
+| 58 ca biên của bài thử S1 (`probes/s1-yaml/cases/`, kết quả `CSafeLoader`) | `tests/yaml_cases.rs::every_edge_case_matches_pyyaml` | đã chuyển | Cùng `props` và câu lỗi YAML; bốn ca `crash-*` thành lỗi YAML của note (lệch có chủ ý `yaml-python-dung-build`) |
+| `vault.parse`, `vault.Resolver`, `vault.fold` (hành vi) | `vault::tests::*`, `vault::resolve::tests::*`, `vault::pystr::tests::*` | đã chuyển | Giá trị mong đợi đã đối chiếu với `vault.py` ở sha ghim |
+| PyYAML `SafeConstructor` (hành vi) | `vault::yaml::tests::*`, `vault::yaml::scalar::tests::*`, `vault::yaml::repr::tests::*` | đã chuyển | Khoá dict so như Python, alias vòng in `{...}`, `<<`, `=`, câu lỗi `int()`, `float()`, `binascii`, `datetime` của Python 3.14 |
+| `schema.resolve`, `schema.load`, `schema.digest` (hành vi) | `schema::tests::*` | đã chuyển | Schema nhúng có digest `bbaa9f0197ef` như golden; schema tự viết đối chiếu với `schema.py` (gói, `extends` vòng, `widen`, `required_if`, `enum_of_edges`) |

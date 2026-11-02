@@ -1,6 +1,6 @@
 ---
 title: "Phase 8: vault và schema"
-status: todo
+status: done
 priority: P1
 effort: "2,5 ngày"
 prd: R06
@@ -26,18 +26,26 @@ needs_user: true
 - Thêm dòng vào `spec/PORTING.md`.
 
 ## Việc cần làm
-- [ ] Tách frontmatter (crate và lớp chuẩn hoá theo Q3), link, block; giải link kiểu Obsidian, alias khi bật (`--no-aliases` tắt).
-- [ ] Giữ CRLF hay LF như Python; đường dẫn trong DB ở dạng NFC (dùng `platform` nếu phase 07 đã merge, không thì viết hàm cục bộ và ghi việc gộp lại).
-- [ ] Bỏ trang theo luật adapter (giao diện trait `Adapter` tối thiểu; phần e11 ở phase 09).
-- [ ] Chuyển hai test Python mà phase platform để lại cho `vault`: `list_notes` và block ID trong file CRLF (xem bảng platform trong `spec/PORTING.md`).
-- [ ] Regex có lookaround: viết lại hoặc dùng `fancy-regex` ở đúng chỗ đó.
-- [ ] Schema nhúng bằng `include_str!` và vẫn nhận file ngoài; nạp gói (`--packs`), `extends`; ghi bảng `schema_*`.
-- [ ] Chuyển các test Python của `vault` và `schema`.
+- [x] Tách frontmatter (crate và lớp chuẩn hoá theo Q3), link, block; giải link kiểu Obsidian, alias khi bật (`--no-aliases` tắt).
+- [x] Giữ CRLF hay LF như Python; đường dẫn trong DB ở dạng NFC (dùng `platform` nếu phase 07 đã merge, không thì viết hàm cục bộ và ghi việc gộp lại).
+- [x] Bỏ trang theo luật adapter (giao diện trait `Adapter` tối thiểu; phần e11 ở phase 09).
+- [x] Chuyển hai test Python mà phase platform để lại cho `vault`: `list_notes` và block ID trong file CRLF (xem bảng platform trong `spec/PORTING.md`).
+- [x] Regex có lookaround: viết lại hoặc dùng `fancy-regex` ở đúng chỗ đó.
+- [x] Schema nhúng bằng `include_str!` và vẫn nhận file ngoài; nạp gói (`--packs`), `extends`; ghi bảng `schema_*`.
+- [x] Chuyển các test Python của `vault` và `schema`.
 
 ## Nghiệm thu
 - Bộ so khớp tầng bảng (các bảng nêu trên) trên kg-solo so với golden: 0 lệch chưa có tên; chạy cả trong CI.
 - `parity --private <bản B>` trên máy user: 0 lệch chưa có tên cho các bảng này.
 - `cargo test -p pkm-core` qua trên ba nền.
+
+## Trạng thái thực hiện (2026-11-02)
+Đã làm và kiểm: lớp YAML tương thích PyYAML (`unsafe-libyaml` + composer, resolver, constructor, `str`/`repr`), `vault` (liệt kê note theo đường dẫn đã sắp, đọc, `parse`, giải link, `fold`), `schema` (nhúng, file ngoài, gói, `extends`, `widen`, bảng `schema_*`), phần cắm Rust của bộ so khớp cho 17 bảng. Bộ so khớp kg-solo so với golden (chạy đúng hai bước CI, không có Python): 17 bảng khớp, 0 lệch chưa có tên. Thêm đối chiếu trực tiếp với Python trên vault ngẫu nhiên (25.000 note YAML, 15.000 note link): 0 lệch. Báo cáo: `plans/reports/fullstack-developer-261102-1400-phase-08-vault-schema.md`.
+
+Nghiệm thu:
+- [x] Bộ so khớp tầng bảng trên kg-solo so với golden: 0 lệch chưa có tên; chạy trong CI (bước so có sẵn, nay các bảng này báo "khớp").
+- [ ] `parity --private <bản B>` trên máy user: 0 lệch chưa có tên cho các bảng này (user hoãn bản B; agent khác chạy sau).
+- [x] `cargo test -p pkm-core` qua trên Linux; `cargo clippy --target x86_64-pc-windows-msvc` và `--target aarch64-apple-darwin` sạch (test trên Windows, macOS chạy ở CI).
 
 ## Cần user
 Cổng G0; chạy bản B.
