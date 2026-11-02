@@ -21,10 +21,15 @@ Mỗi quyết định một mục, theo khung:
 - **Bằng chứng:** (bài thử S1, PRD mục 14 R01)
 
 ## Q4: `rmcp` hay JSON-RPC tự viết
-- **Ngày:**
-- **Lựa chọn:**
+- **Ngày:** 2026-11-02
+- **Lựa chọn:** JSON-RPC 2.0 stdio tự viết (mỗi dòng một bản tin), đồng bộ, chỉ dùng `serde_json` (bật `preserve_order`). Không dùng `rmcp`, không dùng async runtime.
 - **Lý do:**
-- **Bằng chứng:** (bài thử S2, PRD mục 14 R02)
+  - Kích thước và phụ thuộc: cùng một tool, bản tự viết 0,68 MB, 12 crate, build release từ sạch 2,5 s; bản `rmcp` 3.8.0 2,79 MB, 56 crate, 16,5 s, và bắt buộc `tokio` (cần cả `time`, thiếu là panic lúc chạy). PRD mục 3 nói không dùng async runtime nếu không cần.
+  - Câu chữ: cả hai đều cho kiểm soát đủ `instructions`, mô tả tool, schema tham số (mục `find` giống hệt Python, kể cả thứ tự khoá), và phiên bản giao thức (`rmcp` phải ghi đè `supported_protocol_versions`).
+  - Hợp đồng MCP phải giống Python (PRD mục 8), mà ở tầng giao thức `rmcp` khác Python ở năm chỗ: câu báo phương thức lạ (`nope/x` thay vì `method not found: nope/x`), dòng không phải JSON bị bỏ im lặng (Python trả `-32700`), batch bị trả `-32600` không có `id` (Python trả lời từng phần), request trước `initialize` bị từ chối, `server/discover` trả `-32022` (Python `-32601`). Bản tự viết khớp Python ở cả năm chỗ với khoảng 100 dòng, chép thẳng `Server.handle` của Python.
+  - `rmcp` đổi nhanh (bản 3.x, đã theo giao thức 2026-07-28); bám nó là thêm một nguồn thay đổi ngoài Python cần đuổi theo.
+  - Xem lại khi Python chuyển sang giao thức 2026-07-28 (bỏ `initialize`, thêm `server/discover`) hoặc khi cần MCP qua HTTP.
+- **Bằng chứng:** `probes/s2-mcp/` (hai binary `s2-hand`, `s2-rmcp`, test `tests/stdio_session.rs` so mục `find` với bản Python); bản ghi phiên Claude Code 2.1.316 và số đo ở `plans/reports/probe-s2-mcp-261102-1317.md`.
 
 ## Ghim toolchain Rust
 - **Ngày:** 2026-11-02

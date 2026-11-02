@@ -1,0 +1,34 @@
+# Bài thử MCP: cùng một tool `find`, hai cách nói MCP stdio.
+#   s2-hand: JSON-RPC theo dòng tự viết, chỉ `serde_json` (không async runtime).
+#   s2-rmcp: crate `rmcp` + `tokio` (bật bằng feature `rmcp`).
+# Crate đứng riêng (có `[workspace]` của mình), không là member của workspace gốc.
+[workspace]
+
+[package]
+name = "s2-mcp"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97"
+publish = false
+
+[features]
+rmcp = ["dep:rmcp", "dep:tokio"]
+
+[dependencies]
+# preserve_order: giữ thứ tự khoá như dict của Python (mô tả tool, schema so được theo chuỗi).
+serde_json = { version = "1", features = ["preserve_order"] }
+unicode-normalization = "0.1"
+rmcp = { version = "=3.8.0", default-features = false, features = ["server", "transport-io"], optional = true }
+tokio = { version = "1", default-features = false, features = ["rt", "io-std", "time"], optional = true }
+
+[[bin]]
+name = "s2-hand"
+path = "src/bin/hand.rs"
+
+[[bin]]
+name = "s2-rmcp"
+path = "src/bin/with_rmcp.rs"
+required-features = ["rmcp"]
+
+[profile.release]
+strip = true
