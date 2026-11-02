@@ -21,7 +21,7 @@ Từ máy Windows trống tới Claude Desktop hỏi được graph vault trong 
    ```powershell
    pkm mcp install "D:\Duong\dan\toi\Vault"
    ```
-   Lệnh này dựng index, tải gói OHS `0.17.2-vantt.3` (khoảng 100 MB, kiểm sha256) vào `%LOCALAPPDATA%\pkm\ohs`, rồi ghi mục `kg`. Máy không ra được GitHub thì tải file gói ở [bản phát hành của fork](https://github.com/vantt/obsidian-hybrid-search/releases/tag/v0.17.2-vantt.3) rồi thêm `--ohs-package <file vừa tải>`; không cần OHS thì thêm `--no-ohs`.
+   Lệnh này dựng index, tải gói OHS `0.17.2-vantt.4` (khoảng 100 MB, kiểm sha256) vào `%LOCALAPPDATA%\pkm\ohs`, rồi ghi mục `kg`. Máy không ra được GitHub thì tải file gói ở [bản phát hành của fork](https://github.com/vantt/obsidian-hybrid-search/releases/tag/v0.17.2-vantt.4) rồi thêm `--ohs-package <file vừa tải>`; không cần OHS thì thêm `--no-ohs`.
 4. Mở Claude Desktop và hỏi: *"Dùng kg: vault có bao nhiêu note, note nào được liên kết tới nhiều nhất?"*
 
 Có lỗi thì chạy `pkm doctor`: lệnh này kiểm index, cấu hình Claude Desktop, gói OHS, đường dẫn dài, và in cách sửa.

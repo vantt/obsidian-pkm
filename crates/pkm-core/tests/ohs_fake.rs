@@ -6,7 +6,9 @@ use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use pkm_core::ohs::{Ohs, OhsConfig, OhsError, OhsPackage, OhsState};
+use pkm_core::ohs::{
+    Ohs, OhsConfig, OhsError, OhsPackage, OhsState, PACK_IGNORE_ON, PACK_IGNORE_PATTERNS,
+};
 use serde_json::{Value, json};
 use tempfile::TempDir;
 
@@ -130,6 +132,7 @@ fn ohs_is_started_with_vault_db_and_clean_environment() {
     assert_eq!(seen["update_check"], "1");
     assert_eq!(seen["node_options"], Value::Null);
     assert_eq!(seen["language_pack"], Value::Null);
+    assert_eq!(seen["ignore_patterns"], Value::Null);
     let cwd = PathBuf::from(seen["cwd"].as_str().unwrap());
     assert_eq!(
         cwd.canonicalize().unwrap(),
@@ -149,10 +152,14 @@ fn ohs_runs_with_the_vietnamese_pack_of_its_package() {
         f.config(),
     );
     ready(&ohs);
-    assert_eq!(
-        f.seen_env()["language_pack"],
-        pack.to_string_lossy().as_ref()
-    );
+    let seen = f.seen_env();
+    assert_eq!(seen["language_pack"], pack.to_string_lossy().as_ref());
+    let ignore = if PACK_IGNORE_ON {
+        Value::from(PACK_IGNORE_PATTERNS)
+    } else {
+        Value::Null
+    };
+    assert_eq!(seen["ignore_patterns"], ignore);
 }
 
 #[test]

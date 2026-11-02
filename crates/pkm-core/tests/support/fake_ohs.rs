@@ -75,6 +75,7 @@ fn main() {
         "update_check": env("OHS_DISABLE_UPDATE_CHECK"),
         "node_options": env("NODE_OPTIONS"),
         "language_pack": env("OHS_LANGUAGE_PACK"),
+        "ignore_patterns": env("OBSIDIAN_IGNORE_PATTERNS"),
         "cwd": std::env::current_dir().ok(),
     });
     fs::write(vault.join("fake-ohs.env.json"), seen.to_string()).expect("ghi fake-ohs.env.json");
