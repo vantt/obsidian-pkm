@@ -468,10 +468,13 @@ fn check_ohs_package(
         }
         Err(e) => {
             let action = format!(
-                "Cài gói OHS: thoát hẳn Claude Desktop rồi chạy lại `pkm mcp install` (tự tải bằng gh đã đăng nhập, \
-                 hoặc từ biến {} nếu đặt: URL https của gói, kèm <URL>.sha256), hoặc thêm --ohs-package \
-                 <file zip|thư mục|URL>. Không cần OHS thì cài lại với --no-ohs.",
-                install::ohs_bundle::PACKAGE_ENV
+                "Cài gói OHS: thoát hẳn Claude Desktop rồi chạy lại `pkm mcp install` (tự tải gói OHS {} từ GitHub \
+                 Release của fork, không cần đăng nhập; hoặc từ biến {} nếu đặt: URL https của gói, kèm \
+                 <URL>.sha256), hoặc thêm --ohs-package <file gói|thư mục|URL> (file tải ở {}). Không cần OHS thì \
+                 cài lại với --no-ohs.",
+                install::ohs_bundle::VERSION,
+                install::ohs_bundle::PACKAGE_ENV,
+                install::ohs_bundle::Bundle::release_url()
             );
             checks.push(
                 Check::bad(ID, Status::Warn, format!("{e}; {WITHOUT_OHS}"), action)

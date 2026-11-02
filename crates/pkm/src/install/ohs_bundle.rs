@@ -1,17 +1,16 @@
 //! Cài gói OHS dựng sẵn của fork vào `<thư mục pkm>/ohs` (nơi `pkm_core::ohs::OhsPackage::default_dir` tìm).
 //!
-//! Nguồn ghim (docs/DECISIONS.md, "Gói OHS: ghim artifact của một run CI của fork"): artifact `bundle-<nền tảng>`
-//! của run [`RUN_ID`] ở repo [`REPO`]. Mỗi artifact là một file zip chứa gói (`.tar.gz`, hoặc `.zip` cho Windows)
-//! cùng file `.sha256` của gói. Kiểm hai lớp: sha256 của file zip artifact phải bằng digest GitHub ghi cho artifact
-//! (ghim trong [`BUNDLES`]), rồi sha256 của gói bên trong phải bằng file `.sha256` đi kèm.
+//! Nguồn ghim (docs/DECISIONS.md, "Gói OHS: ghim GitHub Release của fork"): asset `ohs-<phiên bản>-<nền tảng>`
+//! (`.tar.gz`, hoặc `.zip` cho Windows) của bản phát hành [`TAG`] ở repo công khai [`REPO`]. Tải qua HTTPS không cần
+//! đăng nhập (bằng [`curl`], có sẵn trên Windows 10 trở lên, macOS, Linux), rồi kiểm sha256 của file với bản ghim
+//! trong [`BUNDLES`], biên dịch sẵn vào binary.
 //!
-//! Tải artifact của GitHub Actions cần đăng nhập GitHub, kể cả repo công khai. Có `gh` đã đăng nhập thì bộ cài tự tải;
-//! nếu không, người dùng tải `bundle-<nền tảng>.zip` ở trang run (đã đăng nhập) rồi chỉ tới file bằng
-//! `--ohs-package <file>`. Cũng nhận gói đã giải nén (thư mục) hoặc chính file gói khi biết sha256 ghim của nó.
+//! Không tự tải được (máy không ra mạng…) thì người dùng tải file gói ở trang phát hành rồi chỉ tới file bằng
+//! `--ohs-package <file>`; file đó cũng phải khớp sha256 ghim. Cũng nhận gói đã giải nén (thư mục, không kiểm được).
 //!
-//! Đổi nguồn mà không cần bản `pkm` mới (ví dụ khi artifact ghim hết hạn): URL `https://…` của file gói, kèm
-//! `<URL>.sha256` cùng chỗ (như asset của GitHub Release), qua `--ohs-package <URL>` hoặc biến [`PACKAGE_ENV`]. Gói
-//! tải theo URL được kiểm với file `.sha256` đó, không cần khớp bản ghim.
+//! Đổi nguồn mà không cần bản `pkm` mới: URL `https://…` của file gói, kèm `<URL>.sha256` cùng chỗ (như asset của
+//! GitHub Release), qua `--ohs-package <URL>` hoặc biến [`PACKAGE_ENV`]. Gói tải theo URL được kiểm với file `.sha256`
+//! đó, không cần khớp bản ghim.
 
 use std::fs::{self, File};
 use std::io::{self, BufReader, Read, Seek, Write};
@@ -21,12 +20,12 @@ use std::process::{Command, Stdio};
 use pkm_core::ohs::OhsPackage;
 use sha2::{Digest, Sha256};
 
-/// Repo fork của OHS.
+/// Repo fork của OHS (công khai).
 pub const REPO: &str = "vantt/obsidian-hybrid-search";
-/// Run CI có artifact được ghim.
-pub const RUN_ID: u64 = 41_398_112_909;
 /// Phiên bản OHS của gói.
-pub const VERSION: &str = "0.17.2-vantt.1";
+pub const VERSION: &str = "0.17.2-vantt.3";
+/// Tag của bản phát hành có gói ghim.
+pub const TAG: &str = "v0.17.2-vantt.3";
 /// Biến môi trường thay nguồn tự tải của bộ cài: đường dẫn (như `--ohs-package`) hoặc URL `https://` của file gói.
 pub const PACKAGE_ENV: &str = "PKM_OHS_PACKAGE";
 
@@ -35,39 +34,27 @@ pub const PACKAGE_ENV: &str = "PKM_OHS_PACKAGE";
 pub struct Bundle {
     /// Nền tảng theo tên của fork (`win32-x64`, `linux-x64`…).
     pub platform: &'static str,
-    /// Id artifact `bundle-<platform>` của run [`RUN_ID`].
-    pub artifact_id: u64,
-    /// sha256 của file zip artifact (digest GitHub ghi cho artifact).
-    pub artifact_sha256: &'static str,
-    /// sha256 của file gói bên trong, khi đã đo được; dùng để nhận file gói trần.
-    pub archive_sha256: Option<&'static str>,
+    /// sha256 của file gói (asset của bản phát hành; khớp file `.sha256` fork đăng kèm).
+    pub sha256: &'static str,
 }
 
-/// Gói ghim của từng nền tảng. Artifact hết hạn ngày 2027-01-31; trước đó phải chuyển sang GitHub Release của fork.
+/// Gói ghim của từng nền tảng trong bản phát hành [`TAG`].
 pub const BUNDLES: [Bundle; 4] = [
     Bundle {
         platform: "win32-x64",
-        artifact_id: 13_120_671_079,
-        artifact_sha256: "f7c2ed058d1d8aa49b003d6e5802aa0c0b8ebb0e5f326b03edae6e80c6c428c9",
-        archive_sha256: Some("02c277df69e599d1c804fb0715f6d1f5f1307fba7ccc93c102aed54c1c00dd8c"),
+        sha256: "ad63f1a59c06daa46d5c55c10d7eec1d912556b389f2c69062cbe46ed45e304d",
     },
     Bundle {
         platform: "darwin-arm64",
-        artifact_id: 13_120_615_810,
-        artifact_sha256: "6c306aea697d00e6287fbe1f62b172a397818d65f8a676364fa69e04c1abb63f",
-        archive_sha256: None,
+        sha256: "8c32b8aaf0375b4436708bfbc45e2414114fb6eaf797095d3e2c33051c04b8e1",
     },
     Bundle {
         platform: "darwin-x64",
-        artifact_id: 13_119_819_922,
-        artifact_sha256: "d8209d3c64ae6fbedbea0a02deba6287f6a570a66ac349eb9736a5c7512d8c07",
-        archive_sha256: None,
+        sha256: "f67d90f7739de5a504f12b21822efc3d737e82aa617d7fc909c3737551630046",
     },
     Bundle {
         platform: "linux-x64",
-        artifact_id: 13_120_251_817,
-        artifact_sha256: "3df23d8bf0813117f154efd44cc9ba9f20b77a52205e06d4903a5efcf159df6d",
-        archive_sha256: Some("9160d45e59c4ef5776568024a5b1f0f5b7643ffc64f2210db8af2d5705278b95"),
+        sha256: "a4178475b6245361c152024d638ed884b4141e7817f2486926c7e96dd547d743",
     },
 ];
 
@@ -94,27 +81,46 @@ impl Bundle {
         format!("ohs-{VERSION}-{}.{ext}", self.platform)
     }
 
-    /// Trang run trên GitHub, nơi tải artifact bằng tay.
-    pub fn run_url() -> String {
-        format!("https://github.com/{REPO}/actions/runs/{RUN_ID}")
+    /// URL tải file gói (asset của bản phát hành [`TAG`]).
+    pub fn url(&self) -> String {
+        format!(
+            "https://github.com/{REPO}/releases/download/{TAG}/{}",
+            self.archive_name()
+        )
+    }
+
+    /// Trang của bản phát hành [`TAG`].
+    pub fn release_url() -> String {
+        format!("https://github.com/{REPO}/releases/tag/{TAG}")
     }
 
     /// Việc người dùng làm khi bộ cài không tự tải được.
     pub fn manual_action(&self) -> String {
         format!(
-            "đăng nhập GitHub, tải artifact bundle-{} ở {} rồi chạy lại với --ohs-package <file zip vừa tải>",
-            self.platform,
-            Self::run_url()
+            "tải {} (trang {}) rồi chạy lại với --ohs-package <file vừa tải>",
+            self.url(),
+            Self::release_url()
         )
     }
+}
+
+/// Câu báo khi fork không có gói dựng sẵn cho máy này.
+pub fn unsupported_platform() -> String {
+    let all: Vec<&str> = BUNDLES.iter().map(|b| b.platform).collect();
+    format!(
+        "fork chưa có gói OHS dựng sẵn cho nền tảng này ({}-{}); bản phát hành {TAG} chỉ có {}",
+        std::env::consts::OS,
+        std::env::consts::ARCH,
+        all.join(", ")
+    )
 }
 
 /// Nguồn của gói khi cài.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Source {
-    /// Tải artifact ghim bằng `gh`.
+    /// Tải gói ghim của máy này từ bản phát hành [`TAG`].
     Download,
-    /// File zip artifact, file gói, hoặc thư mục gói đã giải nén.
+    /// File gói đã tải, hoặc thư mục gói đã giải nén.
     Path(PathBuf),
     /// URL `https://` của file gói (`.tar.gz` hoặc `.zip`); sha256 lấy từ `<URL>.sha256`.
     Url(String),
@@ -135,8 +141,8 @@ impl Source {
 }
 
 /// Cài gói từ `source` vào `dest` (thay gói cũ nếu có), trả gói đã kiểm. `log` nhận các dòng tiến độ. `bundle` là
-/// gói ghim của máy này; tải và kiểm file cần nó, chép thư mục và nguồn URL thì không. `fetch(url, file)` tải nguồn
-/// URL (bản thật: [`curl`]).
+/// gói ghim của máy này; tải và kiểm file cần nó, chép thư mục và nguồn URL thì không. `fetch(url, file)` tải qua
+/// HTTPS (bản thật: [`curl`]).
 pub fn install(
     source: &Source,
     bundle: Option<&Bundle>,
@@ -149,18 +155,19 @@ pub fn install(
         .ok_or_else(|| format!("{} không có thư mục cha", dest.display()))?;
     fs::create_dir_all(parent).map_err(|e| format!("tạo {}: {e}", parent.display()))?;
     let staging = Staging::new(parent, "ohs.new")?;
-    let pinned = || bundle.ok_or("fork chưa có gói OHS dựng sẵn cho nền tảng này".to_owned());
+    let pinned = || bundle.ok_or_else(unsupported_platform);
     let root = match source {
         Source::Download => {
             let bundle = pinned()?;
-            let zip = staging.path.join(format!("bundle-{}.zip", bundle.platform));
+            let url = bundle.url();
+            let file = staging.path.join(bundle.archive_name());
             let _ = writeln!(
                 log,
-                "tải artifact bundle-{} của run {RUN_ID} bằng gh…",
+                "tải gói OHS {VERSION} cho {} từ {url}…",
                 bundle.platform
             );
-            download(bundle, &zip)?;
-            unpack_file(&zip, bundle, &staging.path, log)?
+            fetch(&url, &file).map_err(|e| format!("{e}; hoặc {}", bundle.manual_action()))?;
+            unpack_file(&file, bundle, &staging.path, log)?
         }
         Source::Path(p) if p.is_dir() => {
             let root = package_root(p)?;
@@ -220,38 +227,8 @@ impl Drop for Staging {
     }
 }
 
-/// Tải artifact bằng `gh api` (đi theo chuyển hướng tới kho blob) vào `out`.
-fn download(bundle: &Bundle, out: &Path) -> Result<(), String> {
-    let file = File::create(out).map_err(|e| format!("tạo {}: {e}", out.display()))?;
-    let api = format!("repos/{REPO}/actions/artifacts/{}/zip", bundle.artifact_id);
-    let result = Command::new("gh")
-        .args(["api", &api])
-        .stdin(Stdio::null())
-        .stdout(file)
-        .stderr(Stdio::piped())
-        .output();
-    let output = match result {
-        Ok(o) => o,
-        Err(e) if e.kind() == io::ErrorKind::NotFound => {
-            return Err(format!(
-                "không có GitHub CLI (gh) để tải gói OHS; {}",
-                bundle.manual_action()
-            ));
-        }
-        Err(e) => return Err(format!("chạy gh: {e}")),
-    };
-    if !output.status.success() {
-        let err = String::from_utf8_lossy(&output.stderr);
-        return Err(format!(
-            "gh không tải được artifact ({}); chạy `gh auth login` rồi thử lại, hoặc {}",
-            err.trim(),
-            bundle.manual_action()
-        ));
-    }
-    Ok(())
-}
-
-/// Tải `url` bằng `curl` (có sẵn trên Windows 10 trở lên, macOS, Linux), chỉ qua https, kể cả khi chuyển hướng.
+/// Tải `url` bằng `curl` (có sẵn trên Windows 10 trở lên, macOS, Linux), chỉ qua https, kể cả khi chuyển hướng;
+/// không cần đăng nhập.
 pub fn curl(url: &str, out: &Path) -> Result<(), String> {
     let output = Command::new("curl")
         .args(["--proto", "=https", "--tlsv1.2", "-fsSL", "--retry", "2"])
@@ -260,7 +237,12 @@ pub fn curl(url: &str, out: &Path) -> Result<(), String> {
         .arg(url)
         .stdin(Stdio::null())
         .output()
-        .map_err(|e| format!("không chạy được curl để tải {url}: {e}"))?;
+        .map_err(|e| match e.kind() {
+            io::ErrorKind::NotFound => {
+                format!("không có curl để tải {url} (Windows 10 trở lên, macOS, Linux có sẵn)")
+            }
+            _ => format!("không chạy được curl để tải {url}: {e}"),
+        })?;
     if output.status.success() {
         Ok(())
     } else {
@@ -281,8 +263,7 @@ fn read_sha256(path: &Path) -> Result<String, String> {
         .ok_or_else(|| "file .sha256 không bắt đầu bằng sha256 hex".to_owned())
 }
 
-/// Kiểm sha256 của `file` rồi giải nén vào `staging`; trả thư mục gốc của gói. Nhận file zip artifact (digest ghim)
-/// hoặc file gói (sha256 ghim, khi có).
+/// Kiểm sha256 của file gói `file` với bản ghim của `bundle` rồi giải nén vào `staging`; trả thư mục gốc của gói.
 fn unpack_file(
     file: &Path,
     bundle: &Bundle,
@@ -290,13 +271,7 @@ fn unpack_file(
     log: &mut dyn Write,
 ) -> Result<PathBuf, String> {
     let digest = sha256_file(file).map_err(|e| format!("đọc {}: {e}", file.display()))?;
-    if digest == bundle.artifact_sha256 {
-        let _ = writeln!(log, "sha256 của artifact khớp bản ghim ({digest})");
-        let archive = extract_from_artifact(file, bundle, staging)?;
-        let _ = writeln!(log, "sha256 của gói khớp file .sha256 đi kèm");
-        return unpack_archive(&archive, staging);
-    }
-    if bundle.archive_sha256 == Some(digest.as_str()) {
+    if digest == bundle.sha256 {
         let _ = writeln!(log, "sha256 của gói khớp bản ghim ({digest})");
         return unpack_archive(file, staging);
     }
@@ -308,9 +283,10 @@ fn unpack_file(
         ));
     }
     Err(format!(
-        "{}: sha256 {digest} không khớp gói OHS ghim cho {}; {}",
+        "{}: sha256 {digest} không khớp gói OHS {VERSION} ghim cho {} ({}), không cài; {}",
         file.display(),
         bundle.platform,
+        bundle.sha256,
         bundle.manual_action()
     ))
 }
@@ -318,62 +294,8 @@ fn unpack_file(
 /// Nền tảng khác `bundle` mà `digest` là gói ghim của nó (người dùng tải nhầm gói).
 fn other_platform(digest: &str, bundle: &Bundle, all: &[Bundle]) -> Option<&'static str> {
     all.iter()
-        .filter(|b| b.platform != bundle.platform)
-        .find(|b| b.artifact_sha256 == digest || b.archive_sha256 == Some(digest))
+        .find(|b| b.platform != bundle.platform && b.sha256 == digest)
         .map(|b| b.platform)
-}
-
-/// Lấy file gói và file `.sha256` từ zip artifact, kiểm khớp; trả đường dẫn file gói đã lấy ra.
-fn extract_from_artifact(
-    artifact: &Path,
-    bundle: &Bundle,
-    staging: &Path,
-) -> Result<PathBuf, String> {
-    let name = bundle.archive_name();
-    let open = || -> Result<zip::ZipArchive<BufReader<File>>, String> {
-        let f = File::open(artifact).map_err(|e| format!("mở {}: {e}", artifact.display()))?;
-        zip::ZipArchive::new(BufReader::new(f))
-            .map_err(|e| format!("{} không phải zip hợp lệ: {e}", artifact.display()))
-    };
-    let mut zip = open()?;
-    let expected = {
-        let mut entry = zip
-            .by_name(&format!("{name}.sha256"))
-            .map_err(|e| format!("artifact thiếu {name}.sha256: {e}"))?;
-        let mut text = String::new();
-        entry
-            .read_to_string(&mut text)
-            .map_err(|e| format!("đọc {name}.sha256: {e}"))?;
-        text.split_whitespace()
-            .next()
-            .map(str::to_lowercase)
-            .ok_or_else(|| format!("{name}.sha256 rỗng"))?
-    };
-    let out = staging.join(&name);
-    let mut entry = zip
-        .by_name(&name)
-        .map_err(|e| format!("artifact thiếu {name}: {e}"))?;
-    let mut file = File::create(&out).map_err(|e| format!("tạo {}: {e}", out.display()))?;
-    let mut hasher = Sha256::new();
-    let mut buf = vec![0u8; 1 << 16];
-    loop {
-        let n = entry
-            .read(&mut buf)
-            .map_err(|e| format!("giải nén {name}: {e}"))?;
-        if n == 0 {
-            break;
-        }
-        hasher.update(&buf[..n]);
-        file.write_all(&buf[..n])
-            .map_err(|e| format!("ghi {}: {e}", out.display()))?;
-    }
-    let got = hex(&hasher.finalize());
-    if got != expected {
-        return Err(format!(
-            "sha256 của {name} là {got}, file .sha256 ghi {expected}: artifact hỏng"
-        ));
-    }
-    Ok(out)
 }
 
 /// Giải nén file gói (`.tar.gz` hoặc `.zip`) vào `staging/pkg`; trả thư mục gốc của gói.
@@ -525,14 +447,16 @@ fn hex(bytes: &[u8]) -> String {
 mod tests {
     use super::*;
 
-    /// Cài với `curl` thật (chỉ dùng cho nguồn không phải URL, hoặc test `#[ignore]`).
+    /// Cài không tải gì (nguồn đường dẫn): hàm tải nào được gọi là lỗi.
     fn install(
         source: &Source,
         bundle: Option<&Bundle>,
         dest: &Path,
         log: &mut dyn Write,
     ) -> Result<OhsPackage, String> {
-        super::install(source, bundle, dest, log, &curl)
+        super::install(source, bundle, dest, log, &|url, _| {
+            Err(format!("không được tải {url}"))
+        })
     }
 
     /// Gói giả nhỏ: thư mục gốc `ohs-x/` có Node và `cli.js` như gói thật.
@@ -582,34 +506,37 @@ mod tests {
         Box::leak(s.into_boxed_str())
     }
 
-    /// Bundle thử cho Linux-như với artifact là zip chứa `archive` và `.sha256` (`sha_text` thay được để thử hỏng).
-    fn artifact(archive: &[u8], sha_text: Option<String>) -> (Bundle, Vec<u8>) {
-        let mut bundle = Bundle {
+    /// Bundle thử cho Linux-như, ghim sha256 của `archive`.
+    fn pinned_for(archive: &[u8]) -> Bundle {
+        Bundle {
             platform: "linux-x64",
-            artifact_id: 1,
-            artifact_sha256: "",
-            archive_sha256: None,
-        };
-        let name = bundle.archive_name();
-        let sha_text = sha_text.unwrap_or_else(|| format!("{}  {name}\n", sha(archive)));
-        let zip = zip_of(&[
-            (name.as_str(), archive),
-            (format!("{name}.sha256").as_str(), sha_text.as_bytes()),
-        ]);
-        bundle.artifact_sha256 = leak(sha(&zip));
-        (bundle, zip)
+            sha256: leak(sha(archive)),
+        }
+    }
+
+    /// Hàm tải giả: trả nội dung theo URL từ bảng, URL lạ là lỗi như `curl -f` gặp 404.
+    fn served(files: Vec<(String, Vec<u8>)>) -> impl Fn(&str, &Path) -> Result<(), String> {
+        move |url, out| {
+            let body = files
+                .iter()
+                .find(|(u, _)| u == url)
+                .map(|(_, b)| b)
+                .ok_or_else(|| format!("404 {url}"))?;
+            fs::write(out, body).map_err(|e| e.to_string())
+        }
     }
 
     #[test]
-    fn installs_from_artifact_zip_and_replaces_old_package() {
+    fn downloads_pinned_release_asset_and_replaces_old_package() {
         let tmp = tempfile::tempdir().unwrap();
-        let (bundle, zip) = artifact(&tar_gz("ohs-x"), None);
-        let file = tmp.path().join("bundle.zip");
-        fs::write(&file, zip).unwrap();
+        let archive = tar_gz("ohs-x");
+        let bundle = pinned_for(&archive);
+        let fetch = served(vec![(bundle.url(), archive)]);
         let dest = tmp.path().join("pkm").join("ohs");
         fs::create_dir_all(dest.join("stale")).unwrap();
         let mut log = Vec::new();
-        let pkg = install(&Source::Path(file), Some(&bundle), &dest, &mut log).unwrap();
+        let pkg =
+            super::install(&Source::Download, Some(&bundle), &dest, &mut log, &fetch).unwrap();
         assert_eq!(pkg.root, dest);
         assert!(!dest.join("stale").exists());
         assert_eq!(
@@ -621,6 +548,9 @@ mod tests {
             .map(|e| e.unwrap().file_name())
             .collect();
         assert_eq!(names, ["ohs"], "không còn thư mục tạm");
+        let log = String::from_utf8(log).unwrap();
+        assert!(log.contains(&bundle.url()), "{log}");
+        assert!(log.contains("khớp bản ghim"), "{log}");
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -633,36 +563,57 @@ mod tests {
     }
 
     #[test]
-    fn rejects_archive_whose_sha256_file_disagrees() {
+    fn rejects_downloaded_asset_not_matching_the_pin() {
         let tmp = tempfile::tempdir().unwrap();
-        let (bundle, zip) = artifact(&tar_gz("ohs-x"), Some(format!("{}  x\n", "0".repeat(64))));
-        let file = tmp.path().join("bundle.zip");
-        fs::write(&file, zip).unwrap();
+        let bundle = pinned_for(b"something else");
+        let fetch = served(vec![(bundle.url(), tar_gz("ohs-x"))]);
         let dest = tmp.path().join("ohs");
-        let err = install(&Source::Path(file), Some(&bundle), &dest, &mut Vec::new()).unwrap_err();
-        assert!(err.contains("artifact hỏng"), "{err}");
+        let err = super::install(
+            &Source::Download,
+            Some(&bundle),
+            &dest,
+            &mut Vec::new(),
+            &fetch,
+        )
+        .unwrap_err();
+        assert!(err.contains("không khớp gói OHS"), "{err}");
         assert!(!dest.exists());
     }
 
     #[test]
-    fn rejects_file_not_matching_any_pin() {
+    fn download_failure_explains_the_manual_route() {
         let tmp = tempfile::tempdir().unwrap();
-        let (bundle, _) = artifact(&tar_gz("ohs-x"), None);
-        let file = tmp.path().join("other.zip");
-        fs::write(&file, b"PK not the pinned artifact").unwrap();
-        let err = install(
-            &Source::Path(file),
+        let bundle = BUNDLES[3];
+        let err = super::install(
+            &Source::Download,
             Some(&bundle),
             &tmp.path().join("ohs"),
             &mut Vec::new(),
+            &served(Vec::new()),
         )
         .unwrap_err();
-        assert!(err.contains("không khớp gói OHS ghim"), "{err}");
-        assert!(err.contains(&Bundle::run_url()), "{err}");
+        assert!(err.starts_with(&format!("404 {}", bundle.url())), "{err}");
+        assert!(err.contains("--ohs-package"), "{err}");
+        assert!(err.contains(&Bundle::release_url()), "{err}");
     }
 
     #[test]
-    fn installs_bare_archive_with_known_sha_including_zip() {
+    fn download_without_a_pinned_bundle_names_the_supported_platforms() {
+        let tmp = tempfile::tempdir().unwrap();
+        let err = super::install(
+            &Source::Download,
+            None,
+            &tmp.path().join("ohs"),
+            &mut Vec::new(),
+            &served(Vec::new()),
+        )
+        .unwrap_err();
+        assert!(err.contains("chưa có gói OHS dựng sẵn"), "{err}");
+        assert!(err.contains(TAG) && err.contains("darwin-arm64"), "{err}");
+    }
+
+    #[test]
+    fn installs_downloaded_file_with_pinned_sha_including_zip() {
         let tmp = tempfile::tempdir().unwrap();
         let archive = zip_of(&[
             (&format!("ohs-x/{}", node_rel()), b"node"),
@@ -670,9 +621,7 @@ mod tests {
         ]);
         let bundle = Bundle {
             platform: "win32-x64",
-            artifact_id: 1,
-            artifact_sha256: "",
-            archive_sha256: Some(leak(sha(&archive))),
+            sha256: leak(sha(&archive)),
         };
         let file = tmp.path().join("ohs.zip");
         fs::write(&file, &archive).unwrap();
@@ -682,21 +631,37 @@ mod tests {
     }
 
     #[test]
+    fn rejects_file_not_matching_any_pin() {
+        let tmp = tempfile::tempdir().unwrap();
+        let bundle = pinned_for(&tar_gz("ohs-x"));
+        let file = tmp.path().join("other.tar.gz");
+        fs::write(&file, b"not the pinned package").unwrap();
+        let err = install(
+            &Source::Path(file),
+            Some(&bundle),
+            &tmp.path().join("ohs"),
+            &mut Vec::new(),
+        )
+        .unwrap_err();
+        assert!(err.contains("không khớp gói OHS"), "{err}");
+        assert!(err.contains(&bundle.url()), "{err}");
+    }
+
+    #[test]
     fn recognises_bundle_for_another_platform() {
         let all = [
             Bundle {
-                artifact_sha256: "aa",
+                sha256: "aa",
                 ..BUNDLES[0]
             },
             Bundle {
-                artifact_sha256: "bb",
-                archive_sha256: Some("cc"),
+                sha256: "bb",
                 ..BUNDLES[3]
             },
         ];
         assert_eq!(other_platform("aa", &all[1], &all), Some("win32-x64"));
-        assert_eq!(other_platform("cc", &all[0], &all), Some("linux-x64"));
-        assert_eq!(other_platform("cc", &all[1], &all), None);
+        assert_eq!(other_platform("bb", &all[0], &all), Some("linux-x64"));
+        assert_eq!(other_platform("bb", &all[1], &all), None);
         assert_eq!(other_platform("dd", &all[0], &all), None);
     }
 
@@ -732,18 +697,6 @@ mod tests {
         )
         .unwrap_err();
         assert!(err.contains("không thấy gói OHS"), "{err}");
-    }
-
-    /// Hàm tải giả: trả nội dung theo URL từ bảng, URL lạ là lỗi như `curl -f` gặp 404.
-    fn served(files: Vec<(String, Vec<u8>)>) -> impl Fn(&str, &Path) -> Result<(), String> {
-        move |url, out| {
-            let body = files
-                .iter()
-                .find(|(u, _)| u == url)
-                .map(|(_, b)| b)
-                .ok_or_else(|| format!("404 {url}"))?;
-            fs::write(out, body).map_err(|e| e.to_string())
-        }
     }
 
     #[test]
@@ -816,48 +769,41 @@ mod tests {
     }
 
     #[test]
-    fn pins_cover_every_platform_once() {
+    fn pins_cover_every_platform_once_with_release_urls() {
         let mut names: Vec<_> = BUNDLES.iter().map(|b| b.platform).collect();
+        names.sort_unstable();
         names.dedup();
         assert_eq!(names.len(), 4);
-        assert!(BUNDLES.iter().all(|b| b.artifact_sha256.len() == 64));
+        assert!(
+            BUNDLES
+                .iter()
+                .all(|b| b.sha256.len() == 64 && b.sha256.bytes().all(|c| c.is_ascii_hexdigit()))
+        );
         assert_eq!(
-            BUNDLES[0].archive_name(),
-            "ohs-0.17.2-vantt.1-win32-x64.zip"
+            BUNDLES[0].url(),
+            "https://github.com/vantt/obsidian-hybrid-search/releases/download/v0.17.2-vantt.3/\
+             ohs-0.17.2-vantt.3-win32-x64.zip"
         );
         assert_eq!(
             BUNDLES[3].archive_name(),
-            "ohs-0.17.2-vantt.1-linux-x64.tar.gz"
+            "ohs-0.17.2-vantt.3-linux-x64.tar.gz"
         );
+        assert_eq!(TAG, format!("v{VERSION}"));
     }
 
-    /// Cài từ artifact thật đã tải (`PKM_TEST_OHS_ARTIFACT=<bundle-<nền tảng>.zip>`), vào thư mục tạm.
+    /// Tải gói ghim của máy này từ bản phát hành thật bằng `curl` (không cần đăng nhập) rồi cài vào thư mục tạm.
     #[test]
-    #[ignore = "cần file artifact thật khoảng 100 MB"]
-    fn installs_real_pinned_artifact() {
-        let file = PathBuf::from(
-            std::env::var_os("PKM_TEST_OHS_ARTIFACT").expect("PKM_TEST_OHS_ARTIFACT"),
-        );
+    #[ignore = "tải khoảng 100 MB từ GitHub Release của fork"]
+    fn downloads_and_installs_pinned_release_asset() {
         let tmp = tempfile::tempdir().unwrap();
         let dest = tmp.path().join("ohs");
-        let bundle = Bundle::current().expect("fork có gói cho máy này");
         let mut log = Vec::new();
-        let pkg = install(&Source::Path(file), Some(bundle), &dest, &mut log).unwrap();
+        let pkg =
+            super::install(&Source::Download, Bundle::current(), &dest, &mut log, &curl).unwrap();
         assert!(pkg.node.is_file() && pkg.cli.is_file());
+        assert!(pkg.pack.is_some(), "gói có lang/ohs-lang-vi");
         let v = Command::new(&pkg.node).arg("--version").output().unwrap();
         assert!(v.status.success(), "Node của gói chạy được");
-        eprintln!("{}", String::from_utf8_lossy(&log));
-    }
-
-    /// Tải artifact ghim bằng `gh` đã đăng nhập rồi cài vào thư mục tạm.
-    #[test]
-    #[ignore = "tải khoảng 100 MB qua gh đã đăng nhập"]
-    fn downloads_and_installs_pinned_artifact_with_gh() {
-        let tmp = tempfile::tempdir().unwrap();
-        let dest = tmp.path().join("ohs");
-        let mut log = Vec::new();
-        let pkg = install(&Source::Download, Bundle::current(), &dest, &mut log).unwrap();
-        assert!(pkg.node.is_file() && pkg.cli.is_file());
         eprintln!("{}", String::from_utf8_lossy(&log));
     }
 }

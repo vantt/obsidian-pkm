@@ -643,7 +643,11 @@ fn refuses_binary_outside_install_dir_without_allow_any_location() {
     let err = s.run(&s.args(), &hooks).unwrap_err();
     assert!(err.contains("thư mục tải về hoặc thư mục tạm"), "{err}");
     assert!(
-        err.contains("gh release download --repo vantt/obsidian-pkm"),
+        err.contains(concat!(
+            "gh release download v",
+            env!("CARGO_PKG_VERSION"),
+            " --repo vantt/obsidian-pkm"
+        )),
         "{err}"
     );
     assert!(
@@ -786,6 +790,42 @@ fn ohs_source_env_installs_package_from_https_url() {
         "{plan}"
     );
     args.dry_run = false;
+    let out = s.run(&args, &hooks).unwrap();
+    assert!(out.contains("đã cài gói OHS vào"), "{out}");
+    assert!(OhsPackage::from_dir(&s.inst.ohs_dir()).is_ok());
+}
+
+#[test]
+fn ohs_is_downloaded_from_the_pinned_release_without_login() {
+    let mut s = setup(Some(EXISTING));
+    let archive = ohs_tar_gz();
+    let file = s.vault.parent().unwrap().join("a.tgz");
+    fs::write(&file, &archive).unwrap();
+    let sha = ohs_bundle::sha256_file(&file).unwrap();
+    let bundle: &'static Bundle = Box::leak(Box::new(Bundle {
+        platform: "linux-x64",
+        sha256: Box::leak(sha.into_boxed_str()),
+    }));
+    s.inst.bundle = Some(bundle);
+    let hooks = Fake {
+        served: vec![(bundle.url(), archive)],
+        ..Fake::new()
+    };
+    let mut args = s.args();
+    args.no_ohs = false;
+    args.dry_run = true;
+    let plan = s.run(&args, &hooks).unwrap();
+    assert!(
+        plan.contains(&bundle.url()) && plan.contains("không cần đăng nhập"),
+        "{plan}"
+    );
+    args.dry_run = false;
+    // Tải hỏng (404) chỉ cảnh báo, nêu nguồn là bản phát hành ghim.
+    let out = s.run(&args, &Fake::new()).unwrap();
+    assert!(
+        out.contains("cảnh báo: chưa cài được gói OHS từ bản phát hành v0.17.2-vantt.3"),
+        "{out}"
+    );
     let out = s.run(&args, &hooks).unwrap();
     assert!(out.contains("đã cài gói OHS vào"), "{out}");
     assert!(OhsPackage::from_dir(&s.inst.ohs_dir()).is_ok());
