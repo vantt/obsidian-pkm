@@ -18,6 +18,13 @@ use serde_json::{Map, Value};
 
 use crate::dump::{CliCommand, Dump, Manifest, VaultInfo, Writer};
 
+/// Kết quả một câu đáp án hay một lời gọi tool: giá trị, hoặc tên lớp ngoại lệ Python khi bản Rust báo lỗi ở chỗ
+/// Python ném (ghi vào `raised` như `dump-python.py`).
+pub enum Outcome {
+    Result(Value),
+    Raised(String),
+}
+
 /// Kết quả bắt tay MCP: `initialize` (bỏ `instructions`), `tools/list`, khối `instructions`.
 /// `tools_list` là `None` khi binary chưa có tầng tool (danh sách rỗng).
 pub struct McpHandshake {
@@ -43,6 +50,10 @@ pub struct RustSide {
     index_tables: OnceCell<index_tables::Built>,
     /// Binary `pkm` cho tầng MCP và CLI; `None` khi không có binary.
     pkm: Option<binary::Pkm>,
+    /// Index mở để chạy câu đáp án.
+    graph: OnceCell<pkm_core::query::Graph>,
+    /// Phiên tool (một phiên cho cả bộ câu, để `more` thấy handle của câu trước).
+    tools: Option<pkm_core::tools::Context>,
 }
 
 impl RustSide {
@@ -53,6 +64,8 @@ impl RustSide {
             run: run.clone(),
             note_tables: OnceCell::new(),
             index_tables: OnceCell::new(),
+            graph: OnceCell::new(),
+            tools: None,
             pkm: pkm.map(binary::Pkm::new).transpose()?,
         })
     }
@@ -124,15 +137,44 @@ impl RustSide {
         })
     }
 
-    /// Một câu của `.kg-answers.json`, chạy như `fixture_check.run` của repo đặc tả.
-    pub fn answer(&self, _query: &Value) -> Result<Option<Value>> {
-        Ok(None)
+    /// Một câu của `.kg-answers.json`, chạy như `fixture_check.run` của repo đặc tả (`pkm_core::query::answers`)
+    /// trên index của tầng bảng.
+    pub fn answer(&self, query: &Value) -> Result<Option<Outcome>> {
+        let built = self.index_tables()?;
+        let g = match self.graph.get() {
+            Some(g) => g,
+            None => {
+                let g =
+                    pkm_core::query::Graph::open(&built.db).context("mở index cho câu đáp án")?;
+                self.graph.get_or_init(|| g)
+            }
+        };
+        Ok(Some(match pkm_core::query::answers::run(g, query) {
+            Ok(v) => Outcome::Result(built.scrub.value(v)),
+            Err(e) => Outcome::Raised(e.kind.to_owned()),
+        }))
     }
 
-    /// Một lời gọi tool qua điểm vào chung của tool (như `Server.call` của Python, trước khi MCP
-    /// thu gọn JSON). Các lời gọi chạy theo thứ tự của dump mẫu trên cùng một phiên (`more`).
-    pub fn tool(&mut self, _name: &str, _args: &Value) -> Result<Option<Value>> {
-        Ok(None)
+    /// Một lời gọi tool qua điểm vào chung của tool (`pkm_core::tools::call`, như `Server.call` của Python, trước
+    /// khi MCP thu gọn JSON). Các lời gọi chạy theo thứ tự của dump mẫu trên cùng một phiên (`more`). Tên vault cho
+    /// link `obsidian://` là tên thư mục vault, như MCP server mặc định. `related` chưa có.
+    pub fn tool(&mut self, name: &str, args: &Value) -> Result<Option<Outcome>> {
+        if name == "related" {
+            return Ok(None);
+        }
+        let db = self.index_tables()?.db.clone();
+        if self.tools.is_none() {
+            let t = pkm_core::tools::Tools::open(&db).context("mở index cho tool")?;
+            let name = pkm_core::tools::default_vault_name(&self.vault);
+            self.tools = Some(pkm_core::tools::Context::new(t, &self.vault, name));
+        }
+        let ctx = self.tools.as_mut().context("phiên tool")?;
+        let out = pkm_core::tools::call(ctx, name, args.clone());
+        let scrub = &self.index_tables()?.scrub;
+        Ok(Some(match out {
+            Ok(v) => Outcome::Result(scrub.value(v)),
+            Err(e) => Outcome::Raised(e.kind.to_owned()),
+        }))
     }
 
     /// Bắt tay với `pkm VAULT mcp` trên index dựng sẵn (như `dump_mcp` của Python).
@@ -197,6 +239,34 @@ pub fn check_vault(vault: &Path, like: &Manifest) -> Result<()> {
     Ok(())
 }
 
+/// Dòng của dump mẫu với kết quả của bản Rust thay vào (`result` hoặc `raised`). Khoá sắp như dòng JSONL của
+/// `dump-python.py` (`sort_keys=True`): lõi giữ thứ tự khoá của Python (`preserve_order`), mà danh sách không có
+/// thứ tự được so theo chuỗi JSON của từng mục.
+fn record(like: &Value, out: Outcome) -> Value {
+    let mut rec = like.clone();
+    if let Value::Object(m) = &mut rec {
+        m.remove("result");
+        m.remove("raised");
+        match out {
+            Outcome::Result(v) => m.insert("result".into(), v),
+            Outcome::Raised(k) => m.insert("raised".into(), Value::String(k)),
+        };
+    }
+    sort_keys(rec)
+}
+
+fn sort_keys(v: Value) -> Value {
+    match v {
+        Value::Array(a) => Value::Array(a.into_iter().map(sort_keys).collect()),
+        Value::Object(m) => {
+            let mut pairs: Vec<(String, Value)> = m.into_iter().collect();
+            pairs.sort_by(|a, b| a.0.cmp(&b.0));
+            Value::Object(pairs.into_iter().map(|(k, x)| (k, sort_keys(x))).collect())
+        }
+        v => v,
+    }
+}
+
 /// Chạy bản Rust trên `vault` theo bộ câu của dump mẫu `like`, ghi dump vào `out`. Tầng MCP và CLI chạy binary
 /// `pkm` của bản dựng hiện tại (`PKM_BIN`, hoặc cạnh binary đang chạy).
 pub fn dump(vault: &Path, like: &Dump, out: &Path) -> Result<Manifest> {
@@ -242,11 +312,7 @@ pub fn dump_with(vault: &Path, like: &Dump, out: &Path, pkm: Option<&Path>) -> R
                 .to_owned();
             let query = l.value.get("query").cloned().unwrap_or(Value::Null);
             match side.answer(&query)? {
-                Some(result) => {
-                    let mut rec = l.value.clone();
-                    rec["result"] = result;
-                    lines.push(rec);
-                }
+                Some(out) => lines.push(record(&l.value, out)),
                 None => {
                     absent.insert(op);
                 }
@@ -271,11 +337,7 @@ pub fn dump_with(vault: &Path, like: &Dump, out: &Path, pkm: Option<&Path>) -> R
                 .to_owned();
             let args = l.value.get("args").cloned().unwrap_or(Value::Null);
             match side.tool(&tool, &args)? {
-                Some(result) => {
-                    let mut rec = l.value.clone();
-                    rec["result"] = result;
-                    lines.push(rec);
-                }
+                Some(out) => lines.push(record(&l.value, out)),
                 None => {
                     absent.insert(tool);
                 }
