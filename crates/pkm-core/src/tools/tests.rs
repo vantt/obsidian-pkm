@@ -1,5 +1,5 @@
 //! Test của `tools`, chuyển từ `scripts/kg/tests/test_kg.py` (`Api.test_long_result_envelope`) và
-//! `scripts/e11/tests/test_kg_adapter.py` (lớp `HiddenAndLayers`, trừ phần `related`) ở sha ghim, cộng điểm vào chung
+//! `scripts/e11/tests/test_kg_adapter.py` (lớp `HiddenAndLayers`) ở sha ghim, cộng điểm vào chung
 //! [`call`] như `Server.call`.
 
 use std::path::Path;
@@ -195,8 +195,14 @@ fn call_errors_like_server_call() {
         "TypeError"
     );
     assert_eq!(
-        call(&mut c, "related", json!({})).unwrap_err().kind,
-        "NotImplementedError"
+        call(&mut c, "related", json!({})).unwrap(),
+        json!({"error": "related needs hits (results of OHS search) or query"})
+    );
+    assert_eq!(
+        call(&mut c, "related", json!({"query": 3}))
+            .unwrap_err()
+            .kind,
+        "TypeError"
     );
 }
 
@@ -661,4 +667,125 @@ fn select_skips_system() {
     let all = ids(&t.select(w, None, true).unwrap(), "");
     assert!(all.iter().any(|x| x == "Trang chủ.md"));
     assert!(all.iter().any(|x| x == "_Xưởng/Hôm nay.md"));
+}
+
+#[test]
+fn related_skips_system() {
+    let (tmp, t) = e11();
+    let mut c = Context::new(t, &tmp.path().join("vault"), None);
+    let r = call(
+        &mut c,
+        "related",
+        json!({"hits": [["Dự án/Alpha/a1.md", 1.0]], "k": 10}),
+    )
+    .unwrap();
+    let got: Vec<&str> = r["related"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|x| x["id"].as_str().unwrap())
+        .collect();
+    assert!(got.contains(&"Dự án/Beta/b1.md"), "{got:?}");
+    assert!(
+        !got.iter()
+            .any(|g| g.starts_with('_') || g.starts_with("Trang chủ"))
+    );
+}
+
+/// `Protocol.test_related` của `test_mcp.py`, qua điểm vào chung.
+#[test]
+fn call_related_with_hits() {
+    let v = api();
+    let mut c = ctx(&v);
+    let hits = json!([
+        {"path": "Yếu tố/Số lead.md", "score": 0.9},
+        {"path": "Khách hàng/Không có.md", "score": 0.5},
+        "Người/An.md"
+    ]);
+    let r = call(&mut c, "related", json!({"hits": hits, "k": 5})).unwrap();
+    assert_eq!(r["missing"], json!(["Khách hàng/Không có.md"]));
+    assert_eq!(r["seed_source"], "hits");
+    let seeds: Vec<&str> = r["seeds"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|x| x["id"].as_str().unwrap())
+        .collect();
+    assert_eq!(seeds, ["Yếu tố/Số lead.md", "Người/An.md"]);
+    let ids: Vec<&str> = r["related"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|x| x["id"].as_str().unwrap())
+        .collect();
+    assert!(ids[..3].contains(&"Yếu tố/Doanh thu.md"), "{ids:?}");
+    let top = &r["related"][0];
+    assert_eq!(top["found_by"], "graph");
+    assert!(seeds.contains(&top["via"][0]["from"].as_str().unwrap()));
+    let keys: Vec<&str> = r.as_object().unwrap().keys().map(String::as_str).collect();
+    assert_eq!(
+        keys,
+        ["seeds", "related", "missing", "method", "seed_source"]
+    );
+
+    let r2 = call(
+        &mut c,
+        "related",
+        json!({"hits": hits, "k": 5, "types": ["organization"]}),
+    )
+    .unwrap();
+    let rel = r2["related"].as_array().unwrap();
+    assert!(!rel.is_empty() && rel.iter().all(|x| x["type"] == "organization"));
+
+    let r3 = call(
+        &mut c,
+        "related",
+        json!({"hits": ["Yếu tố/Mệt mỏi.md"], "k": 5, "accepted_only": true}),
+    )
+    .unwrap();
+    let rel = r3["related"].as_array().unwrap();
+    assert!(!rel.is_empty());
+    for x in rel {
+        assert_eq!(x["layer"], "accepted");
+        assert!(
+            x["via"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|s| s["status"] != "proposed")
+        );
+    }
+}
+
+/// Chỉ có câu hỏi mà phiên không có OHS, hoặc OHS thiếu gói: `ohs_not_ready` với `state: broken` (D7), không lùi
+/// về kết quả kém.
+#[test]
+fn call_related_query_without_ohs_is_not_ready() {
+    let v = api();
+    let mut c = ctx(&v);
+    let r = call(&mut c, "related", json!({"query": "lead"})).unwrap();
+    let keys: Vec<&str> = r.as_object().unwrap().keys().map(String::as_str).collect();
+    assert_eq!(keys, ["error", "state", "progress", "eta_s", "action"]);
+    assert_eq!(r["error"], "ohs_not_ready");
+    assert_eq!(r["state"], "broken");
+    assert!(r["action"].as_str().unwrap().contains("--ohs"));
+
+    let missing = v.path().join("không có gói OHS");
+    let ohs = crate::ohs::Ohs::launch(Some(&missing), crate::ohs::OhsConfig::new(v.path()));
+    let mut c = ctx(&v).with_ohs(Arc::new(ohs));
+    assert!(c.ohs().is_some());
+    let r = call(&mut c, "related", json!({"query": "lead", "hits": []})).unwrap();
+    assert_eq!(r["error"], "ohs_not_ready");
+    assert_eq!(r["state"], "broken");
+    assert!(r["action"].as_str().unwrap().contains("Chưa cài gói OHS"));
+    // `hits` có thì không cần OHS.
+    let r = call(
+        &mut c,
+        "related",
+        json!({"query": "lead", "hits": ["Người/An.md"]}),
+    )
+    .unwrap();
+    assert_eq!(r["seed_source"], "hits");
+    c.set_ohs(None);
+    assert!(c.ohs().is_none());
 }

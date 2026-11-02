@@ -1,6 +1,6 @@
 ---
 title: "Phase 11: related và module OHS"
-status: in-progress
+status: done
 priority: P1
 effort: "1,5 ngày"
 prd: R09
@@ -24,11 +24,11 @@ needs_user: false
 - Phần cắm Rust của bộ so khớp cho `related`.
 
 ## Việc cần làm
-- [ ] PageRank cá nhân hoá: trọng số theo lớp (`WEIGHT`), `alpha`, `eps`, `k` như Python.
-- [ ] Chạy PageRank theo đúng thứ tự cạnh của Python (điểm lệch tối đa 1e-6). Dựa trên `probes/s3-ohs` và mục "phase 11" trong `plans/reports/probe-s3-ohs-261102-1317.md`: OHS trả đường dẫn NFD, báo `ready` trước khi index xong, không có `eta_s` (tự tính từ tốc độ).
+- [x] PageRank cá nhân hoá: trọng số theo lớp (`WEIGHT`), `alpha`, `eps`, `k` như Python.
+- [x] Chạy PageRank theo đúng thứ tự cạnh của Python (điểm lệch tối đa 1e-6). Dựa trên `probes/s3-ohs` và mục "phase 11" trong `plans/reports/probe-s3-ohs-261102-1317.md`: OHS trả đường dẫn NFD, báo `ready` trước khi index xong, không có `eta_s` (tự tính từ tốc độ).
 - [x] Module `ohs`: tìm gói (cờ `--ohs`, `PKM_OHS_DIR`, thư mục mặc định); khởi động với `OBSIDIAN_VAULT_PATH` (và `OBSIDIAN_DB_PATH` khi fork có P02); chờ ready; request có `id`, đồng thời; khởi động lại có giới hạn rồi `broken`; tắt khi `pkm` thoát.
 - [x] Trạng thái `starting`, `indexing` (tiến độ từ `status` của OHS), `model_missing`, `broken`, `ready`.
-- [ ] Tool cần OHS khi chưa ready trả đúng `{"error":"ohs_not_ready","state":…,"progress":…,"eta_s":…,"action":…}`; không có đường lùi cho kết quả kém (D7). Tool không cần OHS chạy bình thường.
+- [x] Tool cần OHS khi chưa ready trả đúng `{"error":"ohs_not_ready","state":…,"progress":…,"eta_s":…,"action":…}`; không có đường lùi cho kết quả kém (D7). Tool không cần OHS chạy bình thường.
 - [x] Chuẩn hoá đường dẫn OHS trả về sang NFC trước khi tra index.
 - [x] Không đọc thẳng DB hay `node_modules` của OHS.
 
@@ -40,5 +40,5 @@ needs_user: false
 ## Trạng thái thực hiện (2026-11-02)
 
 - **Module `ohs`: xong.** `crates/pkm-core/src/ohs.rs` và `ohs/{package,process,state}.rs`. Test với server giả `fake-ohs` (`crates/pkm-core/tests/ohs_fake.rs`, không cần Node) chạy được trên cả ba nền; test với OHS thật (`tests/ohs_real.rs`, `#[ignore]`) qua trên Linux. Báo cáo: `plans/reports/fullstack-developer-261102-1400-phase-11-ohs-module.md`.
-- Mục `ohs_not_ready` chưa tick: dạng lỗi đã có (`OhsState::not_ready_error`, `OhsError::NotReady`) nhưng chưa nối vào `tools`; việc này làm cùng nhánh `related`.
-- **Còn lại:** PageRank và `related` (chờ tầng truy vấn), nối `related` vào `tools`.
+- **`related`: xong.** `crates/pkm-core/src/related.rs` (PageRank cá nhân hoá, `via`, dạng hit), nhánh `related` của `tools::call`, OHS gắn vào phiên bằng `tools::Context::with_ohs` / `set_ohs`. Bộ so khớp kg-solo: `tools/related` 15/15 khớp, so chặt lệch số thực 0; thêm 400 lời gọi ngẫu nhiên qua `dump-python.py --replay` khớp hết. Chỉ có câu hỏi: hạt giống từ `Ohs::search`; OHS thiếu hay chưa sẵn sàng thì `ohs_not_ready` (D7). Test với OHS giả (`tests/related_ohs_fake.rs`) chạy trong CI; với OHS thật (`tests/related_ohs_real.rs`, `#[ignore]`) qua trên Linux. Báo cáo: `plans/reports/fullstack-developer-261102-1530-phase-11-related.md`.
+- **Còn lại (ngoài phase này):** so `related` chỉ có câu hỏi với Python trên máy có gói OHS, và thử OHS trên Windows thật (agent khác làm sau, theo quyết định của user). MCP server và CLI gắn `Ohs::launch` vào `Context` thuộc phase 12.

@@ -140,7 +140,7 @@ Bản Python không có module tương ứng: `scripts/kg/related.py` (`ohs_seed
 - **Python** (`5a3eb2f`, `scripts/kg/related.py`, `ohs_seeds`): CLI lỗi hoặc không có thì mở chỉ đọc `.obsidian-hybrid-search.db` của OHS và tìm từ khoá BM25 trong bảng FTS5; nguồn hạt giống ghi `ohs-fts`.
 - **Rust:** không có đường lùi. OHS chưa sẵn sàng hoặc không chạy được thì tool trả `ohs_not_ready` với `state` và `action`.
 - **Lý do:** D7 (không có đường lùi cho ra kết quả kém) và PRD mục 9 (không bao giờ đọc thẳng DB của OHS; lược đồ DB là chi tiết nội bộ của OHS).
-- **Ngoại lệ trong bộ so khớp:** `related` chỉ có câu hỏi so trên máy có gói OHS (PRD mục 6); trường hợp không có OHS không so với nhánh `ohs-fts` của Python. Phần `related` ghi tên ngoại lệ khi nối bộ so khớp.
+- **Bộ so khớp:** `related` chỉ có câu hỏi so trên máy có gói OHS (PRD mục 6); trường hợp không có OHS không so với nhánh `ohs-fts` của Python. Golden kg-solo không có lời gọi `related` chỉ có câu hỏi (cả 15 lời gọi đều có `hits`, trừ một lời gọi rỗng trả lỗi giống Python), nên không cần ngoại lệ có tên.
 - **Issue ở repo đặc tả:** không cần; bản Python giữ đường lùi vì chạy được không cần Node.
 
 ### Lỗi `ohs_not_ready`: `progress` và `eta_s` có thể là `null`
@@ -216,7 +216,7 @@ Nguồn: `scripts/kg/tests/test_kg.py` (15 test, đủ 15 dòng dưới đây) v
 | `test_kg_adapter.AdapterEdges` (9 test: `folder_topic`, `proposal_waiting_is_proposed`, `rejected_and_accepted`, `applied_proposal_marks_vault_edge`, `who_and_fix_link`, `ohs_pairs`, `provenance_from_logs`, `proposal_body_links_dropped`, `counts`) | `adapter::tests::` cùng tên | đã chuyển | `counts` kiểm thêm `adapter_spec`, `hidden`, `schema_digest` |
 | `test_kg_adapter.Incremental.test_digest_and_pair_file` | `adapter::tests::digest_and_pair_file` | đã chuyển | Không ngủ 1,1 s: file cặp mới khác cỡ nên digest đổi |
 | `test_kg_adapter.HiddenAndLayers` (4 test: `system_hidden_unless_asked`, `paths_avoid_hubs`, `layers`, `select_skips_system`) | `tools::tests::` cùng tên | đã chuyển | Vault e11 chép từ `adapter::tests` (module đó riêng tư). `system_hidden_unless_asked` lấy đủ kết quả `reach` (`limit` 1000) thay vì 20 mục đầu |
-| `test_kg_adapter.HiddenAndLayers.test_related_skips_system` | — | chưa chuyển | Chuyển cùng `related` |
+| `test_kg_adapter.HiddenAndLayers.test_related_skips_system` | `tools::tests::related_skips_system` | đã chuyển | Qua điểm vào chung `call` |
 | `test_kg_adapter.GraphIndexCli.test_commands` | — | chưa chuyển | `graph_index.py` gộp vào CLI `pkm` (PRD mục 2.1): chuyển cùng CLI |
 | `test_kg_adapter.OverMcp.test_proposed_edges_and_restart` | — | chưa chuyển | Chuyển cùng MCP |
 
@@ -254,7 +254,7 @@ Test Rust thêm, không có bản Python: `mcp::tests::{protocol_edges_like_pyth
 
 ## Module `query`, `tools`
 
-`pkm_core::query::Graph` là `scripts/kg/query.py`: câu SQL (recursive CTE của `reach`, `paths`, `loops`, điều kiện lọc `_w`, `_hid`, `_parts`, thứ tự `ORDER BY`) chép nguyên, phần Rust chỉ ghép câu, đọc dòng và gộp (`_collapse`, Tarjan của `all_loops`). `pkm_core::tools::Tools` là `scripts/kg/tools.py` (vỏ kết quả dài, handle `sha1` của `json.dumps(..., sort_keys=True)`, bộ nhớ 64 kết quả cho `more`); `pkm_core::tools::call` là `Server.call` của `scripts/kg/mcp_server.py` (note id chuẩn hoá NFC, `did_you_mean`, `url` `obsidian://open`, `body`, các lỗi `{"error": ...}`), điểm vào chung cho MCP, CLI và bộ so khớp; `Err` là chỗ Python ném ngoại lệ, mang tên lớp ngoại lệ Python (`KeyError`, `ValueError`, `TypeError`, ...). `pkm_core::tools::defs` là `tool_defs` (mô tả, schema tham số của `tools/list`): so với Python theo từng ký tự cả thứ tự khoá, với `hidden` đúng và sai. Kết quả dạng `dict` giữ thứ tự khoá của Python (`serde_json` có `preserve_order`). `pkm_core::query::answers` là `scripts/kg/tests/fixture_check.py` (`run`, `norm`, `check`). `related` chưa có: `call` trả `NotImplementedError`, bộ so khớp báo "chưa có".
+`pkm_core::query::Graph` là `scripts/kg/query.py`: câu SQL (recursive CTE của `reach`, `paths`, `loops`, điều kiện lọc `_w`, `_hid`, `_parts`, thứ tự `ORDER BY`) chép nguyên, phần Rust chỉ ghép câu, đọc dòng và gộp (`_collapse`, Tarjan của `all_loops`). `pkm_core::tools::Tools` là `scripts/kg/tools.py` (vỏ kết quả dài, handle `sha1` của `json.dumps(..., sort_keys=True)`, bộ nhớ 64 kết quả cho `more`); `pkm_core::tools::call` là `Server.call` của `scripts/kg/mcp_server.py` (note id chuẩn hoá NFC, `did_you_mean`, `url` `obsidian://open`, `body`, các lỗi `{"error": ...}`), điểm vào chung cho MCP, CLI và bộ so khớp; `Err` là chỗ Python ném ngoại lệ, mang tên lớp ngoại lệ Python (`KeyError`, `ValueError`, `TypeError`, ...). `pkm_core::tools::defs` là `tool_defs` (mô tả, schema tham số của `tools/list`): so với Python theo từng ký tự cả thứ tự khoá, với `hidden` đúng và sai. Kết quả dạng `dict` giữ thứ tự khoá của Python (`serde_json` có `preserve_order`). `pkm_core::query::answers` là `scripts/kg/tests/fixture_check.py` (`run`, `norm`, `check`). `related`: xem mục Module `related`.
 
 Đối chiếu với Python ở sha ghim: bộ so khớp kg-solo (81 câu đáp án, 712 lời gọi tool trừ `related`, gồm 63 lời gọi `more`) khớp hết; thêm cùng bộ câu tự sinh của `dump-python.py` trên kg-solo đọc như bản B (`--no-aliases --edge-keys links --body-edges`), trên vault cài lỗi của `test_kg.py`, trên vault e11 với `--adapter e11` (trang hệ thống, `system`, lớp `proposed`, `rejected`), và 181 lời gọi lệch chuẩn trên kg-solo (tham số rỗng, sai kiểu, số âm, `limit` là `true`, `rels` là chuỗi, `max_depth` là số thực, `max_len` là chuỗi, note id dạng NFD hay là số, handle hết hạn, là số, là danh sách, `offset` âm hay vượt cỡ, tool lạ, thiếu tham số bắt buộc): giống hết, kể cả tên ngoại lệ.
 
@@ -273,3 +273,32 @@ Giới hạn đã biết (không gặp trong bộ so khớp; MCP client gửi đ
 | `check` (70 câu graph, 11 câu bảng) | `query::answers::check` | `query::tests::answer_key` |
 
 Test Rust thêm, không có bản Python: `query::tests::{reach_depth_and_direction, note_card_counts_edges_by_relation_and_layer, all_loops_start_at_smallest_id, answers_like_fixture_check}`, `query::py::tests::*` (`json.dumps`, `str`, `repr`, `int()`, cắt danh sách, `bool`), `tools::tests::{handle_like_python, short_results_have_no_handle_and_cache_is_bounded, call_reports_unknown_notes_with_suggestions, default_vault_name_like_abspath_basename, call_note_has_link_and_body, call_errors_like_server_call, call_runs_each_tool_with_mcp_arguments, definitions_match_the_golden_tools_list, definitions_add_system_only_when_vault_has_system_pages}`.
+
+## Module `related`
+
+`pkm_core::related` là `scripts/kg/related.py` (`load_adjacency`, `ppr_push`, `_via`, `related`) cộng `Tools.related` của `scripts/kg/tools.py` (`hits_from`: hit dạng chuỗi, object `path`/`id` và `score`, danh sách `[đường dẫn, điểm]`). Nhánh `related` của `pkm_core::tools::call` là phần `related` của `Server.call`. Hằng số như Python: `WEIGHT` (accepted 1, superseded 0,3, proposed 0,5, nhân `score` của cạnh `proposed` trong (0, 1]), `alpha` 0,15, `eps` 1e-6, `max_pushes` 2.000.000, `k` mặc định 15, `via` tối đa 4 bước.
+
+Điểm khớp Python từng bit chứ không chỉ tới 1e-6, vì mọi phép số thực đi đúng thứ tự Python (docs/DECISIONS.md, "Thứ tự liệt kê file"):
+- cạnh đọc bằng đúng câu SQL của Python (không `ORDER BY`, thứ tự SQLite trả trên index dựng theo đường dẫn đã sắp);
+- bậc của node và tổng điểm hạt giống cộng như `sum` của Python 3.12+ (bù sai số Neumaier, `related::py_sum`); cộng thẳng thì lệch ở bit cuối và có thể đổi số lần đẩy;
+- hàng đợi FIFO và thứ tự chèn `p` như `deque` và `dict`; sắp ổn định theo điểm giảm dần; `round(x, 5)` làm tròn đúng trên giá trị nhị phân, hoà về số chẵn; hạt giống chưa có khối lượng có `score` là số nguyên `0` như `round(0, 5)`.
+
+Đối chiếu với Python ở sha ghim trên kg-solo: 15 lời gọi `related` của golden khớp (so chặt cả thứ tự, `pushes`, `touched`, lệch số thực 0); thêm 400 lời gọi ngẫu nhiên chạy lại bằng `dump-python.py --replay` (1–8 hit đủ dạng, đường dẫn NFD, hit trùng, note không có, điểm là chuỗi, âm, 0, lớn hơn 1, `k` tới 100, `rels`, `statuses`, `accepted_only`, `as_of`, `types`, `system`): khớp hết, lệch số thực 0.
+
+`related` chỉ có câu hỏi (không `hits`), khác Python theo D7 và PRD mục 9:
+- Hạt giống lấy bằng `Ohs::search(query, {"limit": 10, "snippetLength": 0})` của OHS gắn vào phiên (`tools::Context::with_ohs`, `set_ohs`), đường dẫn đã NFC; `seed_source` giữ giá trị `ohs-cli` của Python để hợp đồng MCP không đổi.
+- Phiên không gắn OHS, hoặc OHS chưa `ready` (thiếu gói, đang khởi động, đang index, thiếu model, hỏng): trả `ohs_not_ready` (mục `ohs` ở trên). Python lùi về FTS của DB OHS hoặc trả `{"error": "no OHS index reachable ..."}`.
+- OHS `ready` mà không trả kết quả nào: `{"error": "no OHS index reachable ...", "detail": "ohs-cli"}` như Python. OHS báo lỗi, quá hạn, phản hồi sai: cùng lỗi đó, `detail` là `OHS lỗi: <lý do>` (Python: `OHS CLI lỗi: ...`).
+- `query` không phải chuỗi: `TypeError` (Python cũng ném, ở `re.findall` hay `subprocess`).
+
+Giới hạn đã biết: `k` là số thực thì Rust trả `TypeError` cả khi không có hạt giống nào (Python chỉ ném khi cắt danh sách), như mục `query`, `tools`. Điểm `NaN` hay vô cực trong hit (chuỗi `"nan"`, `"inf"`) cho thứ tự sắp không xác định ở cả hai bên.
+
+Nguồn: `scripts/kg/tests/test_mcp.py` (`Protocol.test_related`, `FixtureOverMcp.test_related_on_fixture`), `scripts/e11/tests/test_kg_adapter.py` (`HiddenAndLayers.test_related_skips_system`). Chạy: `cargo test -p pkm-core related` và `cargo test -p pkm-core --test related_ohs_fake`.
+
+| Test Python | Test Rust | Trạng thái | Ghi chú |
+|---|---|---|---|
+| `Protocol.test_related` | `tools::tests::{call_related_with_hits, call_related_query_without_ohs_is_not_ready}`, `related::tests::{seeds_reranked_missing_reported_and_graph_notes_found, types_and_accepted_only_filter_graph_notes}` | đã chuyển | Câu `query='lead'` không có OHS: Python kiểm lỗi có chữ `OHS`; Rust trả `ohs_not_ready`, `state: broken` (D7) |
+| `FixtureOverMcp.test_related_on_fixture` | bộ so khớp kg-solo (`tools/related`) | đã chuyển | Golden so chặt hơn test Python (tập note, thứ hạng, điểm) |
+| `HiddenAndLayers.test_related_skips_system` | `tools::tests::related_skips_system` | đã chuyển | |
+
+Test Rust thêm, không có bản Python: `related::tests::{sum_compensates_like_python_312, round_half_even_on_the_binary_value, hit_shapes_like_tools_related, type_filter_like_python_in, no_known_hit_gives_empty_result_without_method, nfd_hit_paths_match_nfc_note_ids, bad_hit_values_raise_like_python, isolated_seed_keeps_all_its_mass, push_spreads_mass_both_ways_and_conserves_it, max_pushes_bounds_the_work}`, `tests/related_ohs_fake.rs` (hạt giống từ OHS giả ở dạng NFD, `indexing` thành `ohs_not_ready`, OHS báo lỗi, note OHS trả không có trong index, phiên không có OHS), `tests/related_ohs_real.rs` (`#[ignore]`, gói OHS thật; đã chạy qua trên Linux với gói `0.17.2-vantt.1`).
