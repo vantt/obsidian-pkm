@@ -65,6 +65,22 @@ Chỗ bản Python sai rõ ràng và Rust không làm theo (PRD mục 4). Mỗi 
 
 `vault.list_notes` của Python liệt kê vault trên ổ Windows nhìn từ WSL bằng PowerShell (`platform_paths.list_windows_drive`). Rust chạy native trên Windows nên không cần; WSL nằm ngoài phạm vi (PRD mục 2.2, bảng test `platform`: các dòng WSL "không áp dụng"). Kết quả liệt kê giống nhánh `os.scandir`, trừ việc nhánh PowerShell bỏ cả file bắt đầu bằng `.` còn nhánh `scandir` chỉ bỏ thư mục chấm; Rust theo nhánh `scandir`.
 
+### Adapter chỉ nạp theo tên ngắn, không nạp file `.py`
+
+- **Python** (`5a3eb2f`, `scripts/kg/index.py`, `load_adapter`): `--adapter` nhận tên ngắn (`e11`) hoặc đường dẫn một file `.py` bất kỳ có lớp `Adapter` hay hàm `edges(ctx)`.
+- **Rust** (`pkm_core::adapter::load`): chỉ nhận tên ngắn của adapter dựng sẵn (`e11`), rỗng và `none`. Chữ khác báo lỗi `không có adapter '<chữ>' (tên ngắn: e11; bản Rust không nạp adapter từ file .py)`.
+- **Lý do:** binary không chạy Python (D1: khách không phải cài Python). Adapter mới là một impl của trait `Adapter` trong `pkm-core`.
+- **Ngoại lệ trong bộ so khớp:** không cần; bộ so khớp chỉ dùng `e11` hoặc không adapter.
+- **Issue ở repo đặc tả:** không cần.
+
+### Sổ của adapter `e11`: dòng có YAML lỗi luôn được bỏ qua
+
+- **Python** (`5a3eb2f`, `scripts/e11/kg_adapter.py`, `_log_keys`): chỉ bắt `yaml.YAMLError`; frontmatter trong sổ làm PyYAML ném `ValueError` (ví dụ ngày không có thật trong `!!timestamp`, số quá 4300 chữ số) thì cả lần build dừng.
+- **Rust** (`pkm_core::adapter::e11`): mọi lỗi YAML có câu lỗi (`Fail::Error`, gồm cả các `ValueError` mà `vault.parse` cũng coi là lỗi YAML) làm bỏ dòng sổ đó; các dạng làm Python dừng vì ngoại lệ khác (`Fail::Crash`) vẫn làm build báo lỗi như Python.
+- **Lý do:** lớp YAML của `vault` gộp `YAMLError` và `ValueError` thành một loại lỗi (như `vault.parse`). Một dòng sổ hỏng chỉ mất nguồn gốc của một cạnh, không đáng dừng cả index.
+- **Ngoại lệ trong bộ so khớp:** không cần; trên các dòng này bản Python không dựng được index để so.
+- **Issue ở repo đặc tả:** đề xuất (bắt cả `ValueError` trong `_log_keys`), chưa mở.
+
 ## Test `platform` chuyển từ Python
 
 Nguồn: `scripts/tests/test_platform_paths.py` ở sha ghim, 19 test. Test Rust nằm trong `crates/pkm-core/src/platform.rs` (`platform::tests::…`), chạy bằng `cargo test -p pkm-core platform` trên cả ba nền. Test có `#[cfg(...)]` chỉ chạy trên nền tương ứng (Python giả nền bằng mock; Rust kiểm nền thật trong CI).
@@ -141,3 +157,38 @@ Khác Python (cố ý, vì binary thay cho bản chép mã Python):
 - Bắt tay: chờ trả lời `initialize` rồi mới gửi `notifications/initialized` và `tools/list` (Python gửi cả ba một lúc), có hạn giờ (`--timeout`, mặc định 120 giây), bỏ qua dòng stdout không phải JSON.
 - Kiểm Claude Desktop đang chạy: Windows liệt kê đường dẫn mọi `claude.exe` qua PowerShell và bỏ qua Claude Code (`~\.local\bin`, npm), không được thì lùi về `tasklist` như Python; macOS `pgrep -x Claude`; Linux `pgrep -x claude-desktop`. Không hỏi được thì từ chối và gợi ý `--force`.
 - Cài gói OHS dựng sẵn vào `<thư mục pkm>/ohs` (Python trỏ tới `cli.js` của OHS cài sẵn qua `--ohs-cli` và `node` trên PATH).
+
+## Module `index`, `validate`, `adapter::e11`
+
+`pkm_core::index` dựng index SQLite như `scripts/kg/index.py` (DDL chép nguyên, `rusqlite` với SQLite đóng gói sẵn), `pkm_core::validate` giữ nguyên câu SQL của 19 view (so `sqlite_master.sql` với DB của Python: giống từng byte), `pkm_core::adapter` có trait `Adapter` và impl `e11` (`scripts/e11/kg_adapter.py`). Mọi câu đọc lại DB trong lúc build giống Python, nên thứ tự dòng, `edges.id` và rowid của `links` trùng với Python cả khi build tăng dần sau khi sửa vault. Bộ so khớp đọc DB qua `pkm_core::index::dump_tables`.
+
+Đối chiếu với Python ở sha ghim, ngoài bộ so khớp kg-solo (20 bảng và view khớp): so cả DB (`sqlite_master`, mọi bảng theo rowid, `meta`) sau build đủ, build không đổi gì, build tăng dần sau khi sửa (đổi status, xoá, thêm note có alias trùng, đổi tên note), build tăng dần lần hai, build đủ lại, trên kg-solo với ba cách đọc (mặc định; `--no-aliases --edge-keys links --body-edges`; không gói và `--body-edges`), trên vault cài lỗi của `test_kg.py`, và trên vault e11 của `test_kg_adapter.py` với `--adapter e11` (sửa file cặp, sổ có dòng `\r\n`, dòng YAML lỗi và `rules` là chuỗi, đề xuất mới, trang chủ đề mới, thư mục lồng sâu, đổi status đề xuất): giống hết. Riêng `schema_field`, `schema_link` có thứ tự rowid khác vì Python chèn theo thứ tự của `set()` (đổi theo `PYTHONHASHSEED`); nội dung giống.
+
+Giới hạn đã biết (không gặp trên kg-solo, bộ dữ liệu trên hay schema nhúng):
+
+- `regexp` của view R9 (mẫu `pattern` của schema) chạy bằng crate `regex`: `$` và `\Z` đổi theo nghĩa của Python, `[`, `&`, `~` trong lớp ký tự là chữ thường; mẫu dùng nhìn trước, nhìn lùi, tham chiếu ngược làm truy vấn view báo lỗi (Python chạy được). Schema nhúng chỉ có `^.+@schema_v[0-9]+$`.
+- `float()` (cột `score` của claim, `data.score` của đề xuất) chỉ nhận chữ số ASCII.
+- Adapter `e11`: file JSON có `NaN`, `Infinity` bị coi là hỏng (Python đọc được); khoá không phải chuỗi trong frontmatter của sổ so theo `repr` (Python còn coi `1 == 1.0 == True`).
+
+Nguồn: `scripts/kg/tests/test_kg.py` (15 test) và `scripts/e11/tests/test_kg_adapter.py` (16 test) ở sha ghim. Test nào kiểm qua `Graph`, `Tools`, CLI hay MCP thì chuyển cùng module đó; phần đọc cạnh của chúng đã kiểm ở đây bằng SQL. Chạy: `cargo test -p pkm-core` (lọc theo `index::`, `validate::`, `adapter::`).
+
+| Test Python | Test Rust | Trạng thái | Ghi chú |
+|---|---|---|---|
+| `test_kg.Planted.test_every_planted_error_fires` | `validate::tests::every_planted_error_fires` | đã chuyển | Thêm `planted_deviations_equal_python`: mọi chỗ lệch và số đếm đúng như Python trả |
+| `test_kg.Planted.test_every_rule_category` | `validate::tests::every_rule_category` | đã chuyển | |
+| `test_kg.Planted.test_clean_notes_have_no_deviation` | `validate::tests::clean_notes_have_no_deviation` | đã chuyển | |
+| `test_kg.Planted.test_r9_kinds` | `validate::tests::r9_kinds` | đã chuyển | |
+| `test_kg.Api.test_clean_vault_has_no_deviation` | `validate::tests::clean_vault_has_no_deviation` | đã chuyển | |
+| `test_kg.Api.test_two_layers_default_and_accepted_only` | `index::tests::two_layers_and_provenance` | một phần | Cột của cạnh (status, proposed_by, extracted_by, score); `neighbors`, `accepted_only` chuyển cùng `query` |
+| `test_kg.Api.test_claim_edge_window_source_and_alias` | `index::tests::claim_edge_window_source_and_alias` | một phần | Cạnh claim (source `#^q1`, đích qua alias, cửa sổ); `neighbors(as_of)` chuyển cùng `query` |
+| `test_kg.Api.test_contract_window`, `test_loops_need_start_and_report_polarity`, `test_paths_and_provenance`, `test_find_select`, `test_long_result_envelope` | — | chưa chuyển | Kiểm `Graph`, `Tools`: chuyển cùng `query`, `tools` |
+| `test_kg.Incremental.test_rebuild_after_edit_and_delete` | `index::tests::rebuild_after_edit_and_delete` | một phần | `mode`, `notes_read`, `notes_removed`, status của cạnh claim, cạnh của claim đã xoá biến mất; `loops` chuyển cùng `query` |
+| `test_kg.Fixture.test_answer_key` | — | chưa chuyển | Câu đáp án của kg-solo: tầng `answers` của bộ so khớp, chuyển cùng `query` |
+| `test_kg.Fixture.test_fixture_planted_errors` | `validate::tests::fixture_planted_errors` | đã chuyển | Cần `PKM_KG_SOLO=<vault kg-solo>` (không có thì bỏ qua, như Python khi thiếu node); CI so cả `v3_deviations` qua bộ so khớp |
+| `test_kg_adapter.AdapterEdges` (9 test: `folder_topic`, `proposal_waiting_is_proposed`, `rejected_and_accepted`, `applied_proposal_marks_vault_edge`, `who_and_fix_link`, `ohs_pairs`, `provenance_from_logs`, `proposal_body_links_dropped`, `counts`) | `adapter::tests::` cùng tên | đã chuyển | `counts` kiểm thêm `adapter_spec`, `hidden`, `schema_digest` |
+| `test_kg_adapter.Incremental.test_digest_and_pair_file` | `adapter::tests::digest_and_pair_file` | đã chuyển | Không ngủ 1,1 s: file cặp mới khác cỡ nên digest đổi |
+| `test_kg_adapter.HiddenAndLayers` (5 test) | — | chưa chuyển | Kiểm `Tools` (`system`, `statuses`, `related`): chuyển cùng `tools` |
+| `test_kg_adapter.GraphIndexCli.test_commands` | — | chưa chuyển | `graph_index.py` gộp vào CLI `pkm` (PRD mục 2.1): chuyển cùng CLI |
+| `test_kg_adapter.OverMcp.test_proposed_edges_and_restart` | — | chưa chuyển | Chuyển cùng MCP |
+
+Test Rust thêm, không có bản Python: `index::tests::{noop_build_keeps_every_table, meta_like_python, counts_escape_non_ascii_status_like_json_dumps, changing_packs_or_options_rebuilds_everything, body_edges_and_edge_keys_links, options_pick_and_previous, ctx_add_and_drop_deduplicate_by_key, regexp_follows_python_re, missing_vault_is_an_error, empty_vault_builds_an_empty_index}`, `index::py::tests::*` (`float()`, `json.dumps`), `validate::tests::{rule_filter_and_limit, report_like_the_validate_command, views_are_recreated_and_sql_kept}`, `adapter::tests::{similar_file_replaces_both_pair_files, broken_private_data_is_an_error, load_and_system_pages}`.

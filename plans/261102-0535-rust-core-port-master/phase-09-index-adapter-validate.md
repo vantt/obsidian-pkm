@@ -1,6 +1,6 @@
 ---
 title: "Phase 9: index, adapter e11, validate"
-status: todo
+status: done
 priority: P1
 effort: "3 ngày"
 prd: R07
@@ -24,19 +24,22 @@ Dựng index đủ và tăng dần như Python, cùng adapter bản B và valida
 - Thêm dòng vào `spec/PORTING.md`.
 
 ## Việc cần làm
-- [ ] SQLite qua `rusqlite` (feature `bundled`); DDL, view validator chép nguyên từ Python.
-- [ ] Liệt kê note theo đường dẫn đã sắp và ghi cạnh đúng thứ tự Python (xem mục "Thứ tự liệt kê file" trong `docs/DECISIONS.md`); `rusqlite` chỉ thêm vào `pkm-core`, bộ so khớp đọc DB qua `pkm-core`.
-- [ ] Build đủ (`--full`) và tăng dần theo mtime và hash; thứ tự ghi và chuẩn hoá giá trị như Python.
-- [ ] Hai lớp cạnh; cửa sổ hiệu lực; nguồn gốc (`origin`, `proposed_by`, `extracted_by`); `--edge-keys`, `--body-edges`.
-- [ ] Trait `Adapter` (impl đầu tiên là `e11`): cạnh `topic` theo trang chủ đề (`toc`, tên `(chủ đề).md`), cạnh từ hàng chờ đề xuất, cạnh OHS từ file cặp gần nghĩa, danh sách trang hệ thống. Giữ phần e11 nhỏ, tách riêng để commit chỉ đổi adapter chuyển được độc lập.
-- [ ] Nhớ cách đọc vault trong index sau lần build đầu, như Python.
-- [ ] `validate` với `--rule`, `--limit`, `--json`.
-- [ ] Chuyển các test Python liên quan.
+- [x] SQLite qua `rusqlite` (feature `bundled`); DDL, view validator chép nguyên từ Python.
+- [x] Liệt kê note theo đường dẫn đã sắp và ghi cạnh đúng thứ tự Python (xem mục "Thứ tự liệt kê file" trong `docs/DECISIONS.md`); `rusqlite` chỉ thêm vào `pkm-core`, bộ so khớp đọc DB qua `pkm-core`.
+- [x] Build đủ (`--full`) và tăng dần theo mtime và hash; thứ tự ghi và chuẩn hoá giá trị như Python.
+- [x] Hai lớp cạnh; cửa sổ hiệu lực; nguồn gốc (`origin`, `proposed_by`, `extracted_by`); `--edge-keys`, `--body-edges`.
+- [x] Trait `Adapter` (impl đầu tiên là `e11`): cạnh `topic` theo trang chủ đề (`toc`, tên `(chủ đề).md`), cạnh từ hàng chờ đề xuất, cạnh OHS từ file cặp gần nghĩa, danh sách trang hệ thống. Giữ phần e11 nhỏ, tách riêng để commit chỉ đổi adapter chuyển được độc lập.
+- [x] Nhớ cách đọc vault trong index sau lần build đầu, như Python.
+- [x] `validate` với `--rule`, `--limit`, `--json`.
+- [x] Chuyển các test Python liên quan.
 
 ## Nghiệm thu
-- Bộ so khớp tầng bảng: **mọi** bảng của mục 6 PRD và `v3_deviations` khớp golden kg-solo (CI) và khớp bản B (máy user), 0 lệch chưa có tên.
-- Build tăng dần hai lần liên tiếp không đổi gì cho DB giống hệt build đủ (so bằng bộ so khớp).
-- Số đo hiệu năng build đủ và tăng dần đã ghi; Rust không chậm hơn Python.
+- [x] Bộ so khớp tầng bảng: **mọi** bảng của mục 6 PRD và `v3_deviations` khớp golden kg-solo (CI), 0 lệch chưa có tên.
+- [ ] Như trên trên bản B (máy user): 0 lệch chưa có tên (user hoãn bản B).
+- [x] Build tăng dần hai lần liên tiếp không đổi gì cho DB giống hệt build đủ (so bằng bộ so khớp).
+- [x] Số đo hiệu năng build đủ và tăng dần đã ghi; Rust không chậm hơn Python.
+
+Báo cáo: [fullstack-developer-261102-1440-phase-09-index.md](../reports/fullstack-developer-261102-1440-phase-09-index.md).
 
 ## Cần user
 Chạy bản B.
