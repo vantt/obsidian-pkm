@@ -258,3 +258,93 @@ fn doctor_reports_json_and_fails_without_config_entry() {
             .any(|c| c["id"] == "kg_entry")
     );
 }
+
+// ------------------------------------------------------------------------------------------------ related
+
+mod mcp_support;
+
+/// `pkm VAULT related ...` không thấy biến OHS của máy chạy test; `env` thêm vào.
+fn related(v: &Vault, args: &[&str], env: &[(&str, &str)]) -> Output {
+    let mut c = Command::new(env!("CARGO_BIN_EXE_pkm"));
+    for k in ["PKM_OHS_DIR", "PKM_NO_OHS", "KG_OHS_CLI", "KG_OHS_NODE"] {
+        c.env_remove(k);
+    }
+    c.envs(env.iter().copied())
+        .arg(&v.vault)
+        .arg("related")
+        .args(args)
+        .args(["--db", &v.db, "--packs", "business"])
+        .output()
+        .expect("chạy được pkm")
+}
+
+#[test]
+fn related_with_hits_needs_no_ohs() {
+    let v = vault();
+    let o = related(&v, &["--hit", "Yếu tố/Số lead.md", "--k", "5"], &[]);
+    assert!(o.status.success(), "{o:?}");
+    let r: Value = serde_json::from_str(&stdout(&o)).unwrap();
+    assert_eq!(r["seed_source"], "hits");
+    assert_eq!(r["seeds"][0]["id"], "Yếu tố/Số lead.md");
+    assert_eq!(r["related"][0]["id"], "Yếu tố/Doanh thu.md");
+}
+
+#[test]
+fn related_query_without_ohs_prints_not_ready_and_fails() {
+    let v = vault();
+    let o = related(&v, &["doanh", "thu"], &[("PKM_NO_OHS", "1")]);
+    assert_eq!(o.status.code(), Some(1), "{o:?}");
+    let r: Value = serde_json::from_str(&stdout(&o)).unwrap();
+    assert_eq!(r["error"], "ohs_not_ready");
+    assert_eq!(r["state"], "broken");
+    assert!(
+        String::from_utf8_lossy(&o.stderr).starts_with("related: ohs_not_ready"),
+        "{o:?}"
+    );
+}
+
+#[test]
+fn related_query_waits_for_ohs_then_shuts_it_down() {
+    let v = vault();
+    let Some(pkg) = mcp_support::fake_ohs_package(&v.root) else {
+        return;
+    };
+    let pkg = pkg.to_string_lossy().into_owned();
+    let o = related(&v, &["Yếu tố/Số lead.md", "--ohs", &pkg], &[]);
+    assert!(o.status.success(), "{o:?}");
+    let r: Value = serde_json::from_str(&stdout(&o)).unwrap();
+    assert_eq!(r["seed_source"], "ohs-cli");
+    assert_eq!(r["seeds"][0]["id"], "Yếu tố/Số lead.md");
+    let pids = mcp_support::fake_pids(Path::new(&v.vault));
+    assert_eq!(pids.len(), 1);
+    assert!(
+        pids.iter().all(|p| !mcp_support::process::alive(*p)),
+        "OHS còn chạy"
+    );
+}
+
+#[test]
+fn related_query_gives_up_after_ohs_wait() {
+    let v = vault();
+    let Some(pkg) = mcp_support::fake_ohs_package(&v.root) else {
+        return;
+    };
+    fs::write(
+        Path::new(&v.vault).join("fake-ohs.json"),
+        r#"{"silent": true}"#,
+    )
+    .unwrap();
+    let pkg = pkg.to_string_lossy().into_owned();
+    // Gói chỉ qua biến môi trường, như sau `pkm mcp install`.
+    let o = related(&v, &["lead", "--ohs-wait", "1"], &[("PKM_OHS_DIR", &pkg)]);
+    assert_eq!(o.status.code(), Some(1), "{o:?}");
+    let r: Value = serde_json::from_str(&stdout(&o)).unwrap();
+    assert_eq!(r["error"], "ohs_not_ready");
+    assert_eq!(r["state"], "starting");
+    let pids = mcp_support::fake_pids(Path::new(&v.vault));
+    assert_eq!(pids.len(), 1);
+    assert!(
+        pids.iter().all(|p| !mcp_support::process::alive(*p)),
+        "OHS còn chạy"
+    );
+}

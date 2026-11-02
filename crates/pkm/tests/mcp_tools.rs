@@ -99,9 +99,25 @@ struct Client {
     n: u64,
 }
 
+/// `pkm` không thấy biến OHS của máy chạy test (gói OHS thật, cờ cũ của bản Python).
+fn pkm_command() -> Command {
+    let mut c = Command::new(env!("CARGO_BIN_EXE_pkm"));
+    for k in ["PKM_OHS_DIR", "PKM_NO_OHS", "KG_OHS_CLI", "KG_OHS_NODE"] {
+        c.env_remove(k);
+    }
+    c
+}
+
 impl Client {
+    /// Server không chạy OHS (`PKM_NO_OHS=1`, như `pkm mcp install --no-ohs`).
     fn new(vault: &Path, args: &[&str]) -> Client {
-        let mut child = Command::new(env!("CARGO_BIN_EXE_pkm"))
+        let mut cmd = pkm_command();
+        cmd.env("PKM_NO_OHS", "1");
+        Client::spawn(cmd, vault, args)
+    }
+
+    fn spawn(mut cmd: Command, vault: &Path, args: &[&str]) -> Client {
+        let mut child = cmd
             .arg(vault)
             .arg("mcp")
             .args(args)
@@ -161,6 +177,15 @@ impl Client {
             Value::String(txt.to_owned())
         };
         (v, r["isError"].as_bool().unwrap())
+    }
+}
+
+impl Client {
+    /// Đóng stdin như client thoát; server phải tự thoát 0.
+    fn close(mut self) {
+        drop(self.stdin.take());
+        let status = self.child.wait().unwrap();
+        assert!(status.success(), "{status:?}");
     }
 }
 
@@ -753,4 +778,199 @@ fn answer_key_over_protocol() {
     }
     assert_eq!(fails, Vec::<String>::new());
     assert_eq!((graph, table), (70, 11));
+}
+
+// ------------------------------------------------------------------------------------------------ related
+
+/// `Protocol.test_related`: hạt giống cho sẵn (`hits`), lọc `types`, `accepted_only`; câu hỏi không có OHS. Python
+/// không có OHS thì trả `no OHS index reachable …`; bản Rust trả `ohs_not_ready` với `state: broken` (D7).
+#[test]
+fn related() {
+    let mut p = protocol();
+    let hits = json!([{"path": "Yếu tố/Số lead.md", "score": 0.9}, {"path": "Khách hàng/Không có.md", "score": 0.5}, "Người/An.md"]);
+    let (r, _) = p.c.call("related", json!({"hits": hits, "k": 5}));
+    assert_eq!(r["missing"], json!(["Khách hàng/Không có.md"]));
+    let seeds: Vec<&Value> = r["seeds"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|s| &s["id"])
+        .collect();
+    assert_eq!(seeds, [&json!("Yếu tố/Số lead.md"), &json!("Người/An.md")]);
+    let ids: Vec<&str> = r["related"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|x| x["id"].as_str().unwrap())
+        .collect();
+    assert!(
+        ids[..3.min(ids.len())].contains(&"Yếu tố/Doanh thu.md"),
+        "{ids:?}"
+    );
+    let top = &r["related"][0];
+    assert_eq!(top["found_by"], "graph");
+    let from = &top["via"][0]["from"];
+    assert!(
+        from == "Yếu tố/Số lead.md" || from == "Người/An.md",
+        "{top}"
+    );
+    assert_eq!(r["seed_source"], "hits");
+
+    let (r2, _) = p.c.call(
+        "related",
+        json!({"hits": hits, "k": 5, "types": ["organization"]}),
+    );
+    let rel = r2["related"].as_array().unwrap();
+    assert!(
+        !rel.is_empty() && rel.iter().all(|x| x["type"] == "organization"),
+        "{r2}"
+    );
+
+    let (r3, _) = p.c.call(
+        "related",
+        json!({"hits": ["Yếu tố/Mệt mỏi.md"], "k": 5, "accepted_only": true}),
+    );
+    let rel = r3["related"].as_array().unwrap();
+    assert!(!rel.is_empty());
+    assert!(rel.iter().all(|x| x["layer"] == "accepted"), "{r3}");
+    assert!(
+        rel.iter()
+            .flat_map(|x| x["via"].as_array().unwrap())
+            .all(|s| s["status"] != "proposed")
+    );
+
+    let (r, err) = p.c.call("related", json!({"query": "lead"}));
+    assert!(err, "{r}");
+    assert_eq!(r["error"], "ohs_not_ready");
+    assert_eq!(r["state"], "broken");
+    assert!(r["action"].as_str().unwrap().contains("OHS"), "{r}");
+}
+
+/// `FixtureOverMcp.test_related_on_fixture`: trên kg-solo, hit là một khách hàng; note chỉ graph tìm thấy có dự án,
+/// hợp đồng hay người, mỗi note có `via`. Cần `PKM_KG_SOLO`.
+#[test]
+fn related_on_fixture() {
+    let Some(dir) = std::env::var_os("PKM_KG_SOLO") else {
+        eprintln!("bỏ qua: chưa đặt PKM_KG_SOLO");
+        return;
+    };
+    let tmp = tempfile::tempdir().unwrap();
+    let db = tmp.path().join("graph.db");
+    let db = db.to_string_lossy();
+    let mut c = Client::new(Path::new(&dir), &["--db", &db, "--packs", "business"]);
+    c.init();
+    let (r, _) = c.call(
+        "related",
+        json!({"hits": [{"path": "Khách hàng/Công ty ABC.md", "score": 1}], "k": 10}),
+    );
+    let rel = r["related"].as_array().unwrap();
+    let types: Vec<&str> = rel.iter().filter_map(|x| x["type"].as_str()).collect();
+    assert!(
+        types
+            .iter()
+            .any(|t| ["project", "contract", "person"].contains(t)),
+        "{types:?}"
+    );
+    assert!(rel.iter().all(|x| !x["via"].as_array().unwrap().is_empty()));
+    c.close();
+}
+
+mod mcp_support;
+use mcp_support::{fake_ohs_package, fake_pids, process};
+
+/// Một vault nhỏ và gói OHS giả; server `pkm` gắn với gói đó qua `--ohs`.
+struct WithFakeOhs {
+    _tmp: tempfile::TempDir,
+    vault: PathBuf,
+    pkg: PathBuf,
+}
+
+fn with_fake_ohs(fake: Value) -> Option<WithFakeOhs> {
+    let tmp = tempfile::tempdir().unwrap();
+    let pkg = fake_ohs_package(tmp.path())?;
+    let vault = tmp.path().join(VAULT_NAME);
+    write_vault(&vault);
+    fs::write(vault.join("fake-ohs.json"), fake.to_string()).unwrap();
+    Some(WithFakeOhs {
+        _tmp: tmp,
+        vault,
+        pkg,
+    })
+}
+
+impl WithFakeOhs {
+    fn client(&self) -> Client {
+        let pkg = self.pkg.to_string_lossy();
+        Client::spawn(
+            pkm_command(),
+            &self.vault,
+            &["--packs", "business", "--refresh-every", "0", "--ohs", &pkg],
+        )
+    }
+
+    fn assert_no_fake_left(&self) {
+        let pids = fake_pids(&self.vault);
+        assert!(!pids.is_empty(), "server không chạy OHS");
+        for pid in pids {
+            assert!(
+                !process::alive(pid),
+                "fake-ohs {pid} còn chạy sau khi server thoát"
+            );
+        }
+    }
+}
+
+/// `related` chỉ có câu hỏi: server chạy OHS một lần ở nền, `initialize` trả lời ngay; hạt giống lấy từ OHS
+/// (`seed_source` giữ `ohs-cli` như Python); index dựng lại giữa hai lời gọi vẫn giữ OHS; hết stdin thì tắt OHS,
+/// không để lại tiến trình.
+#[test]
+fn related_query_seeds_come_from_ohs() {
+    let Some(f) = with_fake_ohs(Value::Null) else {
+        return;
+    };
+    let mut c = f.client();
+    c.init();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+    let r = loop {
+        let (r, _) = c.call("related", json!({"query": "Yếu tố/Số lead.md", "k": 5}));
+        if r.get("error").is_none() || std::time::Instant::now() > deadline {
+            break r;
+        }
+        assert_eq!(r["error"], "ohs_not_ready", "{r}");
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    };
+    assert_eq!(r["seed_source"], "ohs-cli", "{r}");
+    assert_eq!(r["seeds"][0]["id"], "Yếu tố/Số lead.md");
+    // Sửa một note: lời gọi sau dựng lại index và mở lại graph, OHS vẫn gắn với phiên.
+    let p = f.vault.join("Yếu tố").join("Doanh thu.md");
+    fs::write(&p, "---\ntype: factor\n---\n# Doanh thu\nsửa\n").unwrap();
+    let (r, _) = c.call("related", json!({"query": "Yếu tố/Doanh thu.md"}));
+    assert_eq!(r["seeds"][0]["id"], "Yếu tố/Doanh thu.md", "{r}");
+    assert_eq!(fake_pids(&f.vault).len(), 1, "một OHS cho cả server");
+    c.close();
+    f.assert_no_fake_left();
+}
+
+/// OHS chưa sẵn sàng: server vẫn bắt tay ngay, `related` chỉ có câu hỏi trả `ohs_not_ready` (`starting`) với
+/// `isError`, tool khác chạy bình thường; hết stdin thì OHS bị tắt dù chưa bao giờ sẵn sàng.
+#[test]
+fn related_query_while_ohs_starts_is_not_ready() {
+    let Some(f) = with_fake_ohs(json!({"silent": true})) else {
+        return;
+    };
+    let mut c = f.client();
+    let t0 = std::time::Instant::now();
+    c.init();
+    assert!(
+        t0.elapsed() < std::time::Duration::from_secs(10),
+        "initialize không chờ OHS"
+    );
+    let (r, err) = c.call("related", json!({"query": "lead"}));
+    assert!(err, "{r}");
+    assert_eq!(r["error"], "ohs_not_ready");
+    assert_eq!(r["state"], "starting");
+    let (r, err) = c.call("find", json!({"name": "doanh thu"}));
+    assert!(!err && r["count"] == 4, "{r}");
+    c.close();
+    f.assert_no_fake_left();
 }

@@ -13,13 +13,15 @@
 //! mã [`crate::cli::EXIT_NO_TOOL_LAYER`]. Test của vỏ dùng đường này với tầng tool giả.
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
+use pkm_core::ohs::Ohs;
 use pkm_core::query::Graph;
 use pkm_core::tools;
 use serde_json::{Map, Value};
 
 /// Những gì một phiên tool cần biết về vault và index.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone)]
 pub struct ToolContext {
     /// Index SQLite (đã dựng).
     pub db: PathBuf,
@@ -29,10 +31,8 @@ pub struct ToolContext {
     pub vault_name: Option<String>,
     /// Số mục trước khi rút gọn khi lời gọi không ghi `limit` (`Tools(limit=...)`; CLI: `--limit` hoặc 20).
     pub limit: Option<i64>,
-    /// `--ohs-cli` của MCP server (gói OHS cho `related` khi không có `hits`).
-    pub ohs_cli: Option<String>,
-    /// `--ohs-node` của MCP server.
-    pub ohs_node: Option<String>,
+    /// OHS cho `related` chỉ có `query` (một tiến trình cho cả server); `None`: tool đó trả `ohs_not_ready`.
+    pub ohs: Option<Arc<Ohs>>,
 }
 
 /// Tầng tool: danh mục tool và cách mở một phiên trên một index.
@@ -89,7 +89,11 @@ impl ToolLayer for CoreLayer {
         // `Tools(g)` của MCP (mặc định 20), `Tools(db, limit=a.limit or 20)` của CLI; 0 là mặc định.
         let t = tools::Tools::with_limit(g, ctx.limit.unwrap_or(0));
         Ok(Box::new(CoreSession {
-            ctx: tools::Context::new(t, &ctx.vault, ctx.vault_name.clone()),
+            ctx: {
+                let mut c = tools::Context::new(t, &ctx.vault, ctx.vault_name.clone());
+                c.set_ohs(ctx.ohs.clone());
+                c
+            },
             db: ctx.db.clone(),
         }))
     }
@@ -144,6 +148,13 @@ impl ToolSession for CoreSession {
                     args.insert(k.into(), kw.0.get(k).cloned().unwrap_or(Value::Null));
                 }
                 return tools::call(&mut self.ctx, "valid", Value::Object(args))
+                    .map_err(|e| e.to_string());
+            }
+            // Lệnh `related` của CLI (không có trong `cli.py`): tham số theo tên MCP, qua điểm vào chung.
+            "related" => {
+                let args: Map<String, Value> =
+                    kw.0.into_iter().filter(|(_, v)| !v.is_null()).collect();
+                return tools::call(&mut self.ctx, "related", Value::Object(args))
                     .map_err(|e| e.to_string());
             }
             other => return Err(format!("phương thức tool lạ {other}")),
