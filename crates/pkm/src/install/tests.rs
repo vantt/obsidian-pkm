@@ -475,14 +475,24 @@ fn ohs_flag_points_kg_at_an_existing_package_without_installing_one() {
     fs::write(shared.join(node), "").unwrap();
     fs::create_dir_all(shared.join("app/dist/src")).unwrap();
     fs::write(shared.join("app/dist/src/cli.js"), "").unwrap();
+    let manifest = r#"{"version":"0.17.2-vantt.1"}"#;
+    fs::write(shared.join("MANIFEST.json"), manifest).unwrap();
     let mut args = s.args();
     args.no_ohs = false;
     args.ohs = Some(shared.clone());
     let out = s.run(&args, &Fake::new()).unwrap();
-    assert!(out.contains("dùng gói OHS có sẵn"), "{out}");
+    assert!(
+        out.contains("dùng gói OHS có sẵn") && out.contains("0.17.2-vantt.1"),
+        "{out}"
+    );
     assert!(
         !s.inst.ohs_dir().exists(),
         "không cài gói vào thư mục của pkm"
+    );
+    assert_eq!(
+        fs::read_to_string(shared.join("MANIFEST.json")).unwrap(),
+        manifest,
+        "gói của người dùng giữ nguyên, kể cả khi cũ hơn bản ghim"
     );
     let entry: Vec<String> =
         serde_json::from_value(s.read()["mcpServers"]["kg"]["args"].clone()).unwrap();
@@ -504,7 +514,7 @@ fn ohs_flag_points_kg_at_an_existing_package_without_installing_one() {
 }
 
 #[test]
-fn ohs_older_than_the_pin_is_upgraded_and_the_pin_is_kept() {
+fn ohs_older_than_the_pin_is_upgraded_and_the_pin_or_newer_is_kept() {
     let mut s = setup(Some(EXISTING));
     let archive = ohs_tar_gz();
     let sha = ohs_bundle::sha256_file(&{
@@ -548,6 +558,20 @@ fn ohs_older_than_the_pin_is_upgraded_and_the_pin_is_kept() {
     assert!(
         out.contains("gói OHS đã có") && out.contains(ohs_bundle::VERSION),
         "{out}"
+    );
+
+    let (core, n) = ohs_bundle::VERSION.split_once("-vantt.").unwrap();
+    let newer = format!("{core}-vantt.{}", n.parse::<u64>().unwrap() + 1);
+    old(&newer);
+    let out = s.run(&args, &hooks).unwrap();
+    assert!(
+        out.contains("gói OHS đã có") && out.contains(&newer),
+        "không hạ cấp gói mới hơn bản ghim: {out}"
+    );
+    assert!(
+        fs::read_to_string(dir.join("MANIFEST.json"))
+            .unwrap()
+            .contains(&newer)
     );
 
     old("0.17.2-vantt.1");

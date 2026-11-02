@@ -798,14 +798,17 @@ fn ohs_plan(inst: &Install, args: &InstallArgs) -> String {
     }
 }
 
-/// Dòng báo gói OHS ở `dir` đã dùng được, nên không cài: gói có, và là bản ghim hoặc người dùng đã chọn nguồn riêng
-/// ([`ohs_bundle::PACKAGE_ENV`]). `None`: chưa có gói, hoặc gói khác bản ghim (bộ cài nâng lên bản ghim; tải lỗi thì
+/// Dòng báo gói OHS ở `dir` đã dùng được, nên không cài: gói có, và không cũ hơn bản ghim
+/// ([`ohs_bundle::older_than_pin`]; gói mới hơn được giữ, không hạ cấp) hoặc người dùng đã chọn nguồn riêng
+/// ([`ohs_bundle::PACKAGE_ENV`]). `None`: chưa có gói, hoặc gói cũ hơn bản ghim (bộ cài nâng lên bản ghim; tải lỗi thì
 /// giữ gói cũ).
 fn installed_ohs(dir: &Path, inst: &Install) -> Option<String> {
     let pkg = OhsPackage::from_dir(dir).ok()?;
     let version = pkg.version();
-    let pinned = version.as_deref() == Some(ohs_bundle::VERSION);
-    if pinned || inst.ohs_source.is_some() || inst.bundle.is_none() {
+    if !ohs_bundle::older_than_pin(version.as_deref())
+        || inst.ohs_source.is_some()
+        || inst.bundle.is_none()
+    {
         let v = version.unwrap_or_else(|| "không rõ phiên bản".to_owned());
         return Some(format!("gói OHS đã có ở {} ({v})", dir.display()));
     }

@@ -198,7 +198,7 @@ fn deep_runs_ohs_on_the_entry_vault() {
 }
 
 #[test]
-fn ohs_package_other_than_the_pin_or_without_vietnamese_pack_warns() {
+fn ohs_package_older_than_the_pin_or_without_vietnamese_pack_warns() {
     let m = machine();
     let ohs = m.ohs.clone();
     fs::write(ohs.join("MANIFEST.json"), r#"{"version":"0.17.2-vantt.1"}"#).unwrap();
@@ -212,6 +212,16 @@ fn ohs_package_other_than_the_pin_or_without_vietnamese_pack_warns() {
             .unwrap()
             .contains(install::ohs_bundle::VERSION)
     );
+    // Gói chỉ bằng --ohs: `pkm mcp install` không nâng gói đó, nên không có lệnh sửa.
+    assert_eq!(c.fix, None);
+    fs::write(
+        ohs.join("MANIFEST.json"),
+        r#"{"version":"0.17.2-vantt.999"}"#,
+    )
+    .unwrap();
+    let report = m.diagnose(&m.args(), &Fake::new());
+    let c = check(&report, "ohs_package");
+    assert_eq!(c.status, Status::Ok, "gói mới hơn bản ghim: {}", c.detail);
     fs::remove_dir_all(ohs.join("lang")).unwrap();
     let report = m.diagnose(&m.args(), &Fake::new());
     let c = check(&report, "ohs_package");

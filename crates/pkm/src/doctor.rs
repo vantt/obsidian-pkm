@@ -482,7 +482,15 @@ fn check_ohs_package(
                          hẳn Claude Desktop rồi chạy lại `pkm mcp install`."
                     ),
                 )
-            } else if version.as_deref() != Some(pinned) {
+            } else if install::ohs_bundle::older_than_pin(version.as_deref()) {
+                // `pkm mcp install` chỉ nâng gói ở thư mục mặc định; gói chỉ bằng --ohs hay biến môi trường thì người
+                // dùng tự nâng, nên lệnh sửa chỉ gợi ý cho gói mặc định.
+                let default = OhsPackage::default_dir().ok();
+                let fix = if default.as_deref() == Some(pkg.root.as_path()) {
+                    fixes.reinstall()
+                } else {
+                    None
+                };
                 Check::bad(
                     ID,
                     Status::Warn,
@@ -490,12 +498,11 @@ fn check_ohs_package(
                     format!(
                         "pkm này đi với gói OHS {pinned}. Gói ở {} thì thoát hẳn Claude Desktop rồi chạy lại `pkm mcp \
                          install` để nâng; gói chỉ bằng --ohs hay {} thì nâng gói đó.",
-                        OhsPackage::default_dir()
-                            .map_or_else(|_| "thư mục mặc định".to_owned(), |d| d.display().to_string()),
+                        default.map_or_else(|| "thư mục mặc định".to_owned(), |d| d.display().to_string()),
                         pkm_core::ohs::OHS_DIR_ENV
                     ),
                 )
-                .with_fix(fixes.reinstall())
+                .with_fix(fix)
             } else {
                 Check::ok(ID, detail)
             };
