@@ -248,7 +248,7 @@ fn handshake() {
     assert_eq!(init["protocolVersion"], "2025-06-18");
     assert_eq!(
         init["serverInfo"],
-        json!({"name": "kg", "version": "0.1.0"})
+        json!({"name": "pkm", "version": "0.1.0"})
     );
     assert_eq!(
         init["capabilities"],
@@ -261,7 +261,7 @@ fn handshake() {
         "never to your own tools",
         "proposed_by",
         "increases (inverse increased_by, polarity +)",
-        "OHS",
+        "Use only this server (pkm)",
         "\"Vault thử\": 6 notes.",
         "obsidian://open?vault=Vault%20th%E1%BB%AD&file=PATH",
     ] {
@@ -574,7 +574,7 @@ fn missing_vault_reports_the_build_error_in_instructions() {
     let ins = s.instructions();
     assert!(
         ins.starts_with(
-            "Typed knowledge graph (kg) of an Obsidian vault; the index is still being built. "
+            "Typed knowledge graph (pkm) of an Obsidian vault; the index is still being built. "
         ),
         "{ins}"
     );

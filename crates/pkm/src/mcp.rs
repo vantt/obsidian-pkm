@@ -35,7 +35,7 @@ use tool_layer::{ToolContext, ToolLayer, ToolSession};
 
 /// Phiên bản giao thức nhận được, theo thứ tự ưu tiên; phần tử đầu là bản trả khi client xin bản lạ.
 pub const PROTOCOLS: [&str; 3] = ["2025-06-18", "2025-03-26", "2024-11-05"];
-pub const SERVER_NAME: &str = "kg";
+pub const SERVER_NAME: &str = "pkm";
 pub const SERVER_VERSION: &str = "0.1.0";
 
 /// `initialize` và `tools/list` chờ lần dựng đầu tối đa chừng này (vault lớn trên ổ chậm: không giữ client quá lâu).
