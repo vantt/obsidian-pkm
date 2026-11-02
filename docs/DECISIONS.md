@@ -82,3 +82,15 @@ Mỗi quyết định một mục, theo khung:
 - **Lựa chọn:** phía Python của bộ so khớp liệt kê note theo đường dẫn đã sắp (thứ tự NTFS và APFS trả về). `edges.id` và `related` vẫn so chặt như PRD (điểm lệch tối đa 1e-6). Lõi Rust liệt kê note theo đường dẫn đã sắp, chèn cạnh và chạy PageRank đúng thứ tự Python.
 - **Lý do:** đầu ra Python phụ thuộc thứ tự hệ điều hành liệt kê file: đảo thứ tự trên kg-solo đổi 593/726 `edges.id` và đổi điểm `related` cỡ 1e-5. Ghim thứ tự giúp golden dựng trên máy này khớp trên máy khác mà không phải nới luật so. Nếu phase index hoặc related không giữ được thứ tự này thì phần đó ghi ngoại lệ có tên, không nới luật chung.
 - **Bằng chứng:** báo cáo `plans/reports/fullstack-developer-261102-1317-phase-05-parity.md`, `parity/dump-python.py`.
+
+## Gói OHS: ghim artifact của một run CI của fork
+- **Ngày:** 2026-11-02
+- **Lựa chọn:** khi GitHub Release `v0.17.2-vantt.1` của fork chưa có gói, phase `ohs` và bộ cài lấy gói từ artifact của run `41398112909` (repo `vantt/obsidian-hybrid-search`), kiểm sha256. Fork có gói trên Release thì chuyển sang Release.
+- **Lý do:** user chọn (2026-11-02). Smoke trên darwin-arm64 và win32-x64 của fork đang hỏng nên Release chưa có file.
+- **Bằng chứng:** `plans/reports/probe-s3-ohs-261102-1317.md`.
+
+## Bốn dạng YAML làm Python crash: Rust ghi lỗi cho note
+- **Ngày:** 2026-11-02
+- **Lựa chọn:** với `!!bool maybe`, `!!timestamp soon`, `!!int ""` và alias vòng trong list, Rust không dừng build mà ghi lỗi YAML cho note đó; ghi "Lệch có chủ ý" trong `spec/PORTING.md` và ngoại lệ có tên trong `parity/exceptions.toml`. Chưa mở issue ở repo đặc tả.
+- **Lý do:** user chọn (2026-11-02).
+- **Bằng chứng:** `plans/reports/probe-s1-yaml-261102-1317.md`.
