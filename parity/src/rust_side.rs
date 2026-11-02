@@ -5,6 +5,10 @@
 //! làm được, `None` khi chưa. Mục trả `None` được khai trong `not_available` của manifest và báo
 //! "chưa có"; bộ so khớp không bao giờ tính chúng là khớp.
 
+mod note_tables;
+
+use std::cell::OnceCell;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Result, bail};
@@ -30,6 +34,8 @@ pub struct CliOutput {
 pub struct RustSide {
     vault: PathBuf,
     run: Value,
+    /// Bảng của `vault` và `schema`, dựng một lần khi được hỏi lần đầu.
+    note_tables: OnceCell<HashMap<&'static str, note_tables::Rows>>,
 }
 
 impl RustSide {
@@ -37,6 +43,7 @@ impl RustSide {
         Self {
             vault: vault.to_path_buf(),
             run: run.clone(),
+            note_tables: OnceCell::new(),
         }
     }
 
@@ -51,12 +58,15 @@ impl RustSide {
 
     /// Các dòng của một bảng index (hoặc view `v3_deviations`) sau khi build đủ rồi build tăng dần
     /// không đổi gì, mỗi dòng một object theo thứ tự cột của `columns`.
-    pub fn table(
-        &self,
-        _name: &str,
-        _columns: &[String],
-    ) -> Result<Option<Vec<Map<String, Value>>>> {
-        Ok(None)
+    pub fn table(&self, name: &str, columns: &[String]) -> Result<Option<Vec<Map<String, Value>>>> {
+        let tables = match self.note_tables.get() {
+            Some(t) => t,
+            None => {
+                let built = note_tables::build(&self.vault, &self.run)?;
+                self.note_tables.get_or_init(|| built)
+            }
+        };
+        note_tables::rows(tables, name, columns)
     }
 
     /// Một câu của `.kg-answers.json`, chạy như `fixture_check.run` của repo đặc tả.

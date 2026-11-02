@@ -265,11 +265,19 @@ fn rust_side_reports_every_missing_layer_as_not_available_never_as_match() {
     let r = Dump::open(&tmp.path().join("rust")).unwrap();
     let cmp = compare(&g, &r, &[]).unwrap();
     assert!(!cmp.items.is_empty());
+    // Bảng mà `vault` và `schema` đã dựng được thì có kết quả (vault giả rỗng nên lệch); mọi mục khác là "chưa có".
+    let built = |table: &str| {
+        ["nodes", "props", "raw_links", "blocks", "names", "links"].contains(&table)
+            || pkm_core::schema::TABLES.contains(&table)
+    };
     for i in &cmp.items {
-        assert_eq!(i.status, Status::NotAvailable, "{}/{}", i.layer, i.item);
+        if i.layer == "index" && built(&i.item) {
+            assert_ne!(i.status, Status::NotAvailable, "{}/{}", i.layer, i.item);
+        } else {
+            assert_eq!(i.status, Status::NotAvailable, "{}/{}", i.layer, i.item);
+        }
     }
     assert!(cmp.perf.is_none());
-    assert_eq!(exit_code(&cmp, false), 0);
     assert_eq!(exit_code(&cmp, true), 1, "--strict: còn mục chưa có là lỗi");
 }
 

@@ -1,0 +1,372 @@
+# Knowledge graph schema for the Obsidian vault.
+# Human-readable companion: Schema.md (same folder). The two files must agree;
+# edit both in the same change and bump schema_version on any breaking change.
+
+schema_version: 3
+updated: 2026-10-29
+# v3 is backward compatible: every new field is optional or claim-only; the bump is for lint rules R11-R15.
+# Dates are full ISO days (YYYY-MM-DD); validity windows are closed: valid_to is still valid on that day.
+
+# ---------------------------------------------------------------------------
+# Enumerations (controlled vocabularies)
+# ---------------------------------------------------------------------------
+enums:
+  confidence: [speculative, plausible, established]
+  evidence_type: [anecdote, observational, experimental, textual, expert]
+  status: [proposed, accepted, rejected, superseded]
+  proposed_by: [llm, model, rule, human]   # model = embedding or other ML model, not an LLM; rule = deterministic script
+  cardinality: [one, many]
+  polarity: ["+", "-", "?"]
+  timing: [before, same, after, immediate, delayed]
+  presence: [trigger, ongoing, sustains, absence]
+  strength: [decisive, dominant, support, weak]
+  role: [root]
+
+# ---------------------------------------------------------------------------
+# Node types. Every note must have exactly one `type` from this list.
+# ---------------------------------------------------------------------------
+properties_common:
+  required: [type]
+  optional: [aliases, tags, schema_version, proposed_by, extracted_by, asserted_at]
+  fields:
+    proposed_by: {enum: proposed_by}
+    extracted_by: {type: text, pattern: "^.+@schema_v[0-9]+$"}   # model or script, e.g. multilingual-e5-small@schema_v3
+    asserted_at: {type: date}       # when the vault learned it: the reviewer's acceptance, or the first git commit
+
+# Packs: optional node types and edges a vault turns on in its index config (packs: [capture]).
+# A pack may add node types, edges, enums, and widen the domain or range of a core edge.
+# Defined at the end of this file.
+
+node_types:
+  concept:
+    description: Khái niệm, chủ đề (SKOS concept).
+  factor:
+    description: >-
+      Biến số, trạng thái hoặc sự kiện có thể có/không, tăng/giảm.
+      Loại node duy nhất được tham gia edge nhân quả.
+    naming: Tên là trạng thái hoặc biến ("Lượng caffeine"), không là đồ vật ("Cà phê").
+  claim:
+    description: >-
+      Một khẳng định có bằng chứng: edge nhân quả được nâng thành note, hoặc dữ kiện có thời hạn
+      (người làm ở đâu, ai là đầu mối) khi bật gói business.
+    required: [relation, confidence, source, status]
+    required_if:
+      - when: {relation_group: causal}
+        then: [cause, effect]
+      - when: {relation_group: facts}
+        then: [subject, object]
+      - when: {relation: conditions}
+        then: [counterfactual]
+      - when: {status: superseded}
+        then: [superseded_by, valid_to]
+    optional:
+      [polarity, timing, presence, mutual, strength, repetition, role,
+       scope, mechanism, evidence_type, jointly_with, valid_from, valid_to, superseded_by]
+    fields:
+      relation: {enum_of_edges: [causal, facts]}
+      cause: {link_to: [factor]}
+      effect: {link_to: [factor]}
+      subject: {link_to: [person]}
+      object: {link_to: [organization]}
+      valid_from: {type: date}
+      valid_to: {type: date}        # closed: still valid on this day
+      jointly_with: {link_to: [factor], list: true}
+      source: {link_to: [source, note], list: true, min: 1, block_ref: allowed}   # plus pack widenings of the source edge
+      confidence: {enum: confidence}
+      evidence_type: {enum: evidence_type}
+      status: {enum: status}
+      polarity: {enum: polarity}
+      timing: {enum: timing}
+      presence: {enum: presence}
+      strength: {enum: strength}
+      role: {enum: role}
+      mutual: {type: boolean}
+      repetition: {type: boolean}
+      scope: {type: text}
+      mechanism: {type: text}
+      counterfactual: {type: text}
+  source:
+    description: Sách, paper, bài viết, bài kinh.
+    optional: [author, year, url]
+    fields:
+      author: {link_to: [person], list: true}
+      year: {type: number}
+      url: {type: text}
+  person:
+    description: Người.
+  project:
+    description: Dự án.
+  tool:
+    description: Công cụ, phần mềm, thư viện.
+  moc:
+    description: >-
+      Map of Content: bản đồ người viết về khoảng giữa các note của một chủ đề (nhìn rộng, nhìn sâu, góc nhìn,
+      chỗ còn trống). Xoá hết link mà phần còn lại vẫn đáng đọc. Máy không tạo moc; trang liệt kê là toc.
+  note:
+    description: Ghi chép tự viết (dàn ý, tóm tắt, bài học, ý rút ra).
+
+# ---------------------------------------------------------------------------
+# Edge types. Write only the forward key, in the source note's frontmatter,
+# as a list of quoted wikilinks. Inverses are implied (Breadcrumbs), never written.
+# domain/range use node type names; "*" means any type.
+# ---------------------------------------------------------------------------
+edge_groups:
+  hierarchy: [up, part_of, next]
+  association: [related, uses]
+  evidence: [source, supports, disputes]
+  lifecycle: [superseded_by]
+  causal: [correlates_with, increases, decreases, conditions, prevents]
+  navigation: [parent_moc]
+
+edges:
+  up:
+    inverse: down
+    domain: [concept]
+    range: [concept]           # semantic only; MOC membership is navigation (parent_moc, MOC body)
+    transitive_implied: true   # [up, up] -> up_transitive, never asserted
+    definition: Đích rộng hơn nguồn (SKOS broader).
+  parent_moc:
+    inverse: child_moc
+    domain: [moc]
+    range: [moc]
+    definition: MOC đích là MOC cha của MOC nguồn trong cây điều hướng. Không mang nghĩa phân loại.
+  part_of:
+    inverse: has_part
+    domain: ["*"]
+    range: [same]              # target must have the same type as the source
+    definition: Nguồn là một thành phần của đích.
+  next:
+    inverse: prev
+    domain: ["*"]
+    range: ["*"]
+    definition: Đích đứng ngay sau nguồn trong một chuỗi có thứ tự.
+  related:
+    inverse: related
+    symmetric: true
+    domain: ["*"]
+    range: ["*"]
+    excludes_with: [up]        # SKOS S27: never both related and up on one pair
+    definition: Liên quan, không phân cấp, không nhân quả.
+  uses:
+    inverse: used_by
+    domain: [project, tool]
+    range: [tool, concept]
+    definition: Nguồn dùng đích.
+  source:
+    inverse: cited_by
+    domain: ["*"]
+    range: [source, note]      # packs widen it (business: meeting, document, contract; capture: clip, quote)
+    block_ref: allowed         # "[[Note#^block]]"; R13 checks the block exists
+    definition: Nội dung của nguồn lấy từ đích.
+  superseded_by:
+    inverse: supersedes
+    domain: [claim]            # business pack adds contract, decision, document
+    range: [same]
+    cardinality: one
+    definition: Đích thay thế nguồn từ ngày sau valid_to của nguồn. Thay chứ không xoá.
+  supports:
+    inverse: supported_by
+    domain: [source, claim]
+    range: [claim]
+    definition: Nguồn là bằng chứng ủng hộ claim đích (CiTO supports).
+  disputes:
+    inverse: disputed_by
+    domain: [source, claim]
+    range: [claim]
+    definition: Nguồn là bằng chứng phản bác claim đích (CiTO disputes).
+
+  # Causal family, ordered from weakest to strongest claim.
+  correlates_with:
+    inverse: correlates_with
+    symmetric: true
+    domain: [factor]
+    range: [factor]
+    rung: 1
+    passes: [1]
+    definition: Quan sát thấy đi cùng nhau; chưa khẳng định nhân quả.
+  increases:
+    inverse: increased_by
+    domain: [factor]
+    range: [factor]
+    rung: 2
+    passes: [1, 2]
+    polarity: "+"
+    definition: Nguồn tăng thì đích tăng; thiếu nguồn đích vẫn có thể có.
+  decreases:
+    inverse: decreased_by
+    domain: [factor]
+    range: [factor]
+    rung: 2
+    passes: [1, 2]
+    polarity: "-"
+    definition: Nguồn tăng thì đích giảm; thiếu nguồn đích vẫn có thể có.
+  conditions:
+    inverse: conditioned_by
+    domain: [factor]
+    range: [factor]
+    rung: 3
+    passes: [1, 2, 3, 4]
+    human_only: true           # LLM may never assert this; only propose lower rungs
+    definition: >-
+      Nguồn là duyên của đích: thiếu nguồn thì đích không có,
+      dứt nguồn thì đích dứt (trong phạm vi đang xét). Cần, không nhất thiết đủ.
+  prevents:
+    inverse: prevented_by
+    domain: [factor]
+    range: [factor]
+    rung: 2
+    passes_inverted: [1]       # clause 1 reversed: this being, that does not arise
+    polarity: "-"
+    definition: Nguồn có thì đích không khởi lên.
+
+# The four clauses of idappaccayatā, used as acceptance tests (`passes` above).
+causal_tests:
+  1: "Cái này có, cái kia có: đích hiện diện cùng nguồn."
+  2: "Cái này sinh, cái kia sinh: nguồn khởi thì đích khởi theo."
+  3: "Cái này không có, cái kia không có: thiếu nguồn thì đích không có."
+  4: "Cái này diệt, cái kia diệt: dứt nguồn thì đích dứt."
+
+# ---------------------------------------------------------------------------
+# Validation rules (for Propsec config and the external lint script).
+# ---------------------------------------------------------------------------
+rules:
+  - id: R1
+    check: every note has exactly one `type` from node_types
+  - id: R2
+    check: every frontmatter key that holds wikilinks is an edge key, a claim field, or a node-type field
+  - id: R3
+    check: every edge target resolves to an existing note
+  - id: R4
+    check: source note type is in edge.domain and target note type is in edge.range
+  - id: R5
+    check: inverse keys (down, has_part, used_by, ...) are never written in frontmatter
+  - id: R6
+    check: no pair has both `related` and `up` (either direction)
+  - id: R7
+    check: no edge points to its own note
+  - id: R8
+    check: each alias and note title is unique across the vault (case- and diacritic-insensitive)
+  - id: R9
+    check: claim notes satisfy required, required_if and enum fields
+  - id: R10
+    check: a `conditions` edge or claim written or last modified by an LLM must have status proposed
+  - id: R11
+    check: dates are YYYY-MM-DD; valid_from <= valid_to; asserted_at is not in the future
+  - id: R12
+    check: status superseded has superseded_by and valid_to; target has the same type, exists, is not itself, no cycle
+  - id: R13
+    check: a "#^block" in source exists in the target note; an accepted claim has at least one source
+  - id: R14
+    check: extends names an existing type, no cycle; domain and range accept subtypes
+  - id: R15
+    check: an edge with cardinality one has at most one target at any date of its validity window
+# R9 also requires extracted_by when proposed_by is llm.
+
+# ---------------------------------------------------------------------------
+# Rules for LLM agents writing to the vault.
+# ---------------------------------------------------------------------------
+llm_policy:
+  allowed_edges: all except human_only
+  new_edge_types: propose in schema-proposals.md, never write
+  new_nodes: search titles and aliases first; link to existing note on match
+  causal_default_rung: 1-2      # correlates_with, increases, decreases, prevents
+  claim_status_on_create: proposed
+  mark_provenance: true         # add `proposed_by: llm` and `extracted_by: <model>@schema_v3` on what it creates
+
+# ---------------------------------------------------------------------------
+# Packs (turned on per vault). Node types may declare `extends: <type>` (one parent, no cycle).
+# ---------------------------------------------------------------------------
+packs:
+  business:
+    description: Người làm một mình làm việc với khách hàng (bộ kg-solo của obsidian-test-fixture).
+    node_types:
+      organization: {description: Công ty, tổ chức.}
+      document: {description: Tài liệu có vòng đời (bảng giá, đề xuất, quy trình).}
+      contract: {extends: document, description: Hợp đồng.}
+      meeting: {description: Cuộc họp.}
+      decision: {description: Quyết định.}
+    edges:
+      client: {inverse: has_project, domain: [project], range: [organization], cardinality: one}
+      party: {inverse: has_contract, domain: [contract], range: [organization], cardinality: one}
+      covers: {inverse: covered_by, domain: [contract], range: [project]}
+      decided_in: {inverse: decision, domain: [decision], range: [meeting], cardinality: one}
+      affects: {inverse: affected_by, domain: [decision], range: [project, contract, document]}
+    facts:                       # written as claims with a validity window (D5)
+      works_at: {inverse: employs, domain: [person], range: [organization]}
+      contact_for: {inverse: contact, domain: [person], range: [organization], cardinality: one}
+    widen:
+      source: {range: [meeting, document, contract]}
+      supports: {domain: [meeting, document]}
+      disputes: {domain: [meeting, document]}
+      superseded_by: {domain: [document, decision]}
+    lifecycle_types: [document, contract, decision]   # may carry valid_from, valid_to, status superseded
+
+  capture:
+    description: >-
+      Người lưu nhiều (trích, bài cắt) muốn ra đầu ra (ý, bài viết). Dùng cho vault xưởng E11.
+      Giữ bộ khung thẻ của user: wf (trạm), wise (độ thông thái của nội dung note), use (mức dùng).
+    enums:
+      wf: [to-read, to-research, to-summary, to-clarify, to-review, re-read, to-re-read, to-absorb, re-think,
+           to-remember, to-surprise, to-organize, to-apply, to-blog, to-mixture, done]
+      wise: [1, 2, 3, 4, 5, 6, 7]   # DIKW of the content: raw, signal, information, knowledgeable, understanding, wisdom, enlightenment
+      use: [1, 2, 3, 4, 5, 6, 7]
+      post_status: [ý tưởng, nháp, đã đăng]
+      project_status: [đang làm, tạm dừng, xong]
+      proposal_status: [chờ, nhận, bỏ, đã áp dụng, đã bỏ]
+      proposal_kind: [duplicate, same-topic, fix-link, type-batch, related, idea, person]
+    properties:                  # on any note of a capture vault
+      wf: {enum: wf, list: true}
+      wise: {enum: wise}         # set by the person
+      use: {enum: use}
+      url: {type: text}          # web address of what was captured (not `source`, which is an edge)
+      created: {type: datetime}
+      updated: {type: datetime}
+      proposed_type: {type: text}   # machine guess waiting for review; removed when accepted
+    node_types:
+      toc:
+        description: >-
+          Mục lục do máy sinh (trang chủ đề của một thư mục): liệt kê note, dựng lại được, không phải bản đồ.
+          Không phải moc.
+      quote:
+        description: Trích ngắn (tweet, câu sách).
+        fields:
+          author: {link_to: [person], cardinality: one}
+          captured: {type: datetime}
+          captured_via: {type: text}
+      clip:
+        description: Bài cắt từ web, video, ảnh chụp.
+        fields:
+          why: {type: text}      # one sentence, written by the person only
+      post:
+        description: Bài viết, từ ý tưởng tới đã đăng.
+        fields:
+          status: {enum: post_status}
+          channel: {type: text}
+      step:
+        description: Một bước của dự án chia bước.
+        fields:
+          project: {link_to: [project], cardinality: one}
+          order: {type: number}
+          final: {type: boolean}
+      proposal:
+        description: Đề xuất của máy chờ người duyệt (hàng chờ); hồ sơ gốc của mọi cạnh được nhận.
+        fields:
+          kind: {enum: proposal_kind}
+          status: {enum: proposal_status}
+          notes: {link_to: ["*"], list: true}
+          reason: {type: text}
+          closed: {type: datetime}
+          reject_reason: {type: text}
+    node_fields:                 # fields added to core types
+      note: {gist: {type: text}}
+      project: {status: {enum: project_status}, goal: {type: text}}
+    edges:
+      topic: {inverse: topic_of, group: navigation, domain: ["*"], range: [toc, moc],
+              definition: Note thuộc chủ đề đích (mục lục sinh từ thư mục, hoặc MOC người viết). Điều hướng, không phân loại.}
+      who: {inverse: mentioned_in, group: association, domain: ["*"], range: [person],
+            definition: Note nhắc tới người đích (trục ngữ cảnh ctx-who của user).}
+      duplicate_of: {inverse: has_duplicate, group: lifecycle, domain: ["*"], range: [same], cardinality: one,
+                     definition: Nguồn có nội dung giống hệt đích; đích là bản giữ. Không xoá nguồn.}
+    widen:
+      source: {range: [clip, quote]}            # an idea note cites the clip it came from
+      uses: {domain: [post], range: [note, quote, clip]}

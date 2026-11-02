@@ -9,7 +9,11 @@ publish.workspace = true
 [dependencies]
 caseless = "0.2"
 serde_json = { version = "1", features = ["preserve_order"] }
+indexmap = "2"
+regex = "1"
+sha1_smol = "1"
 unicode-normalization = "0.1"
+unsafe-libyaml = "0.2.11"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

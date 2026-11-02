@@ -8,3 +8,10 @@
 # item = "neighbors"               # bảng, op, tool, file MCP (initialize, tools_list, instructions) hay id lệnh CLI; "*" = mọi mục
 # fields = ["/result/items/*/claim"]  # tuỳ chọn: chỉ tha khi mọi chỗ lệch nằm dưới các trường này ("*" khớp một đoạn)
 # reason = "một câu; chi tiết ở spec/PORTING.md"
+
+[[exception]]
+name = "yaml-python-dung-build"
+layer = "index"
+item = "nodes"
+fields = ["/yaml_error"]
+reason = "Các dạng YAML làm Python dừng cả lần build (`!!bool maybe`, `!!timestamp soon`, `!!int \"\"`, alias vòng trong list, ...): Rust ghi `YAML lỗi: <tên ngoại lệ>` cho riêng note"

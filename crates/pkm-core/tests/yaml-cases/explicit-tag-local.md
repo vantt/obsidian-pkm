@@ -1,0 +1,4 @@
+---
+local: !foo bar
+---
+body
