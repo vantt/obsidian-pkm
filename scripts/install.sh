@@ -74,7 +74,7 @@ parse_args() {
   while [ $# -gt 0 ]; do
     case "$1" in
       --version|--install-dir|--mcp-install|--local-fixture|--repo|--release-base-url)
-        [ $# -ge 2 ] && [ -n "$2" ] || usage_err "$1 needs a value"
+        if [ $# -lt 2 ] || [ -z "$2" ]; then usage_err "$1 needs a value"; fi
         case "$1" in
           --version) VERSION="$2" ;;
           --install-dir) INSTALL_DIR="$2" ;;
