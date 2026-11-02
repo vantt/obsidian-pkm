@@ -42,7 +42,7 @@ const USAGE: &str = "Cách gọi:
   pkm VAULT stats | validate | find | note | neighbors | reach | paths | loops | provenance | select | valid ...
   pkm VAULT mcp [--packs business] [--db PATH] ...       MCP server stdio (pkm VAULT mcp --help)
   pkm mcp install VAULT [--dry-run] | --check | --remove  cài MCP `kg` cho Claude Desktop (pkm mcp install --help)
-  pkm doctor [--json]                                     chẩn đoán cấu hình, index, gói OHS
+  pkm doctor [--json] [--deep]                            chẩn đoán (chỉ đọc) cấu hình, index, gói OHS
 Chi tiết lệnh trên vault: pkm VAULT stats --help.";
 
 #[derive(Parser)]

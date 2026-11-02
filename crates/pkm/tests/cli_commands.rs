@@ -202,14 +202,15 @@ fn doctor_reports_json_and_fails_without_config_entry() {
         &config.to_string_lossy(),
         "--ohs",
         &tmp.path().join("ohs").to_string_lossy(),
-        "--no-ohs-start",
         "--json",
     ]);
     assert_eq!(o.status.code(), Some(1), "{o:?}");
     let rep: Value = serde_json::from_str(&stdout(&o)).unwrap();
-    assert_eq!(rep["healthy"], false);
+    assert_eq!(rep["schema"], 1);
+    assert_eq!(rep["ok"], false);
+    assert_eq!(rep["error"]["code"], "checks_failed");
     assert!(
-        rep["checks"]
+        rep["data"]["checks"]
             .as_array()
             .unwrap()
             .iter()

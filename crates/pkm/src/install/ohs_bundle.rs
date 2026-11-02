@@ -8,6 +8,10 @@
 //! Tải artifact của GitHub Actions cần đăng nhập GitHub, kể cả repo công khai. Có `gh` đã đăng nhập thì bộ cài tự tải;
 //! nếu không, người dùng tải `bundle-<nền tảng>.zip` ở trang run (đã đăng nhập) rồi chỉ tới file bằng
 //! `--ohs-package <file>`. Cũng nhận gói đã giải nén (thư mục) hoặc chính file gói khi biết sha256 ghim của nó.
+//!
+//! Đổi nguồn mà không cần bản `pkm` mới (ví dụ khi artifact ghim hết hạn): URL `https://…` của file gói, kèm
+//! `<URL>.sha256` cùng chỗ (như asset của GitHub Release), qua `--ohs-package <URL>` hoặc biến [`PACKAGE_ENV`]. Gói
+//! tải theo URL được kiểm với file `.sha256` đó, không cần khớp bản ghim.
 
 use std::fs::{self, File};
 use std::io::{self, BufReader, Read, Seek, Write};
@@ -23,6 +27,8 @@ pub const REPO: &str = "vantt/obsidian-hybrid-search";
 pub const RUN_ID: u64 = 41_398_112_909;
 /// Phiên bản OHS của gói.
 pub const VERSION: &str = "0.17.2-vantt.1";
+/// Biến môi trường thay nguồn tự tải của bộ cài: đường dẫn (như `--ohs-package`) hoặc URL `https://` của file gói.
+pub const PACKAGE_ENV: &str = "PKM_OHS_PACKAGE";
 
 /// Một gói ghim cho một nền tảng.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -110,15 +116,33 @@ pub enum Source {
     Download,
     /// File zip artifact, file gói, hoặc thư mục gói đã giải nén.
     Path(PathBuf),
+    /// URL `https://` của file gói (`.tar.gz` hoặc `.zip`); sha256 lấy từ `<URL>.sha256`.
+    Url(String),
+}
+
+impl Source {
+    /// Nguồn người dùng chỉ ra (cờ `--ohs-package` hoặc biến [`PACKAGE_ENV`]): `https://…` là URL, chuỗi có `://`
+    /// khác là lỗi (chỉ tải qua https), còn lại là đường dẫn.
+    pub fn parse(text: &str) -> Result<Self, String> {
+        if text.starts_with("https://") {
+            Ok(Self::Url(text.to_owned()))
+        } else if text.contains("://") {
+            Err(format!("{text}: chỉ tải gói OHS qua https://"))
+        } else {
+            Ok(Self::Path(PathBuf::from(text)))
+        }
+    }
 }
 
 /// Cài gói từ `source` vào `dest` (thay gói cũ nếu có), trả gói đã kiểm. `log` nhận các dòng tiến độ. `bundle` là
-/// gói ghim của máy này; tải và kiểm file cần nó, chép thư mục thì không.
+/// gói ghim của máy này; tải và kiểm file cần nó, chép thư mục và nguồn URL thì không. `fetch(url, file)` tải nguồn
+/// URL (bản thật: [`curl`]).
 pub fn install(
     source: &Source,
     bundle: Option<&Bundle>,
     dest: &Path,
     log: &mut dyn Write,
+    fetch: &dyn Fn(&str, &Path) -> Result<(), String>,
 ) -> Result<OhsPackage, String> {
     let parent = dest
         .parent()
@@ -150,6 +174,23 @@ pub fn install(
             out
         }
         Source::Path(p) => unpack_file(p, pinned()?, &staging.path, log)?,
+        Source::Url(url) => {
+            let _ = writeln!(log, "tải gói OHS từ {url}…");
+            let file = staging.path.join("download");
+            fetch(url, &file)?;
+            let sidecar = staging.path.join("download.sha256");
+            fetch(&format!("{url}.sha256"), &sidecar)
+                .map_err(|e| format!("{e}; nguồn URL cần file <URL>.sha256 cùng chỗ"))?;
+            let expected = read_sha256(&sidecar)?;
+            let got = sha256_file(&file).map_err(|e| format!("đọc gói vừa tải: {e}"))?;
+            if got != expected {
+                return Err(format!(
+                    "sha256 của gói tải từ {url} là {got}, {url}.sha256 ghi {expected}: không cài"
+                ));
+            }
+            let _ = writeln!(log, "sha256 của gói khớp {url}.sha256 ({got})");
+            unpack_archive(&file, &staging.path)?
+        }
     };
     OhsPackage::from_dir(&root).map_err(|e| format!("gói OHS không dùng được: {e}"))?;
     swap_into(&root, dest)?;
@@ -208,6 +249,36 @@ fn download(bundle: &Bundle, out: &Path) -> Result<(), String> {
         ));
     }
     Ok(())
+}
+
+/// Tải `url` bằng `curl` (có sẵn trên Windows 10 trở lên, macOS, Linux), chỉ qua https, kể cả khi chuyển hướng.
+pub fn curl(url: &str, out: &Path) -> Result<(), String> {
+    let output = Command::new("curl")
+        .args(["--proto", "=https", "--tlsv1.2", "-fsSL", "--retry", "2"])
+        .args(["--connect-timeout", "20", "-o"])
+        .arg(out)
+        .arg(url)
+        .stdin(Stdio::null())
+        .output()
+        .map_err(|e| format!("không chạy được curl để tải {url}: {e}"))?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(format!(
+            "curl không tải được {url} ({})",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ))
+    }
+}
+
+/// Chữ đầu của file `.sha256` (dạng `sha256sum`): 64 ký tự hex, đưa về chữ thường.
+fn read_sha256(path: &Path) -> Result<String, String> {
+    let text = fs::read_to_string(path).map_err(|e| format!("đọc {}: {e}", path.display()))?;
+    text.split_whitespace()
+        .next()
+        .map(str::to_lowercase)
+        .filter(|h| h.len() == 64 && h.bytes().all(|b| b.is_ascii_hexdigit()))
+        .ok_or_else(|| "file .sha256 không bắt đầu bằng sha256 hex".to_owned())
 }
 
 /// Kiểm sha256 của `file` rồi giải nén vào `staging`; trả thư mục gốc của gói. Nhận file zip artifact (digest ghim)
@@ -454,6 +525,16 @@ fn hex(bytes: &[u8]) -> String {
 mod tests {
     use super::*;
 
+    /// Cài với `curl` thật (chỉ dùng cho nguồn không phải URL, hoặc test `#[ignore]`).
+    fn install(
+        source: &Source,
+        bundle: Option<&Bundle>,
+        dest: &Path,
+        log: &mut dyn Write,
+    ) -> Result<OhsPackage, String> {
+        super::install(source, bundle, dest, log, &curl)
+    }
+
     /// Gói giả nhỏ: thư mục gốc `ohs-x/` có Node và `cli.js` như gói thật.
     fn node_rel() -> &'static str {
         if cfg!(windows) {
@@ -651,6 +732,87 @@ mod tests {
         )
         .unwrap_err();
         assert!(err.contains("không thấy gói OHS"), "{err}");
+    }
+
+    /// Hàm tải giả: trả nội dung theo URL từ bảng, URL lạ là lỗi như `curl -f` gặp 404.
+    fn served(files: Vec<(String, Vec<u8>)>) -> impl Fn(&str, &Path) -> Result<(), String> {
+        move |url, out| {
+            let body = files
+                .iter()
+                .find(|(u, _)| u == url)
+                .map(|(_, b)| b)
+                .ok_or_else(|| format!("404 {url}"))?;
+            fs::write(out, body).map_err(|e| e.to_string())
+        }
+    }
+
+    #[test]
+    fn installs_from_https_url_checked_against_its_sha256_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let archive = tar_gz("ohs-x");
+        let url = "https://example.test/ohs-linux-x64.tar.gz";
+        let fetch = served(vec![
+            (url.to_owned(), archive.clone()),
+            (
+                format!("{url}.sha256"),
+                format!("{}  ohs-linux-x64.tar.gz\n", sha(&archive).to_uppercase()).into_bytes(),
+            ),
+        ]);
+        let dest = tmp.path().join("ohs");
+        let mut log = Vec::new();
+        // Không cần gói ghim: nguồn URL kiểm bằng file .sha256 của chính nó.
+        super::install(&Source::Url(url.into()), None, &dest, &mut log, &fetch).unwrap();
+        assert!(dest.join("app/dist/src/cli.js").is_file());
+        assert!(String::from_utf8(log).unwrap().contains("khớp"));
+    }
+
+    #[test]
+    fn rejects_url_package_with_wrong_or_missing_sha256() {
+        let tmp = tempfile::tempdir().unwrap();
+        let url = "https://example.test/ohs.tar.gz";
+        let dest = tmp.path().join("ohs");
+        let wrong = served(vec![
+            (url.to_owned(), tar_gz("ohs-x")),
+            (format!("{url}.sha256"), "0".repeat(64).into_bytes()),
+        ]);
+        let err = super::install(
+            &Source::Url(url.into()),
+            None,
+            &dest,
+            &mut Vec::new(),
+            &wrong,
+        )
+        .unwrap_err();
+        assert!(err.contains("không cài"), "{err}");
+        let missing = served(vec![(url.to_owned(), tar_gz("ohs-x"))]);
+        let err = super::install(
+            &Source::Url(url.into()),
+            None,
+            &dest,
+            &mut Vec::new(),
+            &missing,
+        )
+        .unwrap_err();
+        assert!(err.contains("<URL>.sha256"), "{err}");
+        assert!(!dest.exists());
+    }
+
+    #[test]
+    fn source_parse_accepts_https_urls_and_paths_only() {
+        assert_eq!(
+            Source::parse("https://h/x.zip"),
+            Ok(Source::Url("https://h/x.zip".into()))
+        );
+        assert_eq!(
+            Source::parse("D:\\ohs.zip"),
+            Ok(Source::Path(PathBuf::from("D:\\ohs.zip")))
+        );
+        assert!(
+            Source::parse("http://h/x.zip")
+                .unwrap_err()
+                .contains("https")
+        );
+        assert!(Source::parse("file:///x.zip").is_err());
     }
 
     #[test]

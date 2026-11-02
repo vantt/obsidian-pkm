@@ -130,3 +130,22 @@ Mỗi quyết định một mục, theo khung:
   - Chưa làm: release nháp rồi chạy thử bộ cài trên release thật trước khi công khai (REL-07), ký mã và provenance (SEC-02, PRD mục 12).
 - **Lý do:** REL-03/04/05/06/10, VER-02/07, TST-02 của skill. Gọi lại `ci.yml` thay vì chép bước để release luôn chạy đúng bộ kiểm của CI (gồm so khớp).
 - **Bằng chứng:** audit (I6, I7); `gh api repos/<action>/commits/<tag>`.
+
+## `pkm doctor`: chỉ đọc, OHS chỉ là cảnh báo, envelope `--json` cố định
+- **Ngày:** 2026-11-02
+- **Lựa chọn:** `doctor` mặc định không ghi gì và không chạy OHS: chỉ kiểm gói có đủ file và `node --version`. Chạy thử OHS cần `--deep` (bỏ `--no-ohs-start`). Mục OHS không ổn (thiếu gói, Node hỏng, mọi trạng thái của `--deep`) chỉ là `warn`. Mục `kg` cài với `--no-ohs` (`env.PKM_NO_OHS = "1"`) thì thiếu gói là `skip`. `--json` in `{"schema": 1, "ok", "data": {"checks": [{"id", "status", "detail", "action", "fix"}]}, "error", "next"}`. `fix` là lệnh chạy được, không hỏi gì, cho PowerShell trên Windows và `sh` nơi khác; `next` là `fix` của các mục `fail`. Hợp đồng chi tiết nằm ở `spec/PORTING.md`, mục bộ cài.
+- **Lý do:** chẩn đoán không được ghi. Chạy OHS có thể bắt đầu index và nạp model trên DB dùng chung với MCP `ohs`. User chốt OHS là tuỳ chọn lúc này (tích hợp OHS do việc khác lo): không có OHS thì chỉ `related` khi không có `hits` bị ảnh hưởng, nên thiếu OHS không được làm `doctor` báo hỏng. Chốt khoá JSON ngay vì chưa ai gọi `doctor --json`, theo chuẩn envelope của skill `cs-packaging-distribution` (CMD-11, DOC-01/03). Chưa có `--fix`, vì `fix` đã là lệnh chạy được.
+- **Bằng chứng:** `crates/pkm/src/doctor.rs`, `crates/pkm/src/doctor/tests.rs`, `plans/reports/fullstack-developer-261102-1520-doctor-install-fixes.md`.
+
+## `pkm mcp install`: binary phải ở chỗ cài ổn định, so rồi mới ghi, nguồn OHS đổi được bằng biến
+- **Ngày:** 2026-11-02
+- **Lựa chọn:**
+  - Binary ở chỗ cài ổn định là binary nằm ở một trong ba chỗ: thư mục chuẩn (hằng `STANDARD_BIN_DIR`: `%LOCALAPPDATA%\pkm\bin` trên Windows, `~/.local/bin` nơi khác, cùng mặc định với `install.ps1`/`install.sh`), `PKM_INSTALL_DIR`, hoặc thư mục có `.pkm-managed` của bộ cài. Binary ở chỗ khác thì `mcp install` từ chối trừ khi có `--force`. Lời từ chối nói rõ khi file nằm trong Downloads hay thư mục tạm, và in lệnh bộ cài (`gh release download --repo vantt/obsidian-pkm --pattern install.ps1|install.sh`, vì repo riêng tư) cùng lệnh chạy lại từ chỗ chuẩn.
+  - Trước khi ghi cấu hình: hỏi lại Claude Desktop, đọc lại file và so sha256 với bản đã đọc. Khác thì đặt lại mục `kg` trên bản mới.
+  - `PKM_OHS_PACKAGE` thay nguồn tự tải gói OHS. Giá trị là đường dẫn, hoặc URL https của file gói kèm `<URL>.sha256`.
+- **Lý do:**
+  - Claude Desktop gọi đúng đường dẫn ghi trong cấu hình, nên binary trong Downloads bị xoá là `kg` hỏng.
+  - Giữ bề mặt lệnh của PRD, nên dùng lại `--force` thay vì thêm cờ.
+  - Dựng index có thể mất vài phút; trong lúc đó, nếu Claude Desktop mở hoặc app khác sửa file mà ta vẫn ghi thì thay đổi đó mất.
+  - Artifact ghim hết hạn ngày 2027-01-31, và máy khách không có `gh`. Đổi nguồn bằng biến môi trường thì không cần ra bản `pkm` mới. Nguồn URL kiểm bằng `.sha256` đi kèm, như asset của Release.
+- **Bằng chứng:** `crates/pkm/src/install.rs`, `crates/pkm/src/install/{ohs_bundle,shell,tests}.rs`.

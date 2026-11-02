@@ -11,6 +11,7 @@ pub mod config;
 pub mod desktop;
 pub mod handshake;
 pub mod ohs_bundle;
+pub mod shell;
 
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -64,11 +65,13 @@ pub struct InstallArgs {
     /// Xoá mục `kg` khỏi cấu hình (index và gói OHS vẫn giữ).
     #[arg(long)]
     pub remove: bool,
-    /// Ghi kể cả khi Claude Desktop đang chạy (app sẽ ghi đè khi thoát).
+    /// Ghi kể cả khi Claude Desktop đang chạy (app sẽ ghi đè khi thoát), và kể cả khi binary pkm đang chạy không nằm
+    /// ở chỗ cài chuẩn (Claude Desktop sẽ gọi đúng file đó).
     #[arg(long)]
     pub force: bool,
-    /// Cài gói OHS từ file zip artifact, file gói hoặc thư mục gói đã giải nén.
-    #[arg(long, value_name = "PATH")]
+    /// Cài gói OHS từ file zip artifact, file gói, thư mục gói đã giải nén, hoặc URL https của file gói (kèm
+    /// `<URL>.sha256`). Không có cờ này thì tự tải từ PKM_OHS_PACKAGE nếu đặt, không thì artifact ghim qua gh.
+    #[arg(long, value_name = "PATH|URL")]
     pub ohs_package: Option<PathBuf>,
     /// Không cài hay kiểm gói OHS.
     #[arg(long, conflicts_with = "ohs_package")]
@@ -154,12 +157,67 @@ pub trait Hooks {
     fn long_paths_enabled(&self) -> Option<io::Result<bool>> {
         long_paths_enabled()
     }
+
+    /// Tải `url` (https) vào file `out`, cho gói OHS theo URL. Mặc định dùng `curl`.
+    fn fetch(&self, url: &str, out: &Path) -> Result<(), String> {
+        ohs_bundle::curl(url, out)
+    }
+
+    /// `node --version` của Node trong gói OHS (chỉ chạy Node, không chạy OHS).
+    fn node_version(&self, node: &Path) -> Result<String, String> {
+        let out = Command::new(node)
+            .arg("--version")
+            .stdin(std::process::Stdio::null())
+            .output()
+            .map_err(|e| format!("không chạy được {}: {e}", node.display()))?;
+        if out.status.success() {
+            Ok(String::from_utf8_lossy(&out.stdout).trim().to_owned())
+        } else {
+            Err(format!("{} --version lỗi ({})", node.display(), out.status))
+        }
+    }
 }
 
 /// Hooks thật của máy.
 pub struct SystemHooks;
 
 impl Hooks for SystemHooks {}
+
+/// Gốc của thư mục cài chuẩn trong [`STANDARD_BIN_DIR`].
+#[derive(Debug, Clone, Copy)]
+#[allow(dead_code)] // Mỗi nền tảng chỉ dùng một gốc.
+enum BinBase {
+    /// `platform::pkm_dir()` (`%LOCALAPPDATA%\pkm` trên Windows).
+    PkmDir,
+    /// Thư mục home của người dùng.
+    Home,
+}
+
+/// Chỗ bộ cài (`install.ps1`, `install.sh`) đặt binary `pkm`: `%LOCALAPPDATA%\pkm\bin` trên Windows, `~/.local/bin`
+/// nơi khác. Bộ cài đổi chỗ mặc định thì sửa ở đây.
+#[cfg(windows)]
+const STANDARD_BIN_DIR: (BinBase, &str) = (BinBase::PkmDir, "bin");
+#[cfg(not(windows))]
+const STANDARD_BIN_DIR: (BinBase, &str) = (BinBase::Home, ".local/bin");
+
+/// Biến môi trường của bộ cài khi cài vào thư mục khác chỗ chuẩn.
+pub const INSTALL_DIR_ENV: &str = "PKM_INSTALL_DIR";
+/// File bộ cài đặt cạnh binary đã cài (dòng đầu `pkm-managed-v1`).
+pub const INSTALL_MARKER: &str = ".pkm-managed";
+/// Repo phát hành `pkm` (riêng tư: tải qua `gh` đã đăng nhập).
+pub const RELEASE_REPO: &str = "vantt/obsidian-pkm";
+/// Biến trong `env` của mục `kg` ghi rằng lần cài dùng `--no-ohs`, để `doctor` không cảnh báo thiếu gói OHS.
+pub const NO_OHS_ENV: &str = "PKM_NO_OHS";
+
+/// Thư mục cài chuẩn của binary trên máy này (xem [`STANDARD_BIN_DIR`]).
+pub fn standard_bin_dir() -> Option<PathBuf> {
+    let (base, rel) = STANDARD_BIN_DIR;
+    let base = match base {
+        BinBase::PkmDir => platform::pkm_dir().ok()?,
+        BinBase::Home => std::env::home_dir()?,
+    };
+    Some(base.join(rel))
+}
 
 /// Chỗ đặt dữ liệu và binary của một lần cài. [`Install::for_this_machine`] là bản thật.
 #[derive(Debug, Clone)]
@@ -170,16 +228,57 @@ pub struct Install {
     pub exe: PathBuf,
     /// Gói OHS ghim cho máy này, nếu fork có dựng.
     pub bundle: Option<&'static Bundle>,
+    /// Thư mục cài được coi là ổn định: [`INSTALL_DIR_ENV`] nếu đặt, rồi [`standard_bin_dir`]. Thư mục đầu là chỗ
+    /// gợi ý khi binary nằm chỗ khác.
+    pub bin_dirs: Vec<PathBuf>,
+    /// Nguồn tự tải gói OHS thay cho artifact ghim (biến [`ohs_bundle::PACKAGE_ENV`]).
+    pub ohs_source: Option<String>,
 }
 
 impl Install {
     pub fn for_this_machine() -> Result<Self, String> {
+        let env = |key: &str| std::env::var_os(key).filter(|v| !v.is_empty());
         Ok(Self {
             pkm_dir: platform::pkm_dir().map_err(|e| e.to_string())?,
             exe: std::env::current_exe()
                 .map_err(|e| format!("không xác định được đường dẫn của pkm: {e}"))?,
             bundle: Bundle::current(),
+            bin_dirs: env(INSTALL_DIR_ENV)
+                .map(PathBuf::from)
+                .into_iter()
+                .chain(standard_bin_dir())
+                .collect(),
+            ohs_source: env(ohs_bundle::PACKAGE_ENV).map(|v| v.to_string_lossy().into_owned()),
         })
+    }
+
+    /// Lời cảnh báo khi binary đang chạy không nằm ở chỗ cài ổn định (thư mục cài chuẩn, [`INSTALL_DIR_ENV`], hay
+    /// thư mục có [`INSTALL_MARKER`] của bộ cài): Claude Desktop sẽ gọi đúng file đó, xoá hay dời là `kg` hỏng.
+    /// `rerun` là đối số của `pkm` để chạy lại đúng lệnh này từ chỗ chuẩn.
+    pub fn exe_location_warning(&self, rerun: &[String]) -> Option<String> {
+        let dir = self.exe.parent()?;
+        if dir.join(INSTALL_MARKER).is_file() || self.bin_dirs.iter().any(|d| same_dir(d, dir)) {
+            return None;
+        }
+        let place = if is_temporary(&self.exe) {
+            "thư mục tải về hoặc thư mục tạm"
+        } else {
+            "ngoài chỗ cài chuẩn"
+        };
+        let mut msg = format!(
+            "pkm đang chạy từ {} ({place}); Claude Desktop sẽ gọi đúng file này, xoá hay dời nó là `{SERVER_NAME}` hỏng.",
+            self.exe.display()
+        );
+        if let Some(bin) = self.bin_dirs.first() {
+            let exe = bin.join(if cfg!(windows) { "pkm.exe" } else { "pkm" });
+            msg.push_str(&format!(
+                " Cài pkm vào {} bằng bộ cài: {}\nrồi chạy: {}",
+                bin.display(),
+                installer_command(),
+                shell::command_line(&exe.to_string_lossy(), rerun)
+            ));
+        }
+        Some(msg)
     }
 
     /// Thư mục gói OHS (như `OhsPackage::default_dir`).
@@ -225,7 +324,7 @@ pub fn run_with(
     if args.check {
         return check(&path, hooks, timeout, out);
     }
-    let mut doc = ConfigDoc::load(&path)?;
+    let (mut doc, digest) = load_with_digest(&path)?;
     let before = doc.server(SERVER_NAME).cloned();
     if args.remove {
         return remove(&path, &mut doc, before, args, hooks, out);
@@ -243,10 +342,14 @@ pub fn run_with(
         None => inst.default_db(&vault),
     };
     let read_args = args.read_args();
-    let entry = server_entry(&inst.exe, &vault, &db, &read_args, args.about.as_deref())?;
+    let mut entry = server_entry(&inst.exe, &vault, &db, &read_args, args.about.as_deref())?;
+    if args.no_ohs {
+        entry.env.push((NO_OHS_ENV.to_owned(), "1".to_owned()));
+    }
     let after = entry.to_value();
-    let changed = doc.set_server(SERVER_NAME, Some(after.clone()));
+    let mut changed = doc.set_server(SERVER_NAME, Some(after.clone()));
     let p = |out: &mut dyn Write, s: String| writeln!(out, "{s}").map_err(|e| e.to_string());
+    let location = inst.exe_location_warning(&rerun_args(&entry.args, args));
 
     if args.dry_run {
         p(out, "[dry-run] không ghi gì. Kế hoạch:".to_owned())?;
@@ -258,6 +361,12 @@ pub fn run_with(
                 if doc.exists { "" } else { " (tạo mới)" }
             ),
         )?;
+        if let Some(w) = &location {
+            p(
+                out,
+                format!("- cảnh báo (sẽ từ chối nếu không có --force): {w}"),
+            )?;
+        }
         p(out, format!("- {}", ohs_plan(inst, args)))?;
         p(
             out,
@@ -283,8 +392,16 @@ pub fn run_with(
         return Ok(());
     }
 
+    if let Some(w) = location {
+        if !args.force {
+            return Err(format!(
+                "{w}\nMuốn giữ chỗ này thì chạy lại với --force (cũng bỏ qua kiểm Claude Desktop đang chạy)."
+            ));
+        }
+        p(out, format!("cảnh báo: {w}"))?;
+    }
     refuse_if_desktop_running(hooks, args.force)?;
-    install_ohs(inst, args, out)?;
+    install_ohs(inst, args, hooks, out)?;
     if let Some(dir) = db.parent() {
         std::fs::create_dir_all(dir).map_err(|e| format!("tạo {}: {e}", dir.display()))?;
     }
@@ -292,6 +409,23 @@ pub fn run_with(
     hooks
         .build_index(&inst.exe, &vault, &db, &read_args)
         .map_err(|e| format!("{e}; cấu hình Claude Desktop chưa đổi"))?;
+    // So rồi mới ghi: trong lúc dựng index, Claude Desktop có thể đã mở, hoặc app khác đã sửa file cấu hình.
+    refuse_if_desktop_running(hooks, args.force)
+        .map_err(|e| format!("{e}. Index đã dựng xong; cấu hình Claude Desktop chưa đổi"))?;
+    let (fresh, now) = load_with_digest(&path)
+        .map_err(|e| format!("{e}. Index đã dựng xong; cấu hình Claude Desktop chưa đổi"))?;
+    if now != digest {
+        doc = fresh;
+        changed = doc.set_server(SERVER_NAME, Some(after.clone()));
+        p(
+            out,
+            format!(
+                "{} đã bị sửa trong lúc dựng index; đã đọc lại và chỉ đặt mục `{SERVER_NAME}` trên bản mới, giữ \
+                 thay đổi kia",
+                path.display()
+            ),
+        )?;
+    }
     if changed {
         let backup = config::write_atomic(&path, &doc.render())?;
         p(
@@ -351,6 +485,87 @@ pub fn server_entry(
         args,
         env: Vec::new(),
     })
+}
+
+/// Đối số `pkm` để chạy lại `mcp install` cho mục `kg` có `entry_args` (dạng [`server_entry`] ghi):
+/// `mcp install VAULT --db DB <cờ đọc> [--about TEXT] [--no-ohs]`. `None` khi `entry_args` không có dạng đó.
+pub fn reinstall_args(entry_args: &[String], no_ohs: bool) -> Option<Vec<String>> {
+    let (vault, rest) = entry_args.split_first()?;
+    let (mcp, rest) = rest.split_first()?;
+    if vault.starts_with('-') || mcp != "mcp" {
+        return None;
+    }
+    let mut out = vec!["mcp".to_owned(), "install".to_owned(), vault.clone()];
+    out.extend(rest.iter().cloned());
+    if no_ohs {
+        out.push("--no-ohs".to_owned());
+    }
+    Some(out)
+}
+
+/// Đối số `pkm` để dựng lại index của mục `kg`: `VAULT build --db DB <cờ đọc>` (bỏ `--about`, cờ riêng của MCP).
+pub fn rebuild_args(entry_args: &[String]) -> Option<Vec<String>> {
+    let mut args = reinstall_args(entry_args, false)?.split_off(2);
+    if let Some(i) = args.iter().position(|a| a == "--about") {
+        args.drain(i..(i + 2).min(args.len()));
+    }
+    args.insert(1, "build".to_owned());
+    Some(args)
+}
+
+/// Đối số để chạy lại đúng lần cài này: như [`reinstall_args`], thêm `--config` và nguồn gói OHS khi đã chỉ ra.
+fn rerun_args(entry_args: &[String], args: &InstallArgs) -> Vec<String> {
+    let mut out = reinstall_args(entry_args, args.no_ohs).unwrap_or_default();
+    if let Some(c) = &args.config {
+        out.extend(["--config".to_owned(), c.to_string_lossy().into_owned()]);
+    }
+    if let Some(o) = &args.ohs_package {
+        out.extend(["--ohs-package".to_owned(), o.to_string_lossy().into_owned()]);
+    }
+    out
+}
+
+/// Lệnh bộ cài cho shell của máy này (repo riêng tư nên tải bộ cài qua `gh` đã đăng nhập).
+pub fn installer_command() -> String {
+    if cfg!(windows) {
+        format!(
+            "& ([scriptblock]::Create((gh release download --repo {RELEASE_REPO} --pattern install.ps1 --output - | \
+             Out-String)))"
+        )
+    } else {
+        format!("gh release download --repo {RELEASE_REPO} --pattern install.sh --output - | sh")
+    }
+}
+
+/// Hai đường dẫn chỉ cùng một thư mục (so sau khi giải symlink; không giải được thì so nguyên văn).
+fn same_dir(a: &Path, b: &Path) -> bool {
+    match (std::fs::canonicalize(a), std::fs::canonicalize(b)) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => a == b,
+    }
+}
+
+/// `exe` nằm trong thư mục tạm của hệ thống hoặc một thư mục tên `Downloads`: chỗ hay bị dọn.
+fn is_temporary(exe: &Path) -> bool {
+    let exe = std::fs::canonicalize(exe).unwrap_or_else(|_| exe.to_path_buf());
+    let tmp = std::env::temp_dir();
+    let tmp = std::fs::canonicalize(&tmp).unwrap_or(tmp);
+    exe.starts_with(&tmp)
+        || exe.components().any(|c| {
+            c.as_os_str()
+                .to_str()
+                .is_some_and(|n| n.eq_ignore_ascii_case("downloads"))
+        })
+}
+
+/// Đọc file cấu hình cùng sha256 của bytes đã đọc (`None` khi chưa có file), để biết file có bị sửa trước khi ghi.
+fn load_with_digest(path: &Path) -> Result<(ConfigDoc, Option<[u8; 32]>), String> {
+    let digest = match std::fs::read(path) {
+        Ok(raw) => Some(Sha256::digest(&raw).into()),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => None,
+        Err(e) => return Err(format!("đọc {}: {e}", path.display())),
+    };
+    Ok((ConfigDoc::load(path)?, digest))
 }
 
 /// Vault và DB đọc ngược từ `args` của mục `kg` (dạng [`server_entry`] ghi).
@@ -471,6 +686,13 @@ fn ohs_plan(inst: &Install, args: &InstallArgs) -> String {
     if OhsPackage::from_dir(&dir).is_ok() {
         return format!("gói OHS đã có ở {}", dir.display());
     }
+    if let Some(src) = &inst.ohs_source {
+        return format!(
+            "cài gói OHS từ {src} ({}) vào {}",
+            ohs_bundle::PACKAGE_ENV,
+            dir.display()
+        );
+    }
     match inst.bundle {
         Some(b) => format!(
             "tải gói OHS bundle-{} (run {}) bằng gh vào {}",
@@ -482,35 +704,54 @@ fn ohs_plan(inst: &Install, args: &InstallArgs) -> String {
     }
 }
 
-/// Cài gói OHS theo `args`. Gói chỉ ra bằng `--ohs-package` mà lỗi thì dừng; tự tải lỗi thì chỉ cảnh báo, vì `kg`
-/// vẫn chạy được không cần OHS (tool cần OHS trả `ohs_not_ready`).
-fn install_ohs(inst: &Install, args: &InstallArgs, out: &mut dyn Write) -> Result<(), String> {
+/// Cài gói OHS theo `args`. Gói chỉ ra bằng `--ohs-package` mà lỗi thì dừng; tự tải (từ
+/// [`ohs_bundle::PACKAGE_ENV`] nếu đặt, không thì artifact ghim) lỗi thì chỉ cảnh báo, vì `kg` vẫn chạy được không
+/// cần OHS (chỉ `related` không có `hits` cần OHS).
+fn install_ohs(
+    inst: &Install,
+    args: &InstallArgs,
+    hooks: &dyn Hooks,
+    out: &mut dyn Write,
+) -> Result<(), String> {
     if args.no_ohs {
         return Ok(());
     }
     let dest = inst.ohs_dir();
+    let fetch = |url: &str, file: &Path| hooks.fetch(url, file);
+    let install = |source: &Source, out: &mut dyn Write| {
+        ohs_bundle::install(source, inst.bundle, &dest, out, &fetch)
+    };
     let w = |out: &mut dyn Write, s: String| writeln!(out, "{s}").map_err(|e| e.to_string());
+    let not_ready = "`kg` vẫn chạy; chỉ `related` khi không có `hits` cần OHS và sẽ báo ohs_not_ready tới khi cài gói";
     if let Some(p) = &args.ohs_package {
-        let pkg = ohs_bundle::install(&Source::Path(p.clone()), inst.bundle, &dest, out)?;
+        let source = match p.to_str() {
+            Some(text) => Source::parse(text)?,
+            None => Source::Path(p.clone()),
+        };
+        let pkg = install(&source, out)?;
         return w(out, format!("đã cài gói OHS vào {}", pkg.root.display()));
     }
     if OhsPackage::from_dir(&dest).is_ok() {
         return w(out, format!("gói OHS đã có ở {}", dest.display()));
     }
-    let Some(bundle) = inst.bundle else {
-        return w(
-            out,
-            "cảnh báo: fork chưa có gói OHS cho nền tảng này; tool cần OHS sẽ báo ohs_not_ready"
-                .to_owned(),
-        );
+    let (source, origin) = match &inst.ohs_source {
+        Some(text) => (
+            Source::parse(text),
+            format!("{}={text}", ohs_bundle::PACKAGE_ENV),
+        ),
+        None if inst.bundle.is_some() => (Ok(Source::Download), "artifact ghim".to_owned()),
+        None => {
+            return w(
+                out,
+                format!("cảnh báo: fork chưa có gói OHS cho nền tảng này. {not_ready}"),
+            );
+        }
     };
-    match ohs_bundle::install(&Source::Download, Some(bundle), &dest, out) {
+    match source.and_then(|s| install(&s, out)) {
         Ok(pkg) => w(out, format!("đã cài gói OHS vào {}", pkg.root.display())),
         Err(e) => w(
             out,
-            format!(
-                "cảnh báo: chưa cài được gói OHS ({e}). `kg` vẫn chạy; tool cần OHS sẽ báo ohs_not_ready tới khi cài gói"
-            ),
+            format!("cảnh báo: chưa cài được gói OHS từ {origin} ({e}). {not_ready}"),
         ),
     }
 }

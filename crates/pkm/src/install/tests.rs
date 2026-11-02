@@ -4,12 +4,19 @@ use std::fs;
 
 use serde_json::json;
 
-/// Hooks giả: ghi lại lời gọi, không chạy tiến trình nào.
+/// Hooks giả: ghi lại lời gọi, không chạy tiến trình nào, không đụng mạng.
 struct Fake {
     running: io::Result<bool>,
     build: Result<(), String>,
     builds: RefCell<Vec<(PathBuf, PathBuf, Vec<String>)>>,
     handshakes: Cell<u32>,
+    /// Chạy trong lúc "dựng index" (giả lập app khác sửa cấu hình).
+    during_build: Option<Box<dyn Fn()>>,
+    /// Claude Desktop đang chạy khi hỏi lại sau khi dựng index.
+    running_after_build: Option<bool>,
+    built: Cell<bool>,
+    /// Nội dung trả cho từng URL khi tải gói OHS.
+    served: Vec<(String, Vec<u8>)>,
 }
 
 impl Fake {
@@ -19,6 +26,10 @@ impl Fake {
             build: Ok(()),
             builds: RefCell::default(),
             handshakes: Cell::new(0),
+            during_build: None,
+            running_after_build: None,
+            built: Cell::new(false),
+            served: Vec::new(),
         }
     }
 }
@@ -34,6 +45,10 @@ impl Hooks for Fake {
         self.builds
             .borrow_mut()
             .push((vault.to_path_buf(), db.to_path_buf(), read.to_vec()));
+        if let Some(f) = &self.during_build {
+            f();
+        }
+        self.built.set(true);
         self.build.clone()
     }
 
@@ -47,10 +62,22 @@ impl Hooks for Fake {
     }
 
     fn desktop_running(&self) -> io::Result<bool> {
+        if let Some(b) = self.running_after_build.filter(|_| self.built.get()) {
+            return Ok(b);
+        }
         match &self.running {
             Ok(b) => Ok(*b),
             Err(e) => Err(io::Error::new(e.kind(), e.to_string())),
         }
+    }
+
+    fn fetch(&self, url: &str, out: &Path) -> Result<(), String> {
+        let (_, body) = self
+            .served
+            .iter()
+            .find(|(u, _)| u == url)
+            .ok_or_else(|| format!("404 {url}"))?;
+        fs::write(out, body).map_err(|e| e.to_string())
     }
 }
 
@@ -72,10 +99,13 @@ fn setup(text: Option<&str>) -> Setup {
     if let Some(text) = text {
         fs::write(&config, text).unwrap();
     }
+    let bin = tmp.path().join("bin");
     let inst = Install {
         pkm_dir: tmp.path().join("pkm"),
-        exe: tmp.path().join("bin").join("pkm"),
+        exe: bin.join("pkm"),
         bundle: None,
+        bin_dirs: vec![bin],
+        ohs_source: None,
     };
     Setup {
         _tmp: tmp,
@@ -159,6 +189,7 @@ fn install_writes_kg_and_keeps_every_other_entry() {
             "command": s.inst.exe.to_str().unwrap(),
             "args": [s.vault.to_str().unwrap(), "mcp", "--db", db.to_str().unwrap(),
                      "--edge-keys", "links", "--adapter", "e11"],
+            "env": {"PKM_NO_OHS": "1"},
         })
     );
     assert_eq!(
@@ -519,4 +550,211 @@ fn install_args_parse_from_command_line() {
     let cli = Cli::try_parse_from(["install", "/v", "--dry-run", "--edge-keys", "links"]).unwrap();
     assert_eq!(cli.args.timeout, 120);
     assert!(Cli::try_parse_from(["install", "/v", "--edge-keys", "x"]).is_err());
+}
+
+/// Gói OHS giả dạng `.tar.gz` (thư mục gốc `ohs-x/` có Node và `cli.js`).
+fn ohs_tar_gz() -> Vec<u8> {
+    let node = if cfg!(windows) {
+        "node/node.exe"
+    } else {
+        "node/bin/node"
+    };
+    let mut b = tar::Builder::new(flate2::write::GzEncoder::new(
+        Vec::new(),
+        flate2::Compression::fast(),
+    ));
+    for rel in [node, "app/dist/src/cli.js"] {
+        let mut h = tar::Header::new_gnu();
+        h.set_size(1);
+        h.set_mode(0o755);
+        h.set_cksum();
+        b.append_data(&mut h, format!("ohs-x/{rel}"), &b"x"[..])
+            .unwrap();
+    }
+    b.into_inner().unwrap().finish().unwrap()
+}
+
+#[test]
+fn refuses_binary_outside_install_dir_without_force() {
+    let mut s = setup(Some(EXISTING));
+    s.inst.exe = s.vault.parent().unwrap().join("Downloads").join("pkm");
+    let hooks = Fake::new();
+    let err = s.run(&s.args(), &hooks).unwrap_err();
+    assert!(err.contains("thư mục tải về hoặc thư mục tạm"), "{err}");
+    assert!(
+        err.contains("gh release download --repo vantt/obsidian-pkm"),
+        "{err}"
+    );
+    assert!(
+        err.contains("mcp install"),
+        "lệnh chạy lại từ chỗ chuẩn: {err}"
+    );
+    assert!(err.contains("--force"), "{err}");
+    assert_eq!(fs::read_to_string(&s.config).unwrap(), EXISTING);
+    assert!(hooks.builds.borrow().is_empty());
+
+    let mut args = s.args();
+    args.dry_run = true;
+    let out = s.run(&args, &hooks).unwrap();
+    assert!(
+        out.contains("cảnh báo (sẽ từ chối nếu không có --force)"),
+        "{out}"
+    );
+
+    let mut args = s.args();
+    args.force = true;
+    let out = s.run(&args, &hooks).unwrap();
+    assert!(out.starts_with("cảnh báo: pkm đang chạy từ"), "{out}");
+    assert_eq!(
+        s.read()["mcpServers"]["kg"]["command"],
+        s.inst.exe.to_str().unwrap()
+    );
+}
+
+#[test]
+fn installer_marker_or_install_dir_makes_binary_location_stable() {
+    let mut s = setup(Some(EXISTING));
+    let dir = s.vault.parent().unwrap().join("tools");
+    fs::create_dir_all(&dir).unwrap();
+    s.inst.exe = dir.join("pkm");
+    s.inst.bin_dirs = Vec::new();
+    let warning = s.inst.exe_location_warning(&[]).unwrap();
+    assert!(warning.contains("ngoài chỗ cài chuẩn") || warning.contains("thư mục tạm"));
+    fs::write(dir.join(INSTALL_MARKER), "pkm-managed-v1\n").unwrap();
+    assert_eq!(s.inst.exe_location_warning(&[]), None);
+    fs::remove_file(dir.join(INSTALL_MARKER)).unwrap();
+    s.inst.bin_dirs = vec![dir.join("khác"), dir.join(".")];
+    assert_eq!(
+        s.inst.exe_location_warning(&[]),
+        None,
+        "so thư mục sau khi chuẩn hoá"
+    );
+}
+
+#[test]
+fn rereads_config_changed_while_building_and_keeps_that_change() {
+    let s = setup(Some(EXISTING));
+    let config = s.config.clone();
+    let hooks = Fake {
+        during_build: Some(Box::new(move || {
+            let mut v: serde_json::Value =
+                serde_json::from_str(&fs::read_to_string(&config).unwrap()).unwrap();
+            v["mcpServers"]["mới"] = json!({"command": "y"});
+            v["preferences"]["theme"] = json!("light");
+            fs::write(&config, v.to_string()).unwrap();
+        })),
+        ..Fake::new()
+    };
+    let out = s.run(&s.args(), &hooks).unwrap();
+    assert!(out.contains("đã bị sửa trong lúc dựng index"), "{out}");
+    let got = s.read();
+    assert_eq!(got["mcpServers"]["mới"], json!({"command": "y"}));
+    assert_eq!(got["preferences"]["theme"], "light");
+    assert_eq!(got["mcpServers"]["kg"]["args"][1], "mcp");
+    assert!(out.contains("servers: ohs, kg, other, mới"), "{out}");
+}
+
+#[test]
+fn refuses_to_write_when_desktop_starts_during_build() {
+    let s = setup(Some(EXISTING));
+    let hooks = Fake {
+        running_after_build: Some(true),
+        ..Fake::new()
+    };
+    let err = s.run(&s.args(), &hooks).unwrap_err();
+    assert!(err.contains("Claude Desktop đang chạy"), "{err}");
+    assert!(err.contains("Index đã dựng xong"), "{err}");
+    assert_eq!(hooks.builds.borrow().len(), 1);
+    assert_eq!(fs::read_to_string(&s.config).unwrap(), EXISTING);
+    assert_eq!(hooks.handshakes.get(), 0);
+}
+
+#[test]
+fn no_ohs_is_recorded_in_the_entry_and_dropped_on_a_later_install() {
+    let mut s = setup(Some(EXISTING));
+    s.run(&s.args(), &Fake::new()).unwrap();
+    assert_eq!(
+        s.read()["mcpServers"]["kg"]["env"],
+        json!({"PKM_NO_OHS": "1"})
+    );
+    // Lần cài sau có OHS (nguồn không tải được: chỉ cảnh báo) thì bỏ dấu `--no-ohs`.
+    s.inst.ohs_source = Some("https://example.test/ohs.tar.gz".into());
+    let mut args = s.args();
+    args.no_ohs = false;
+    let out = s.run(&args, &Fake::new()).unwrap();
+    assert!(
+        out.contains("cảnh báo: chưa cài được gói OHS từ PKM_OHS_PACKAGE="),
+        "{out}"
+    );
+    assert!(out.contains("chỉ `related` khi không có `hits`"), "{out}");
+    assert!(s.read()["mcpServers"]["kg"].get("env").is_none());
+}
+
+#[test]
+fn ohs_source_env_installs_package_from_https_url() {
+    let mut s = setup(Some(EXISTING));
+    let url = "https://example.test/ohs-linux-x64.tar.gz";
+    s.inst.ohs_source = Some(url.into());
+    let archive = ohs_tar_gz();
+    let file = s.vault.parent().unwrap().join("a.tgz");
+    fs::write(&file, &archive).unwrap();
+    let sha = ohs_bundle::sha256_file(&file).unwrap();
+    let hooks = Fake {
+        served: vec![
+            (url.to_owned(), archive),
+            (
+                format!("{url}.sha256"),
+                format!("{sha}  ohs.tar.gz\n").into_bytes(),
+            ),
+        ],
+        ..Fake::new()
+    };
+    let mut args = s.args();
+    args.no_ohs = false;
+    args.dry_run = true;
+    let plan = s.run(&args, &hooks).unwrap();
+    assert!(
+        plan.contains(&format!("cài gói OHS từ {url} (PKM_OHS_PACKAGE)")),
+        "{plan}"
+    );
+    args.dry_run = false;
+    let out = s.run(&args, &hooks).unwrap();
+    assert!(out.contains("đã cài gói OHS vào"), "{out}");
+    assert!(OhsPackage::from_dir(&s.inst.ohs_dir()).is_ok());
+}
+
+#[test]
+fn ohs_package_flag_rejects_plain_http() {
+    let s = setup(Some(EXISTING));
+    let mut args = s.args();
+    args.no_ohs = false;
+    args.ohs_package = Some(PathBuf::from("http://example.test/ohs.tar.gz"));
+    let err = s.run(&args, &Fake::new()).unwrap_err();
+    assert!(err.contains("https://"), "{err}");
+    assert_eq!(fs::read_to_string(&s.config).unwrap(), EXISTING);
+}
+
+#[test]
+fn reinstall_and_rebuild_args_come_from_the_entry() {
+    let e = server_entry(
+        Path::new("/bin/pkm"),
+        Path::new("/v"),
+        Path::new("/d.db"),
+        &["--packs".into(), "capture".into()],
+        Some("Kho"),
+    )
+    .unwrap();
+    assert_eq!(
+        reinstall_args(&e.args, true).unwrap(),
+        [
+            "mcp", "install", "/v", "--db", "/d.db", "--packs", "capture", "--about", "Kho",
+            "--no-ohs"
+        ]
+    );
+    assert_eq!(
+        rebuild_args(&e.args).unwrap(),
+        ["/v", "build", "--db", "/d.db", "--packs", "capture"]
+    );
+    assert_eq!(reinstall_args(&["/v".into(), "serve".into()], false), None);
+    assert_eq!(rebuild_args(&["--db".into()]), None);
 }
