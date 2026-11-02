@@ -1,0 +1,91 @@
+name: Release
+
+# Tag v* : build bốn đích rồi đăng GitHub Release.
+# workflow_dispatch : chỉ build và lưu artifact, không tạo Release.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: build ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+          - target: x86_64-apple-darwin
+            os: macos-latest # runner arm64, biên dịch chéo sang x86_64
+          - target: aarch64-apple-darwin
+            os: macos-latest
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      # Cài đúng toolchain ghi trong rust-toolchain.toml, rồi thêm đích.
+      - run: rustup toolchain install
+      - run: rustup target add ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+      - run: cargo build --release --locked --package pkm --target ${{ matrix.target }}
+      - name: Đóng gói binary và sha256
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          ext=""
+          if [[ "$TARGET" == *windows* ]]; then ext=".exe"; fi
+          mkdir -p out
+          asset="pkm-${TARGET}${ext}"
+          cp "target/${TARGET}/release/pkm${ext}" "out/${asset}"
+          cd out
+          # Tên file tương đối trong .sha256 để `sha256sum -c` chạy được.
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "${asset}" > "${asset}.sha256"
+          else
+            shasum -a 256 "${asset}" > "${asset}.sha256"
+          fi
+          cat "${asset}.sha256"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: pkm-${{ matrix.target }}
+          path: out/*
+          if-no-files-found: error
+
+  release:
+    name: publish release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: out
+          pattern: pkm-*
+          merge-multiple: true
+      - name: Kiểm tra sha256 trước khi đăng
+        working-directory: out
+        run: |
+          ls -l
+          sha256sum -c ./*.sha256
+      - name: Tạo GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: gh release create "$TAG" out/* --title "$TAG" --generate-notes --verify-tag

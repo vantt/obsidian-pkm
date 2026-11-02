@@ -1,6 +1,6 @@
 ---
 title: "Phase 14: Workflow release"
-status: todo
+status: in-progress
 priority: P2
 effort: "0,25 ngày"
 prd: "mục 12 (release.yml)"
@@ -21,9 +21,9 @@ Khi có tag `v*`, build `pkm` cho bốn đích và đính kèm sha256, để use
 - Tạo: `.github/workflows/release.yml`. Không sửa `ci.yml`.
 
 ## Việc cần làm
-- [ ] Đích: `x86_64-pc-windows-msvc`, `aarch64-apple-darwin`, `x86_64-apple-darwin`, `x86_64-unknown-linux-gnu`.
-- [ ] Mỗi binary kèm file sha256; đăng lên GitHub Release của tag.
-- [ ] Thêm kích hoạt `workflow_dispatch` chỉ build và lưu artifact (không tạo Release) để thử mà không cần tag.
+- [x] Đích: `x86_64-pc-windows-msvc`, `aarch64-apple-darwin`, `x86_64-apple-darwin`, `x86_64-unknown-linux-gnu`.
+- [x] Mỗi binary kèm file sha256; đăng lên GitHub Release của tag.
+- [x] Thêm kích hoạt `workflow_dispatch` chỉ build và lưu artifact (không tạo Release) để thử mà không cần tag.
 
 ## Nghiệm thu
 - Chạy `workflow_dispatch` ra đủ bốn artifact và sha256 khớp (`sha256sum -c`).
