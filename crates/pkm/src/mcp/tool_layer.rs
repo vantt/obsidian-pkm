@@ -31,8 +31,11 @@ pub struct ToolContext {
     pub vault_name: Option<String>,
     /// Số mục trước khi rút gọn khi lời gọi không ghi `limit` (`Tools(limit=...)`; CLI: `--limit` hoặc 20).
     pub limit: Option<i64>,
-    /// OHS cho `related` chỉ có `query` (một tiến trình cho cả server); `None`: tool đó trả `ohs_not_ready`.
+    /// OHS cho `search` và `related` gieo bằng câu hỏi hay note (một tiến trình cho cả server); `None`: hai tool đó
+    /// trả `ohs_not_ready`.
     pub ohs: Option<Arc<Ohs>>,
+    /// Bộ cắt `--max-chars` của MCP: `read` tự cắt thân note cho vừa (`None`: CLI, không cắt).
+    pub max_chars: Option<usize>,
 }
 
 /// Tầng tool: danh mục tool và cách mở một phiên trên một index.
@@ -92,6 +95,7 @@ impl ToolLayer for CoreLayer {
             ctx: {
                 let mut c = tools::Context::new(t, &ctx.vault, ctx.vault_name.clone());
                 c.set_ohs(ctx.ohs.clone());
+                c.set_reply_budget(ctx.max_chars);
                 c
             },
             db: ctx.db.clone(),
@@ -150,11 +154,11 @@ impl ToolSession for CoreSession {
                 return tools::call(&mut self.ctx, "valid", Value::Object(args))
                     .map_err(|e| e.to_string());
             }
-            // Lệnh `related` của CLI (không có trong `cli.py`): tham số theo tên MCP, qua điểm vào chung.
-            "related" => {
+            // Lệnh `related`, `read` của CLI (không có trong `cli.py`): tham số theo tên MCP, qua điểm vào chung.
+            "related" | "read" => {
                 let args: Map<String, Value> =
                     kw.0.into_iter().filter(|(_, v)| !v.is_null()).collect();
-                return tools::call(&mut self.ctx, "related", Value::Object(args))
+                return tools::call(&mut self.ctx, method, Value::Object(args))
                     .map_err(|e| e.to_string());
             }
             other => return Err(format!("phương thức tool lạ {other}")),

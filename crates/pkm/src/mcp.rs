@@ -1,4 +1,5 @@
-//! `pkm VAULT mcp`: MCP server stdio của index graph, chép `scripts/kg/mcp_server.py` ở sha ghim.
+//! `pkm VAULT mcp`: MCP server stdio `pkm` của vault (một cửa: tìm kiếm qua OHS và graph), chép
+//! `scripts/kg/mcp_server.py` ở sha ghim; phần khác Python ghi trong `docs/MCP-CHANGELOG.md`.
 //!
 //! Giao thức (DECISIONS Q4): JSON-RPC 2.0 tự viết, mỗi dòng một bản tin, đồng bộ, không async runtime.
 //! `initialize`, `ping`, `tools/list`, `tools/call`; `resources/list`, `prompts/list`, `resources/templates/list`
@@ -95,8 +96,8 @@ pub struct McpArgs {
     /// Ngày "hôm nay" cho instructions (mặc định ngày máy).
     #[arg(long)]
     pub today: Option<String>,
-    /// Thư mục gói OHS (có `node/` và `app/dist/`) cho `related` chỉ có `query`; mặc định biến PKM_OHS_DIR, rồi
-    /// thư mục gói mà `pkm mcp install` cài.
+    /// Thư mục gói OHS (có `node/` và `app/dist/`) cho `search` và `related` gieo bằng câu hỏi hay note; mặc định biến
+    /// PKM_OHS_DIR, rồi thư mục gói mà `pkm mcp install` cài.
     #[arg(long)]
     pub ohs: Option<PathBuf>,
     /// Cờ cũ của bản Python (đường dẫn `cli.js` của OHS): nhận để tương thích. Trỏ vào một gói OHS (thư mục gói, hoặc
@@ -522,6 +523,7 @@ impl Shared {
             vault_name: self.vault_name.clone(),
             limit: None,
             ohs: lock(&self.ohs).clone(),
+            max_chars: Some(self.a.max_chars),
         }
     }
 

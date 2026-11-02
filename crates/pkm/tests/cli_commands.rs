@@ -313,7 +313,7 @@ fn related_query_waits_for_ohs_then_shuts_it_down() {
     let o = related(&v, &["Yếu tố/Số lead.md", "--ohs", &pkg], &[]);
     assert!(o.status.success(), "{o:?}");
     let r: Value = serde_json::from_str(&stdout(&o)).unwrap();
-    assert_eq!(r["seed_source"], "ohs-cli");
+    assert_eq!(r["seed_source"], "query");
     assert_eq!(r["seeds"][0]["id"], "Yếu tố/Số lead.md");
     let pids = mcp_support::fake_pids(Path::new(&v.vault));
     assert_eq!(pids.len(), 1);
@@ -347,4 +347,36 @@ fn related_query_gives_up_after_ohs_wait() {
         pids.iter().all(|p| !mcp_support::process::alive(*p)),
         "OHS còn chạy"
     );
+}
+
+/// `pkm VAULT read`: thân note in JSON, không cần OHS; note sai nằm trong mục của nó, lệnh vẫn thoát 0; thiếu note
+/// id thì báo như các lệnh cần tham số.
+#[test]
+fn read_prints_note_bodies() {
+    let v = vault();
+    fs::write(
+        Path::new(&v.vault).join("Yếu tố/Doanh thu.md"),
+        "---\ntype: factor\n---\nThân note doanh thu.\n",
+    )
+    .unwrap();
+    let o = pkm(&[&v.vault, "build", "--packs", "business", "--db", &v.db]);
+    assert!(o.status.success(), "{o:?}");
+    let o = pkm(&[
+        &v.vault,
+        "read",
+        "Yếu tố/Doanh thu.md",
+        "Không có.md",
+        "--max-chars",
+        "4",
+        "--db",
+        &v.db,
+    ]);
+    assert!(o.status.success(), "{o:?}");
+    let r: Value = serde_json::from_str(&stdout(&o)).unwrap();
+    assert_eq!(r["items"][0]["body"], "Thân");
+    assert_eq!(r["items"][0]["truncated"], true);
+    assert_eq!(r["items"][1]["id"], "Không có.md");
+    assert!(r["items"][1]["error"].is_string());
+    let o = pkm(&[&v.vault, "read", "--db", &v.db]);
+    assert!(!o.status.success(), "{o:?}");
 }

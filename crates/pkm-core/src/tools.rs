@@ -2,6 +2,10 @@
 //! `paths`, `loops`, `provenance`, `select`, `valid`, `more` (lấy tiếp kết quả dài), `related` (PageRank cá nhân
 //! hoá từ hit tìm kiếm, [`crate::related`]).
 //!
+//! Một cửa (không có trong bản Python, lệch có chủ ý, `docs/MCP-CHANGELOG.md`): `search` chuyển tiếp sang OHS
+//! ([`crate::ohs`]) và trả kết quả gọn có `type` từ index; `read` đọc thân note thẳng từ vault, không cần OHS;
+//! `related` nhận `query`/`queries`/`node` làm đường chính bên cạnh `hits`.
+//!
 //! Đặc tả: `scripts/kg/tools.py` ([`Tools`]) và `Server.call` của `scripts/kg/mcp_server.py` ([`call`]: điểm vào
 //! chung theo tên tool và tham số MCP, trước khi MCP thu gọn JSON) ở sha ghim.
 //!
@@ -22,12 +26,13 @@ mod tests;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock};
+use std::time::Duration;
 
 use indexmap::IndexMap;
 use regex::Regex;
 use serde_json::{Map, Value, json};
 
-use crate::ohs::{Ohs, OhsError, OhsState};
+use crate::ohs::{self, Ohs, OhsError, OhsState};
 use crate::query::{Dir, Filter, Graph, QueryError, py};
 use crate::vault::{fold, nfc};
 
@@ -41,10 +46,12 @@ type Result<T> = std::result::Result<T, ToolError>;
 pub const LIMIT: i64 = 20;
 /// Số kết quả dài giữ lại cho `more`.
 pub const CACHE: usize = 64;
-/// Tên các tool, theo thứ tự của Python.
-pub const NAMES: [&str; 11] = [
+/// Tên các tool: mười một tool của Python, thêm `search` và `read` của một cửa.
+pub const NAMES: [&str; 13] = [
     "find",
+    "search",
     "note",
+    "read",
     "neighbors",
     "reach",
     "paths",
@@ -484,8 +491,12 @@ pub struct Context {
     tools: Tools,
     vault: PathBuf,
     vault_name: Option<String>,
-    /// OHS cho `related` chỉ có câu hỏi; `None`: phiên không chạy OHS (tool đó trả `ohs_not_ready`).
+    /// OHS cho `search` và `related` gieo bằng câu hỏi hay note; `None`: phiên không chạy OHS (hai tool đó trả
+    /// `ohs_not_ready`).
     ohs: Option<Arc<Ohs>>,
+    /// Số ký tự tối đa của cả kết quả sau khi in JSON (bộ cắt `--max-chars` của MCP); `read` tự cắt thân note để
+    /// không vượt, nên bộ cắt chung không chặt giữa JSON. `None`: không giới hạn (CLI).
+    reply_budget: Option<usize>,
 }
 
 /// Tên vault mặc định cho link `obsidian://open`: tên thư mục vault sau `os.path.abspath` (bỏ `.`, `..` theo chữ),
@@ -518,7 +529,13 @@ impl Context {
             vault: vault.to_path_buf(),
             vault_name: vault_name.filter(|n| !n.is_empty()),
             ohs: None,
+            reply_budget: None,
         }
+    }
+
+    /// Đặt giới hạn ký tự của cả kết quả (xem trường `reply_budget`); `None` để bỏ.
+    pub fn set_reply_budget(&mut self, chars: Option<usize>) {
+        self.reply_budget = chars;
     }
 
     /// Gắn OHS (thường là [`Ohs::launch`] lúc `pkm` khởi động) cho tool cần tìm kiếm; `None` để bỏ.
@@ -765,6 +782,10 @@ pub fn call(ctx: &mut Context, name: &str, args: Value) -> Result<Value> {
         }
     };
     for k in ["node", "from", "to", "claim"] {
+        // `related` có `hits` thì bỏ qua `node` (hits đứng trước), không bắt lỗi id của tham số không dùng.
+        if name == "related" && k == "node" && py::truthy(a.get("hits")) {
+            continue;
+        }
         if let Some(v) = a.0.get(k) {
             let s = nfc(&py::str_of(v));
             a.0.insert(k.into(), Value::String(s.clone()));
@@ -939,6 +960,8 @@ pub fn call(ctx: &mut Context, name: &str, args: Value) -> Result<Value> {
             t.valid_items(json!([ty_raw, as_of_raw, system]), items, limit)?
         }
         "related" => return related(ctx, &a),
+        "search" => return search(ctx, &a),
+        "read" => return read(ctx, &a),
         "more" => {
             // Như `Tools.more`: tra handle trước, rồi mới dùng `offset`, `limit`.
             let h = match a.req("handle")? {
@@ -966,69 +989,442 @@ pub fn call(ctx: &mut Context, name: &str, args: Value) -> Result<Value> {
     Ok(Value::Object(out))
 }
 
-/// Số hit lấy từ OHS khi `related` chỉ có câu hỏi (như `ohs_seeds(vault, query, 10, ...)` của Python).
+/// Số hit lấy từ OHS khi `related` gieo bằng câu hỏi hay note (như `ohs_seeds(vault, query, 10, ...)` của Python).
 const OHS_SEEDS: usize = 10;
 
-/// Nguồn hạt giống khi lấy từ OHS: giữ giá trị `seed_source` của Python để hợp đồng MCP không đổi.
-const OHS_SEED_SOURCE: &str = "ohs-cli";
+/// Số ký tự `snippet` của mỗi hạt giống khi `related` gieo bằng câu hỏi hay note.
+const SEED_SNIPPET: i64 = 160;
 
-const NO_OHS_INDEX: &str = "no OHS index reachable from this server; call the OHS search tool first and pass its results as hits";
+/// OHS vừa khởi động (`starting`) thì `search` và `related` chờ tối đa chừng này trước khi trả `ohs_not_ready`.
+const STARTING_WAIT: Duration = if cfg!(test) {
+    Duration::from_secs(2)
+} else {
+    Duration::from_secs(8)
+};
+
+/// Mặc định của `search`: số kết quả, số ký tự `snippet`.
+const SEARCH_LIMIT: i64 = 10;
+const SEARCH_SNIPPET: i64 = 200;
+/// `mode` mà OHS nhận.
+const SEARCH_MODES: [&str; 4] = ["hybrid", "semantic", "fulltext", "title"];
+
+/// Mặc định và giới hạn của `read`.
+const READ_CHARS: i64 = 4000;
+const READ_MAX_NODES: usize = 20;
 
 /// Trạng thái báo khi phiên không gắn OHS.
 fn no_ohs_state() -> OhsState {
     OhsState::Broken {
         action: "Phiên pkm này không chạy OHS. Khởi động pkm với gói OHS (cờ --ohs <thư mục> hoặc biến PKM_OHS_DIR), \
-                 hoặc gọi search của MCP ohs rồi đưa kết quả vào hits."
+                 hoặc chạy lại `pkm mcp install` không có --no-ohs. Trong lúc đó vẫn dùng được find, select, các tool \
+                 graph, và related với hits là note id."
             .to_owned(),
     }
 }
 
-/// Tool `related` (`Server.call` của Python): hạt giống từ `hits`, hoặc khi không có `hits` thì tìm `query` bằng
-/// OHS của phiên. OHS thiếu hay chưa sẵn sàng thì trả `ohs_not_ready` (D7); không lùi về đọc thẳng DB của OHS như
+/// Tìm bằng OHS của phiên cho `search` và `related`: chờ tối đa [`STARTING_WAIT`] khi OHS đang `starting`. Lỗi đã ở
+/// dạng kết quả tool: `ohs_not_ready` (đủ năm khoá, D7) hoặc `{"error": "ohs_error", "detail"}`.
+fn ohs_search(
+    ctx: &Context,
+    input: &str,
+    options: Value,
+) -> std::result::Result<Vec<Value>, Value> {
+    let found = match ctx.ohs.as_deref() {
+        None => Err(OhsError::NotReady(no_ohs_state())),
+        Some(o) => {
+            o.wait_while_starting(STARTING_WAIT);
+            o.search(input, options)
+        }
+    };
+    found.map_err(|e| match e.not_ready_error() {
+        Some(v) => v,
+        None => json!({"error": "ohs_error", "detail": e.to_string()}),
+    })
+}
+
+/// Danh sách chuỗi của tham số: chuỗi là một phần tử (không tách ký tự như [`py_list`]); rỗng là danh sách rỗng.
+fn str_list(v: &Value, k: &str) -> Result<Vec<String>> {
+    match v {
+        v if !py::truthy(v) => Ok(Vec::new()),
+        Value::String(s) => Ok(vec![s.clone()]),
+        Value::Array(a) => a
+            .iter()
+            .map(|x| match x {
+                Value::String(s) => Ok(s.clone()),
+                x => Err(type_error(format!(
+                    "{k} phải là danh sách chuỗi, có phần tử {}",
+                    py::type_name(x)
+                ))),
+            })
+            .collect(),
+        v => Err(type_error(format!(
+            "{k} phải là chuỗi hoặc danh sách chuỗi, không phải {}",
+            py::type_name(v)
+        ))),
+    }
+}
+
+/// Số không âm của tham số: vắng là `default`; `null` hay `0` là 0.
+fn count_arg(a: &Args, k: &str, default: i64) -> Result<std::result::Result<i64, Value>> {
+    let n = match a.0.get(k) {
+        None => default,
+        Some(v) => index_int(v, k)?.unwrap_or(0),
+    };
+    Ok(if n < 0 {
+        Err(json!({"error": format!("{k} must be >= 0")}))
+    } else {
+        Ok(n)
+    })
+}
+
+/// Tiêu đề và type trong index của các note id (id không có trong index thì vắng).
+fn titles_types(
+    g: &Graph,
+    ids: &[String],
+) -> Result<std::collections::HashMap<String, (Value, Value)>> {
+    let mut out = std::collections::HashMap::new();
+    let mut st = g
+        .conn()
+        .prepare_cached("SELECT title, type FROM nodes WHERE id = ?")
+        .map_err(QueryError::from)?;
+    for id in ids {
+        let row = st
+            .query_row([id], |r| {
+                Ok((
+                    r.get::<_, Option<String>>(0)?,
+                    r.get::<_, Option<String>>(1)?,
+                ))
+            })
+            .map(Some)
+            .or_else(|e| match e {
+                rusqlite::Error::QueryReturnedNoRows => Ok(None),
+                e => Err(e),
+            })
+            .map_err(QueryError::from)?;
+        if let Some((title, ty)) = row {
+            out.insert(id.clone(), (json!(title), json!(ty)));
+        }
+    }
+    Ok(out)
+}
+
+/// Tool `search` (một cửa): tìm theo chữ và nghĩa bằng OHS. Tham số theo tên MCP của OHS, đổi sang tên stdio
+/// ([`ohs::search_input`], `snippet_length` thành `snippetLength`, `path` thành `notePath`). Kết quả gọn
+/// `{count, mode, items: [{id, title, type, score, snippet}]}`: `title`, `type` lấy từ index; trang hệ thống bị bỏ
+/// trừ khi `system`, như các tool khác.
+fn search(ctx: &mut Context, a: &Args) -> Result<Value> {
+    let query = opt_str(a.get("query"), "query")?;
+    let queries = str_list(a.get("queries"), "queries")?;
+    let path = match opt_str(a.get("path"), "path")?.filter(|p| !p.trim().is_empty()) {
+        Some(p) => {
+            let p = nfc(&p);
+            if let Some(e) = ctx.need(&p)? {
+                return Ok(e);
+            }
+            Some(p)
+        }
+        None => None,
+    };
+    let Some((input, multi)) = ohs::search_input(query.as_deref(), &queries, path.as_deref())
+    else {
+        return Ok(json!({"error": "search needs query, queries or path"}));
+    };
+    let mode = match opt_str(a.get("mode"), "mode")?.filter(|m| !m.is_empty()) {
+        None => "hybrid".to_owned(),
+        Some(m) if SEARCH_MODES.contains(&m.as_str()) => m,
+        Some(m) => {
+            return Ok(json!({"error": format!(
+                "unknown mode {}; use one of {}",
+                py::repr(&Value::String(m)),
+                SEARCH_MODES.join(", ")
+            )}));
+        }
+    };
+    let limit = index_int(a.get("limit"), "limit")?
+        .filter(|n| *n > 0)
+        .unwrap_or(SEARCH_LIMIT);
+    let snippet = match count_arg(a, "snippet_length", SEARCH_SNIPPET)? {
+        Ok(n) => n,
+        Err(e) => return Ok(e),
+    };
+    let system = a.flag("system");
+    let hidden = !system && !ctx.tools.graph().hidden().is_empty();
+    let mut options = Map::new();
+    options.insert("mode".into(), mode.clone().into());
+    for k in ["scope", "tag"] {
+        let v = str_list(a.get(k), k)?;
+        if !v.is_empty() {
+            options.insert(k.into(), json!(v));
+        }
+    }
+    // Lấy dư khi phải bỏ trang hệ thống, để còn đủ `limit` kết quả.
+    let ask = if hidden { limit + 10 } else { limit };
+    options.insert("limit".into(), json!(ask));
+    options.insert("snippetLength".into(), json!(snippet));
+    if let Some(p) = &path {
+        options.insert("notePath".into(), json!(p));
+    }
+    if let Some(m) = multi {
+        options.insert("queries".into(), json!(m));
+    }
+    let results = match ohs_search(ctx, &input, Value::Object(options)) {
+        Ok(r) => r,
+        Err(e) => return Ok(e),
+    };
+    let g = ctx.tools.graph();
+    let hits: Vec<&Value> = results
+        .iter()
+        .filter(|r| {
+            r.get("path")
+                .and_then(Value::as_str)
+                .is_some_and(|p| system || !g.is_hidden(p))
+        })
+        .take(usize::try_from(limit).unwrap_or(usize::MAX))
+        .collect();
+    let ids: Vec<String> = hits
+        .iter()
+        .filter_map(|r| r["path"].as_str().map(str::to_owned))
+        .collect();
+    let meta = titles_types(g, &ids)?;
+    let items: Vec<Value> =
+        hits.iter()
+            .zip(&ids)
+            .map(|(r, id)| {
+                let (title, ty) = meta.get(id).cloned().unwrap_or_else(|| {
+                    (r.get("title").cloned().unwrap_or(Value::Null), Value::Null)
+                });
+                let score = r
+                    .get("score")
+                    .and_then(Value::as_f64)
+                    .map(|x| (x * 1000.0).round() / 1000.0);
+                json!({"id": id, "title": title, "type": ty, "score": score,
+                   "snippet": r.get("snippet").cloned().unwrap_or(Value::Null)})
+            })
+            .collect();
+    Ok(json!({"count": items.len(), "mode": mode, "items": items}))
+}
+
+/// Id có dạng đường dẫn tương đối trong vault: không tuyệt đối, không có `..`.
+fn inside_vault(id: &str) -> bool {
+    let p = Path::new(id);
+    !p.is_absolute()
+        && !id.starts_with(['/', '\\'])
+        && !id.split(['/', '\\']).any(|c| c == "..")
+        && p.components().all(|c| {
+            matches!(
+                c,
+                std::path::Component::Normal(_) | std::path::Component::CurDir
+            )
+        })
+}
+
+/// Số ký tự của `s` khi in thành chuỗi JSON không thoát chữ ngoài ASCII (không kể hai dấu nháy).
+fn json_len(s: &str) -> usize {
+    s.chars().map(json_char_len).sum()
+}
+
+fn json_char_len(c: char) -> usize {
+    match c {
+        '"' | '\\' | '\n' | '\r' | '\t' | '\u{8}' | '\u{c}' => 2,
+        c if u32::from(c) < 0x20 => 6,
+        _ => 1,
+    }
+}
+
+/// Phần đầu của `s` dài nhất có [`json_len`] không quá `budget`.
+fn json_prefix(s: &str, budget: usize) -> &str {
+    let mut used = 0;
+    for (i, c) in s.char_indices() {
+        used += json_char_len(c);
+        if used > budget {
+            return &s[..i];
+        }
+    }
+    s
+}
+
+/// Cắt đều thân note của `items` (mục có `body`) để cả kết quả `{"items": …}` khi in JSON gọn không quá `budget` ký
+/// tự: thân ngắn hơn phần chia đều giữ nguyên, phần dư chia cho các thân dài. Thân bị cắt có `truncated: true`.
+fn fit_bodies(items: &mut [Value], budget: usize) {
+    let lens: Vec<Option<usize>> = items
+        .iter()
+        .map(|it| it.get("body").and_then(Value::as_str).map(json_len))
+        .collect();
+    // Phần cố định: kết quả với thân rỗng; cộng chỗ cho `truncated` đổi false thành true và số làm tròn.
+    let mut empty = items.to_vec();
+    for it in &mut empty {
+        if let Some(b) = it.get_mut("body") {
+            *b = Value::String(String::new());
+        }
+    }
+    let fixed = json!({ "items": empty }).to_string().chars().count() + 16 + items.len();
+    let mut room = budget.saturating_sub(fixed);
+    let total: usize = lens.iter().flatten().sum();
+    if total <= room {
+        return;
+    }
+    let mut order: Vec<usize> = (0..items.len()).filter(|i| lens[*i].is_some()).collect();
+    order.sort_by_key(|i| lens[*i]);
+    let mut left = order.len();
+    for i in order {
+        let len = lens[i].unwrap_or(0);
+        let share = room / left;
+        left -= 1;
+        if len <= share {
+            room -= len;
+            continue;
+        }
+        room -= share;
+        let it = &mut items[i];
+        let cut = it["body"]
+            .as_str()
+            .map(|b| json_prefix(b, share).to_owned());
+        if let Some(cut) = cut {
+            it["body"] = Value::String(cut);
+            it["truncated"] = Value::Bool(true);
+        }
+    }
+}
+
+/// Tool `read` (một cửa): thân note (bỏ frontmatter) đọc thẳng từ file trong vault, không cần OHS. Mỗi id một mục,
+/// đúng thứ tự: `{id, title, type, url, chars, truncated, body}`; id sai là `{id, error, did_you_mean}` mà các mục
+/// khác vẫn trả. `chars` là độ dài cả thân; `body` lấy từ `offset`, tối đa `max_chars` ký tự (0 là hết thân), rồi
+/// cắt đều theo `reply_budget` của phiên.
+fn read(ctx: &mut Context, a: &Args) -> Result<Value> {
+    let nodes = str_list(a.get("nodes"), "nodes")?;
+    if nodes.is_empty() {
+        return Ok(
+            json!({"error": "read needs nodes (note ids, as returned by search / find / related)"}),
+        );
+    }
+    if nodes.len() > READ_MAX_NODES {
+        return Ok(json!({"error": format!(
+            "read takes at most {READ_MAX_NODES} nodes per call, got {}",
+            nodes.len()
+        )}));
+    }
+    let max_chars = match count_arg(a, "max_chars", READ_CHARS)? {
+        Ok(n) => n,
+        Err(e) => return Ok(e),
+    };
+    let offset = match count_arg(a, "offset", 0)? {
+        Ok(n) => usize::try_from(n).unwrap_or(usize::MAX),
+        Err(e) => return Ok(e),
+    };
+    let ids: Vec<String> = nodes.iter().map(|n| nfc(n)).collect();
+    let meta = titles_types(ctx.tools.graph(), &ids)?;
+    let mut items = Vec::with_capacity(ids.len());
+    for id in ids {
+        if !inside_vault(&id) {
+            items.push(json!({"id": id, "error": "note ids are vault-relative paths; absolute paths and '..' are not allowed"}));
+            continue;
+        }
+        if let Some(Value::Object(e)) = ctx.need(&id)? {
+            let mut m = Map::new();
+            m.insert("id".into(), id.into());
+            m.extend(e);
+            items.push(Value::Object(m));
+            continue;
+        }
+        let text = match crate::vault::read(&ctx.vault.join(&id)) {
+            Ok(t) => t,
+            Err(e) => {
+                items.push(json!({"id": id, "error": format!("cannot read the note file: {e}")}));
+                continue;
+            }
+        };
+        let body = match FM_RE.find(&text) {
+            Some(m) => &text[m.end()..],
+            None => text.as_str(),
+        };
+        let body = py::strip(body);
+        let chars = body.chars().count();
+        let take = if max_chars == 0 {
+            usize::MAX
+        } else {
+            usize::try_from(max_chars).unwrap_or(usize::MAX)
+        };
+        let part: String = body.chars().skip(offset).take(take).collect();
+        let truncated = offset.saturating_add(part.chars().count()) < chars;
+        let (title, ty) = meta.get(&id).cloned().unwrap_or_default();
+        items.push(json!({
+            "id": id,
+            "title": title,
+            "type": ty,
+            "url": ctx.url(&id),
+            "chars": chars,
+            "truncated": truncated,
+            "body": part,
+        }));
+    }
+    if let Some(budget) = ctx.reply_budget {
+        fit_bodies(&mut items, budget);
+    }
+    Ok(json!({ "items": items }))
+}
+
+/// Tool `related` (`Server.call` của Python, thêm đường chính của một cửa). Nguồn hạt giống theo thứ tự ưu tiên:
+/// `hits` (cho sẵn, không cần OHS), `node` (note giống nghĩa với note đó: OHS tìm với `notePath`), rồi
+/// `query`/`queries` (OHS tìm câu hỏi). `seed_source` ghi nguồn đã dùng (`hits`, `node`, `query`); hạt giống từ OHS có
+/// thêm `snippet`. OHS thiếu hay chưa sẵn sàng thì trả `ohs_not_ready` (D7); không lùi về đọc thẳng DB của OHS như
 /// Python (spec/PORTING.md, mục `ohs`).
 fn related(ctx: &mut Context, a: &Args) -> Result<Value> {
     let (filter, _) = a.edge()?;
-    let mut src = "hits";
-    let hits = match crate::related::hits_from(a.get("hits"))? {
-        hits if py::truthy(a.get("hits")) => hits,
+    let mut snippets: Map<String, Value> = Map::new();
+    let (hits, src) = match crate::related::hits_from(a.get("hits"))? {
+        hits if py::truthy(a.get("hits")) => (hits, "hits"),
         _ => {
-            let q = a.get("query");
-            if !py::truthy(q) {
-                return Ok(json!({"error": "related needs hits (results of OHS search) or query"}));
-            }
-            let Value::String(q) = q else {
-                return Err(type_error(format!(
-                    "expected string or bytes-like object, got '{}'",
-                    py::type_name(q)
-                )));
-            };
-            let found = match ctx.ohs.as_deref() {
-                None => Err(OhsError::NotReady(no_ohs_state())),
-                Some(ohs) => ohs.search(q, json!({"limit": OHS_SEEDS, "snippetLength": 0})),
-            };
-            let results = match found {
-                Ok(r) => r,
-                Err(e) => {
-                    return Ok(match e.not_ready_error() {
-                        Some(v) => v,
-                        None => json!({"error": NO_OHS_INDEX, "detail": format!("OHS lỗi: {e}")}),
-                    });
+            // `node` đã được chuẩn hoá NFC và kiểm có trong index ở `call`.
+            let node = opt_str(a.get("node"), "node")?.filter(|n| !n.is_empty());
+            let (input, mut options, src) = match node {
+                Some(n) => (n.clone(), json!({"notePath": n}), "node"),
+                None => {
+                    let q = match a.get("query") {
+                        q if py::truthy(q) => q,
+                        _ => &Value::Null,
+                    };
+                    if !matches!(q, Value::String(_) | Value::Null) {
+                        return Err(type_error(format!(
+                            "expected string or bytes-like object, got '{}'",
+                            py::type_name(q)
+                        )));
+                    }
+                    let queries = str_list(a.get("queries"), "queries")?;
+                    let Some((input, multi)) = ohs::search_input(q.as_str(), &queries, None) else {
+                        return Ok(json!({"error": "related needs query, queries, node or hits"}));
+                    };
+                    let options = match multi {
+                        Some(m) => json!({"queries": m}),
+                        None => json!({}),
+                    };
+                    (input, options, "query")
                 }
+            };
+            options["limit"] = json!(OHS_SEEDS);
+            options["snippetLength"] = json!(SEED_SNIPPET);
+            let results = match ohs_search(ctx, &input, options) {
+                Ok(r) => r,
+                Err(e) => return Ok(e),
             };
             let hits: Vec<(Value, Value)> = results
                 .iter()
                 .filter_map(|h| {
                     let path = h.get("path")?.as_str()?;
                     let score = h.get("score").and_then(Value::as_f64).unwrap_or(0.0);
+                    if let Some(s) = h.get("snippet").filter(|s| py::truthy(s)) {
+                        snippets.insert(path.to_owned(), s.clone());
+                    }
                     Some((Value::String(path.to_owned()), json!(score)))
                 })
                 .take(OHS_SEEDS)
                 .collect();
             if hits.is_empty() {
-                return Ok(json!({"error": NO_OHS_INDEX, "detail": OHS_SEED_SOURCE}));
+                return Ok(json!({
+                    "error": "search found no notes to start from",
+                    "detail": "try other words, add queries (e.g. the question in English and Vietnamese), or start from a note with find then related(node)",
+                }));
             }
-            src = OHS_SEED_SOURCE;
-            hits
+            (hits, src)
         }
     };
     let opts = crate::related::Options {
@@ -1038,6 +1434,18 @@ fn related(ctx: &mut Context, a: &Args) -> Result<Value> {
         ..crate::related::Options::default()
     };
     let mut r = crate::related::related(ctx.tools.graph(), &hits, &opts)?;
+    if let Some(Value::Array(seeds)) = r.get_mut("seeds") {
+        for s in seeds {
+            let snippet = s
+                .get("id")
+                .and_then(Value::as_str)
+                .and_then(|id| snippets.get(id))
+                .cloned();
+            if let (Some(snippet), Value::Object(m)) = (snippet, s) {
+                m.insert("snippet".into(), snippet);
+            }
+        }
+    }
     r.insert("seed_source".into(), src.into());
     Ok(Value::Object(r))
 }

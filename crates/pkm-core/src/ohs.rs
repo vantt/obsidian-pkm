@@ -371,6 +371,20 @@ impl Ohs {
         }
     }
 
+    /// Chờ tối đa `max` khi OHS đang `starting` (vừa khởi động, chưa trả `status`); trả trạng thái cuối. Trạng thái
+    /// khác (`indexing`, `model_missing`, `broken`, `ready`) trả ngay: chờ thêm không làm chúng đổi trong vài giây.
+    pub fn wait_while_starting(&self, max: Duration) -> OhsState {
+        let deadline = Instant::now() + max;
+        loop {
+            let state = self.state();
+            let left = deadline.saturating_duration_since(Instant::now());
+            if !matches!(state, OhsState::Starting) || left.is_zero() {
+                return state;
+            }
+            thread::sleep(left.min(Duration::from_millis(200)));
+        }
+    }
+
     /// Tìm bằng OHS. `options` là object tuỳ chọn của OHS (`limit`, `mode`, `snippetLength`, `scope`, …) hoặc `null`.
     /// Đường dẫn trong mỗi kết quả được chuẩn hoá NFC (OHS trả NFD) để tra được trong index, xem
     /// [`normalize_result_paths`].
@@ -481,6 +495,28 @@ impl Drop for Ohs {
 
 fn absolute(p: &Path) -> PathBuf {
     std::path::absolute(p).unwrap_or_else(|_| p.to_path_buf())
+}
+
+/// Câu tìm gửi OHS và `options.queries` từ tham số kiểu MCP của OHS (`query`, `queries`, `path`), đúng như MCP
+/// `search` của OHS đổi trước khi tìm: các câu là `query` rồi `queries` (bỏ câu rỗng); câu gửi đi là `path` nếu có,
+/// không thì câu đầu; `queries` chỉ gửi khi có từ hai câu. `None` khi không có câu nào và không có `path`.
+pub fn search_input(
+    query: Option<&str>,
+    queries: &[String],
+    path: Option<&str>,
+) -> Option<(String, Option<Vec<String>>)> {
+    let all: Vec<String> = query
+        .into_iter()
+        .chain(queries.iter().map(String::as_str))
+        .filter(|q| !q.trim().is_empty())
+        .map(str::to_owned)
+        .collect();
+    let input = path
+        .filter(|p| !p.trim().is_empty())
+        .map(str::to_owned)
+        .or_else(|| all.first().cloned())?;
+    let multi = (all.len() > 1).then_some(all);
+    Some((input, multi))
 }
 
 /// Object tuỳ chọn của request: object giữ nguyên, `null` là object rỗng, kiểu khác là lỗi.
@@ -782,6 +818,30 @@ mod tests {
         }
         let err = ohs.read(&one, json!({"related": false})).unwrap_err();
         assert_eq!(err.not_ready_error().unwrap()["state"], "broken");
+    }
+
+    #[test]
+    fn search_input_maps_like_the_ohs_search_tool() {
+        let qs = |v: &[&str]| v.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>();
+        assert_eq!(search_input(None, &[], None), None);
+        assert_eq!(search_input(Some(" "), &qs(&[""]), None), None);
+        assert_eq!(
+            search_input(Some("khách"), &[], None),
+            Some(("khách".to_owned(), None))
+        );
+        assert_eq!(
+            search_input(Some("khách"), &qs(&["client", ""]), None),
+            Some(("khách".to_owned(), Some(qs(&["khách", "client"]))))
+        );
+        assert_eq!(
+            search_input(None, &qs(&["a", "b"]), None),
+            Some(("a".to_owned(), Some(qs(&["a", "b"]))))
+        );
+        // `path` là câu gửi đi; các câu vẫn đi kèm như OHS làm.
+        assert_eq!(
+            search_input(Some("x"), &[], Some("A/B.md")),
+            Some(("A/B.md".to_owned(), None))
+        );
     }
 
     #[test]

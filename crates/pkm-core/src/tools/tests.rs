@@ -196,7 +196,7 @@ fn call_errors_like_server_call() {
     );
     assert_eq!(
         call(&mut c, "related", json!({})).unwrap(),
-        json!({"error": "related needs hits (results of OHS search) or query"})
+        json!({"error": "related needs query, queries, node or hits"})
     );
     assert_eq!(
         call(&mut c, "related", json!({"query": 3}))
@@ -270,8 +270,10 @@ fn call_runs_each_tool_with_mcp_arguments() {
     assert_eq!(r["items"], json!(["Hợp đồng/HĐ ABC 2025.md"]));
 }
 
+/// Mười tool giữ nguyên chữ của Python ở sha ghim; `search`, `read` (mới) và `related` (viết lại) là lệch có chủ ý
+/// của một cửa, đứng đúng chỗ trong danh sách.
 #[test]
-fn definitions_match_the_golden_tools_list() {
+fn definitions_match_the_golden_tools_list_except_one_door_tools() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let lock = std::fs::read_to_string(root.join("spec/spec.lock")).unwrap();
     let sha = lock
@@ -280,30 +282,56 @@ fn definitions_match_the_golden_tools_list() {
         .unwrap();
     let path = root.join(format!("parity/golden/{sha}/mcp/tools_list.json"));
     let golden: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
-    assert_eq!(tools_list(false), golden);
-    let names: Vec<&str> = definitions(false).iter().map(|d| d.name).collect();
-    assert_eq!(
-        names,
-        [
-            "find",
-            "note",
-            "neighbors",
-            "reach",
-            "paths",
-            "loops",
-            "provenance",
-            "select",
-            "valid",
-            "related",
-            "more"
-        ]
-    );
+    let golden: Vec<&Value> = golden["tools"].as_array().unwrap().iter().collect();
+    let ours = tools_list(false);
+    let ours: Vec<&Value> = ours["tools"].as_array().unwrap().iter().collect();
+    let names: Vec<&str> = ours.iter().map(|t| t["name"].as_str().unwrap()).collect();
+    assert_eq!(names, NAMES_IN_LIST);
+    let one_door = ["search", "read", "related"];
+    let kept: Vec<&&Value> = ours
+        .iter()
+        .filter(|t| !one_door.contains(&t["name"].as_str().unwrap()))
+        .collect();
+    let golden_kept: Vec<&&Value> = golden
+        .iter()
+        .filter(|t| !one_door.contains(&t["name"].as_str().unwrap()))
+        .collect();
+    assert_eq!(kept.len(), 10);
+    assert_eq!(kept, golden_kept);
     let mut sorted = names.clone();
     sorted.sort_unstable();
     let mut all = NAMES.to_vec();
     all.sort_unstable();
     assert_eq!(sorted, all);
 }
+
+const NAMES_IN_LIST: [&str; 13] = [
+    "find",
+    "search",
+    "note",
+    "read",
+    "neighbors",
+    "reach",
+    "paths",
+    "loops",
+    "provenance",
+    "select",
+    "valid",
+    "related",
+    "more",
+];
+
+/// Cỡ của `tools/list` (JSON gọn) không phình dần: mỗi phiên agent nạp cả danh sách. Đo khi thêm một cửa: 17.664
+/// ký tự không có trang hệ thống (11 tool của Python: 13.403), 19.160 khi có; ngân sách chừa khoảng 5%.
+#[test]
+fn tools_list_stays_within_its_size_budget() {
+    let size = |hidden| tools_list(hidden).to_string().chars().count();
+    assert!(size(false) <= TOOLS_LIST_BUDGET, "{}", size(false));
+    assert!(size(true) <= TOOLS_LIST_BUDGET_HIDDEN, "{}", size(true));
+}
+
+const TOOLS_LIST_BUDGET: usize = 18_500;
+const TOOLS_LIST_BUDGET_HIDDEN: usize = 20_000;
 
 #[test]
 fn definitions_add_system_only_when_vault_has_system_pages() {
@@ -315,7 +343,7 @@ fn definitions_add_system_only_when_vault_has_system_pages() {
                 let i = k.iter().position(|x| x == "accepted_only").unwrap();
                 assert_eq!(k[i + 1..], ["system", "limit"], "{}", d.name);
             }
-            "paths" | "related" => {
+            "paths" | "related" | "search" => {
                 assert_eq!(k.last().map(String::as_str), Some("system"), "{}", d.name)
             }
             "select" | "valid" => assert_eq!(k[k.len() - 2..], ["limit", "system"], "{}", d.name),
@@ -788,4 +816,218 @@ fn call_related_query_without_ohs_is_not_ready() {
     assert_eq!(r["seed_source"], "hits");
     c.set_ohs(None);
     assert!(c.ohs().is_none());
+}
+
+// ------------------------------------------------------------------------------------------------ một cửa
+
+/// `read` đọc thẳng file: không cần OHS, đúng thứ tự, id sai chỉ hỏng mục của nó.
+#[test]
+fn read_returns_bodies_in_order_and_per_item_errors() {
+    let v = api();
+    let n = "Yếu tố/Doanh thu.md";
+    write(
+        v.path(),
+        n,
+        "---\ntype: factor\n---\n\n# Doanh thu\nDòng một \"trích\".\nDòng hai.\n\n",
+    );
+    let mut c = ctx(&v);
+    let r = call(
+        &mut c,
+        "read",
+        json!({"nodes": [n, "Yếu tố/Doanh thu", "../ngoài.md", "Người/An.md"]}),
+    )
+    .unwrap();
+    let items = r["items"].as_array().unwrap();
+    assert_eq!(items.len(), 4);
+    let body = "# Doanh thu\nDòng một \"trích\".\nDòng hai.";
+    assert_eq!(
+        items[0],
+        json!({"id": n, "title": "Doanh thu", "type": "factor",
+               "url": "obsidian://open?vault=Kho%20c%E1%BB%A7a%20t%C3%B4i&file=Y%E1%BA%BFu%20t%E1%BB%91%2FDoanh%20thu",
+               "chars": body.chars().count(), "truncated": false, "body": body})
+    );
+    assert_eq!(items[1]["id"], "Yếu tố/Doanh thu");
+    assert!(
+        items[1]["error"]
+            .as_str()
+            .unwrap()
+            .contains("no note with id")
+    );
+    assert_eq!(items[1]["did_you_mean"][0], n);
+    assert_eq!(items[2]["id"], "../ngoài.md");
+    assert!(items[2]["error"].as_str().unwrap().contains("'..'"));
+    assert_eq!(items[3]["id"], "Người/An.md");
+    assert_eq!(items[3]["type"], "person");
+
+    // `max_chars` và `offset` tính theo ký tự; `chars` là độ dài cả thân.
+    let r = call(
+        &mut c,
+        "read",
+        json!({"nodes": n, "max_chars": 5, "offset": 2}),
+    )
+    .unwrap();
+    let it = &r["items"][0];
+    assert_eq!(it["body"], "Doanh");
+    assert_eq!(it["truncated"], true);
+    assert_eq!(it["chars"], body.chars().count());
+    let r = call(
+        &mut c,
+        "read",
+        json!({"nodes": [n], "max_chars": 0, "offset": 2}),
+    )
+    .unwrap();
+    assert_eq!(r["items"][0]["truncated"], false);
+    assert_eq!(r["items"][0]["body"].as_str().unwrap(), &body[2..]);
+}
+
+#[test]
+fn read_rejects_bad_arguments_as_tool_errors() {
+    let v = api();
+    let mut c = ctx(&v);
+    assert_eq!(
+        call(&mut c, "read", json!({})).unwrap()["error"],
+        "read needs nodes (note ids, as returned by search / find / related)"
+    );
+    let many: Vec<String> = (0..21).map(|i| format!("n{i}.md")).collect();
+    assert!(
+        call(&mut c, "read", json!({ "nodes": many })).unwrap()["error"]
+            .as_str()
+            .unwrap()
+            .contains("at most 20")
+    );
+    assert_eq!(
+        call(
+            &mut c,
+            "read",
+            json!({"nodes": ["Người/An.md"], "offset": -1})
+        )
+        .unwrap(),
+        json!({"error": "offset must be >= 0"})
+    );
+    assert_eq!(
+        call(&mut c, "read", json!({"nodes": [3]}))
+            .unwrap_err()
+            .kind,
+        "TypeError"
+    );
+}
+
+/// Ngân sách của cả kết quả: thân bị cắt đều, kết quả in JSON gọn không vượt ngân sách, thân ngắn giữ nguyên.
+#[test]
+fn read_cuts_bodies_evenly_to_fit_the_reply_budget() {
+    let v = api();
+    let long = "Một dòng \"dài\" có dấu.\n".repeat(400);
+    for n in ["Yếu tố/Doanh thu.md", "Người/An.md"] {
+        write(v.path(), n, &format!("---\ntype: x\n---\n{long}"));
+    }
+    write(
+        v.path(),
+        "Yếu tố/Số lead.md",
+        "---\ntype: factor\n---\nNgắn.",
+    );
+    let mut c = ctx(&v);
+    let budget = 3000;
+    c.set_reply_budget(Some(budget));
+    let r = call(
+        &mut c,
+        "read",
+        json!({"nodes": ["Yếu tố/Doanh thu.md", "Yếu tố/Số lead.md", "Người/An.md"], "max_chars": 0}),
+    )
+    .unwrap();
+    let text = r.to_string();
+    assert!(text.chars().count() <= budget, "{}", text.chars().count());
+    let items = r["items"].as_array().unwrap();
+    assert_eq!(items[1]["body"], "Ngắn.");
+    assert_eq!(items[1]["truncated"], false);
+    let (a, b) = (
+        items[0]["body"].as_str().unwrap(),
+        items[2]["body"].as_str().unwrap(),
+    );
+    assert_eq!(items[0]["truncated"], true);
+    assert_eq!(items[2]["truncated"], true);
+    assert!(a.chars().count() > 500 && a == b, "{}", a.chars().count());
+    // Ngân sách lớn: không cắt gì.
+    c.set_reply_budget(Some(1_000_000));
+    let r = call(
+        &mut c,
+        "read",
+        json!({"nodes": ["Người/An.md"], "max_chars": 0}),
+    )
+    .unwrap();
+    assert_eq!(r["items"][0]["truncated"], false);
+}
+
+#[test]
+fn json_prefix_counts_escapes() {
+    assert_eq!(json_len("a\"b\n\u{1}đ"), 1 + 2 + 1 + 2 + 6 + 1);
+    assert_eq!(json_prefix("ab\ncd", 3), "ab");
+    assert_eq!(json_prefix("ab\ncd", 4), "ab\n");
+    assert_eq!(json_prefix("đđ", 10), "đđ");
+}
+
+#[test]
+fn inside_vault_accepts_only_relative_paths_without_dot_dot() {
+    assert!(inside_vault("Người/An.md"));
+    assert!(inside_vault("a..b.md"));
+    assert!(!inside_vault("../x.md"));
+    assert!(!inside_vault("a/../../x.md"));
+    assert!(!inside_vault("a\\..\\x.md"));
+    assert!(!inside_vault("/etc/passwd"));
+}
+
+/// `search` không có OHS: `ohs_not_ready` đủ năm khoá; lỗi tham số trả trước khi cần OHS.
+#[test]
+fn search_without_ohs_is_not_ready_and_checks_arguments_first() {
+    let v = api();
+    let mut c = ctx(&v);
+    let r = call(&mut c, "search", json!({"query": "doanh thu"})).unwrap();
+    let keys: Vec<&str> = r.as_object().unwrap().keys().map(String::as_str).collect();
+    assert_eq!(keys, ["error", "state", "progress", "eta_s", "action"]);
+    assert_eq!(r["state"], "broken");
+    assert_eq!(
+        call(&mut c, "search", json!({"query": " "})).unwrap(),
+        json!({"error": "search needs query, queries or path"})
+    );
+    assert!(
+        call(&mut c, "search", json!({"query": "x", "mode": "vector"})).unwrap()["error"]
+            .as_str()
+            .unwrap()
+            .starts_with("unknown mode 'vector'")
+    );
+    let r = call(&mut c, "search", json!({"path": "Yếu tố/Doanh thu"})).unwrap();
+    assert_eq!(r["did_you_mean"][0], "Yếu tố/Doanh thu.md");
+    assert_eq!(
+        call(
+            &mut c,
+            "search",
+            json!({"query": "x", "snippet_length": -3})
+        )
+        .unwrap(),
+        json!({"error": "snippet_length must be >= 0"})
+    );
+}
+
+/// `related`: `hits` đứng trước `node` (node sai bị bỏ qua khi có hits); `node` sai trả `did_you_mean`; `node` hay
+/// `queries` không có OHS là `ohs_not_ready`.
+#[test]
+fn related_seed_precedence_and_new_inputs() {
+    let v = api();
+    let mut c = ctx(&v);
+    let r = call(
+        &mut c,
+        "related",
+        json!({"hits": ["Người/An.md"], "node": "Không có.md", "query": "x"}),
+    )
+    .unwrap();
+    assert_eq!(r["seed_source"], "hits");
+    let r = call(&mut c, "related", json!({"node": "Người/An"})).unwrap();
+    assert_eq!(r["did_you_mean"][0], "Người/An.md");
+    for args in [
+        json!({"node": "Người/An.md"}),
+        json!({"queries": ["lead", "khách"]}),
+    ] {
+        let r = call(&mut c, "related", args).unwrap();
+        assert_eq!(r["error"], "ohs_not_ready");
+        assert!(!r["action"].as_str().unwrap().contains("MCP ohs"));
+    }
 }

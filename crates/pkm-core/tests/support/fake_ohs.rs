@@ -14,8 +14,10 @@
 //! - `stop_on`: gặp câu tìm này thì ngừng đọc stdin hẳn (và không thoát).
 //!
 //! Mỗi lần khởi động ghi một dòng vào `<vault>/fake-ohs.starts` và ghi môi trường nhận được vào
-//! `<vault>/fake-ohs.env.json`. `search` trả sau `options.delayMs` ms một kết quả có `path` là câu tìm ở dạng NFD;
-//! câu `fail` thì trả `{"error"}`. `read` trả mỗi đường dẫn một note (dạng NFD): đường dẫn bắt đầu bằng `thiếu` là
+//! `<vault>/fake-ohs.env.json`. `search` trả sau `options.delayMs` ms một kết quả có `path` là câu tìm ở dạng NFD và
+//! `snippet` là `trích <câu tìm>`; câu `fail` thì trả `{"error"}`. Cấu hình `hits` (danh sách đường dẫn) thay kết quả
+//! bằng các note đó theo thứ tự (điểm 1, 0.9, …); `echo: true` đặt `snippet` của mỗi kết quả là request nhận được (bỏ
+//! `id`) in JSON, để test kiểm tham số gửi đi. `read` trả mỗi đường dẫn một note (dạng NFD): đường dẫn bắt đầu bằng `thiếu` là
 //! `{found: false, suggestions}`, còn lại là `{found: true, …, request}` với `request` là request nhận được (bỏ `id`);
 //! `paths` rỗng thì trả `{"error"}` như OHS.
 
@@ -157,11 +159,31 @@ fn main() {
                     let delay = req["options"]["delayMs"].as_u64().unwrap_or(0);
                     thread::sleep(Duration::from_millis(delay));
                     let q = req["query"].as_str().unwrap_or_default();
+                    let cfg = config(&vault);
                     if q == "fail" {
                         json!({"id": id, "error": "search failed"})
                     } else {
-                        let nfd: String = q.nfd().collect();
-                        json!({"id": id, "results": [{"path": nfd, "score": 1.0}]})
+                        let paths: Vec<String> = match cfg["hits"].as_array() {
+                            Some(h) => h.iter().filter_map(|p| p.as_str().map(str::to_owned)).collect(),
+                            None => vec![q.to_owned()],
+                        };
+                        let mut echo = req.clone();
+                        echo.as_object_mut().map(|m| m.remove("id"));
+                        let results: Vec<Value> = paths
+                            .iter()
+                            .enumerate()
+                            .map(|(i, p)| {
+                                let nfd: String = p.nfd().collect();
+                                let snippet = if cfg["echo"].as_bool().unwrap_or(false) {
+                                    echo.to_string()
+                                } else {
+                                    format!("trích {p}")
+                                };
+                                json!({"path": nfd, "score": 1.0 - 0.1 * i as f64, "title": "tiêu đề OHS",
+                                       "snippet": snippet, "links": ["x.md"]})
+                            })
+                            .collect();
+                        json!({"id": id, "results": results})
                     }
                 }
                 Some("read") => {
