@@ -76,7 +76,7 @@ vantt/obsidian-pkm
 ├── spec/
 │   ├── spec.lock              sha đang ghim của repo đặc tả, phiên bản fixture (mục 4)
 │   └── PORTING.md             nhật ký: commit Python nào đã chuyển, ở commit Rust nào
-├── parity/                    bộ so khớp (mục 6): script chạy hai bản, so bảng và JSON
+├── parity/                    bộ so khớp (mục 6): script chạy hai bản, so bảng và JSON; golden/<sha>/ cho CI
 ├── docs/PRD.md                tài liệu này
 └── .github/workflows/         CI (mục 12)
 ```
@@ -129,7 +129,7 @@ Python vẫn sửa trong lúc chuyển. Cách đuổi, ngược chiều với c�
 1. **Đường dẫn theo dõi** (thay đổi ở đây là việc của repo này):
    `scripts/kg/**`, `scripts/e11/kg_adapter.py`, `scripts/e11/graph_index.py`, `scripts/platform_paths.py`, `docs/knowledge-graph/schema/schema.yaml`, `docs/knowledge-graph/install-guide-kg-mcp.md` (hợp đồng dùng), `scripts/kg/tests/**`.
 2. **Lệnh** `cargo xtask follow` (hoặc `parity/follow.py`): fetch repo đặc tả, liệt kê commit từ `spec.lock` tới `main` chạm đường dẫn theo dõi, in mỗi commit một dòng (sha, ngày, tiêu đề, file chạm, số dòng). `--issues` mở mỗi commit một issue nhãn `port` trong repo này (bỏ commit đã có issue).
-3. **Workflow** `follow.yml`: chạy hằng ngày; có commit mới thì mở issue như trên. Repo đặc tả là **private**: workflow cần secret `SPEC_READ_TOKEN` (fine-grained PAT, chỉ quyền đọc `contents` của `vantt/obsidian-pkm-automation`). CI so khớp (mục 12) dùng cùng secret để checkout repo đặc tả ở sha ghim.
+3. **Chạy ở đâu:** trên máy, bởi agent đang đăng nhập `gh` của user (repo đặc tả là private; máy đã có quyền đọc). Agent chạy `follow` đầu mỗi phiên làm việc. **Không** chạy trong GitHub Actions, nên không cần token hay secret nào.
 4. **Chuyển một commit:** đọc diff và test đi kèm → sửa Rust → chạy bộ so khớp với đặc tả **ở sha của commit đó** → ghi `spec/PORTING.md` (sha Python, commit Rust, lệch có chủ ý nếu có) → đóng issue. Chuyển theo thứ tự thời gian; commit chỉ đổi phần WSL hoặc phần Python thuần (ví dụ `utf8_stdio`) thì đánh dấu "không áp dụng" kèm lý do.
 5. **Nâng ghim:** khi mọi commit tới sha X đã chuyển và bộ so khớp ở X sạch, đặt `spec.lock` = X trong cùng PR.
 6. **Đo khoảng cách:** `follow` in số commit chưa chuyển và số ngày từ commit cũ nhất chưa chuyển. Mục tiêu: dưới 5 commit, dưới 7 ngày.
@@ -149,6 +149,7 @@ Chạy cả hai bản trên cùng vault, so kết quả. Đây là tiêu chuẩn
 
 - kg-solo chạy trong CI. Bản B chỉ chạy trên máy user (`parity --private <vault>`), chỉ in số dòng lệch theo bảng và theo tool, không in nội dung note.
 - Đầu ra: `parity/report.json` và bảng tóm tắt; mã thoát khác 0 khi có lệch chưa được ghi là "có chủ ý".
+- **Kết quả mẫu (golden) cho CI:** agent chạy bản Python ở sha ghim trên máy, xuất dump bảng và JSON tool của kg-solo vào `parity/golden/<sha>/`, commit cùng PR nâng ghim. CI chỉ so Rust với các file này, không đọc repo đặc tả. Bản B không bao giờ có golden trong repo (nội dung thật).
 
 ## 7. Chuyển từng module: điểm cần chú ý
 
@@ -200,8 +201,8 @@ Thay `desktop_config.py`: không còn chép 15 file Python, không cần Python.
 ## 12. Kiểm thử và CI
 
 - Test Rust theo đúng danh sách test Python (mục 2.1), cộng test đơn vị riêng cho phần Rust tự viết.
-- CI (`.github/workflows/ci.yml`): `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test` trên Windows, macOS, Linux; dựng kg-solo bằng `npx github:vantt/obsidian-test-fixture#v0.7.0 generate …`; chạy bộ so khớp với Python ở sha ghim (Python 3.12 và PyYAML trên runner).
-- `follow.yml` (mục 5). `release.yml`: khi có tag `v*`, build `pkm` cho `x86_64-pc-windows-msvc`, `aarch64-apple-darwin`, `x86_64-apple-darwin`, `x86_64-unknown-linux-gnu`, kèm sha256. Chưa ký mã (giai đoạn sau).
+- CI (`.github/workflows/ci.yml`): `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test` trên Windows, macOS, Linux; dựng kg-solo bằng `npx github:vantt/obsidian-test-fixture#v0.7.0 generate …` (repo public); so Rust với `parity/golden/<sha ghim>/` (mục 6). CI không cần Python, không cần token.
+- `release.yml`: khi có tag `v*`, build `pkm` cho `x86_64-pc-windows-msvc`, `aarch64-apple-darwin`, `x86_64-apple-darwin`, `x86_64-unknown-linux-gnu`, kèm sha256. Chưa ký mã (giai đoạn sau).
 - Không đưa nội dung vault thật vào repo, CI, log hay issue.
 
 ## 13. Điều kiện bắt đầu và chuyển hẳn
@@ -229,7 +230,7 @@ Sau khi chuyển hẳn: `setup_vault.py` và hướng dẫn cài ở repo đặc
 | R02 | Bài thử S2: MCP Rust nhỏ (một tool) bắt tay với Claude Desktop trên Windows và với Claude Code | R00 | 0,5 | Gọi được tool; chốt `rmcp` hay tự viết |
 | R03 | Bài thử S3: `pkm` gọi `ohs serve --stdio` của upstream, request đồng thời theo `id`, chuẩn hoá NFC | R00 | 0,5 | Ra kết quả `search` đúng |
 | R04 | Bộ so khớp chạy với bản Python (Python so với chính nó cho ra 0 lệch), bộ câu sinh tự động cho bản B | R00 | 2 | `parity` chạy được trên kg-solo và bản B |
-| R05 | `follow` + `follow.yml` | R00 | 0,5 | Liệt kê đúng commit từ `5a3eb2f` |
+| R05 | `follow` (chạy trên máy) + xuất golden kg-solo từ Python ở `5a3eb2f` | R00 | 0,5 | Liệt kê đúng commit từ `5a3eb2f`; `parity/golden/5a3eb2f…/` có đủ bảng và JSON tool |
 | R06 | `vault` + `schema` | R01 | 2,5 | Bảng `nodes`, `props`, `links`, `raw_links`, `blocks`, `names`, `schema_*` khớp |
 | R07 | `index` (cạnh, lớp, tăng dần) + `adapter::e11` + `validate` | R06 | 3 | Mọi bảng và `v3_deviations` khớp |
 | R08 | `query` + `tools` + `more` | R07 | 2,5 | JSON mọi tool trừ `related` khớp |
@@ -250,7 +251,7 @@ Song song được: R01–R05 sau R00; R06 chờ R01.
 | Q2 | Giữ tên MCP `kg` hay đổi thành `pkm` | Giữ `kg` tới khi chuyển hẳn (Project instructions, `CLAUDE.md` của vault, playbook đang gọi tên `kg`); đổi sau cùng đợt với Q1 nếu muốn | User |
 | Q3 | Crate YAML | Theo kết quả R01 | Agent |
 | Q4 | `rmcp` hay JSON-RPC tự viết | Theo kết quả R02 | Agent |
-| Q5 | Repo đặc tả có chạy được Rust trong CI của nó không (để so khớp hai chiều) | Không cần; repo này chạy Python ở sha ghim | Agent |
+| Q5 | ~~Cách CI đọc repo đặc tả private~~ | **Đã chốt (user 2026-11-02):** không đọc; `follow` và chạy Python ở trên máy đã đăng nhập `gh`, CI dùng golden đã commit | — |
 
 ## 16. Rủi ro
 | Rủi ro | Ảnh hưởng | Giảm thiểu |
