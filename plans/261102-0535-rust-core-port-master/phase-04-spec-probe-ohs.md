@@ -1,6 +1,6 @@
 ---
 title: "Phase 4: Bài thử S3, OHS stdio"
-status: todo
+status: done
 priority: P2
 effort: "0,5 ngày"
 prd: R03
@@ -22,12 +22,12 @@ Chứng minh Rust giữ được một tiến trình OHS upstream qua stdio: ch�
 - Tạo: `probes/s3-ohs/` (crate riêng, không là member của workspace), báo cáo `plans/reports/probe-s3-ohs-*.md`.
 
 ## Việc cần làm
-- [ ] Lấy hoặc dựng gói OHS dựng sẵn (thư mục có `node/` và thư mục build của app), chỉ đường bằng cờ hoặc `PKM_OHS_DIR`.
-- [ ] Khởi động lệnh `serve --stdio` của OHS như mục 9 PRD, với `OBSIDIAN_VAULT_PATH` trỏ vào kg-solo; chờ ready.
-- [ ] Gửi ít nhất 5 request `search` đồng thời, ghép đúng câu trả lời theo `id`.
-- [ ] Chuẩn hoá đường dẫn trả về sang NFC; thử với tên file tiếng Việt dạng NFD.
-- [ ] Đóng stdin khi thoát, chờ có giới hạn, không để tiến trình mồ côi.
-- [ ] Ghi cách đọc trạng thái (`starting`, `indexing` kèm tiến độ, `model_missing`) từ OHS để phase 11 dựng lỗi `ohs_not_ready` (D7).
+- [x] Lấy hoặc dựng gói OHS dựng sẵn (thư mục có `node/` và thư mục build của app), chỉ đường bằng cờ hoặc `PKM_OHS_DIR`.
+- [x] Khởi động lệnh `serve --stdio` của OHS như mục 9 PRD, với `OBSIDIAN_VAULT_PATH` trỏ vào kg-solo; chờ ready.
+- [x] Gửi ít nhất 5 request `search` đồng thời, ghép đúng câu trả lời theo `id`.
+- [x] Chuẩn hoá đường dẫn trả về sang NFC; thử với tên file tiếng Việt dạng NFD.
+- [x] Đóng stdin khi thoát, chờ có giới hạn, không để tiến trình mồ côi.
+- [x] Ghi cách đọc trạng thái (`starting`, `indexing` kèm tiến độ, `model_missing`) từ OHS để phase 11 dựng lỗi `ohs_not_ready` (D7).
 
 ## Nghiệm thu
 - Kết quả `search` của bài thử trùng với cùng câu hỏi gọi qua CLI OHS (so tập note).

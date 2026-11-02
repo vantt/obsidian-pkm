@@ -1,0 +1,14 @@
+# Bài thử: giữ một tiến trình `ohs serve --stdio`, request đồng thời theo `id`, chuẩn hoá NFC.
+# Crate riêng, không là member của workspace gốc (bảng [workspace] rỗng bên dưới).
+[package]
+name = "s3-ohs"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.97"
+publish = false
+
+[workspace]
+
+[dependencies]
+serde_json = "1"
+unicode-normalization = "0.1"
