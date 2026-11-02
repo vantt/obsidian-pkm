@@ -1,0 +1,6 @@
+# CRT tĩnh cho Windows: `pkm.exe` không cần `VCRUNTIME140.dll` (máy Windows mới cài, Windows Sandbox không có
+# file này, và Claude Desktop khởi chạy `pkm.exe` thì lỗi mà không báo gì). `cc` (SQLite bundled) đọc cờ này và
+# biên dịch C bằng `/MT`. `scripts/release-assets.sh` kiểm bằng `dumpbin /dependents` mỗi lần đóng gói.
+# Đặt `RUSTFLAGS` sẽ ghi đè cờ ở đây, nên CI và release không đặt `RUSTFLAGS`.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
