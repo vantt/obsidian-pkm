@@ -39,12 +39,14 @@ const LOGS: [(&str, &str); 2] = [
     ("_E11/migrate-v3-log.jsonl", "migrate_v3.py"),
 ];
 const OHS_MODEL: &str = "multilingual-e5-small";
-/// Trang sinh tự động và hàng chờ: nối tới mọi thứ.
-pub const SYSTEM: [&str; 5] = [
+/// Trang sinh tự động và hàng chờ: nối tới mọi thứ. `_ohs/` là thư mục của gói tiếng Việt OHS (`_ohs/lexicon.md`),
+/// không phải nguyên liệu.
+pub const SYSTEM: [&str; 6] = [
     "_E11/",
     "_Xưởng/",
     "_Templates/",
     "_Đề xuất/",
+    "_ohs/",
     "Trang chủ.md",
 ];
 const FOLDER_EX: &str = "kg_adapter.py folder@schema_v3";
