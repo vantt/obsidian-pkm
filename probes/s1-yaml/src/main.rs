@@ -116,8 +116,11 @@ fn reference(o: &Opts) -> Result<Reference, String> {
     } else {
         let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("pyyaml-dump.py");
         let spec = o.spec.as_ref().expect("checked in parse_opts");
+        // `-E -P`, not `-I`: `-I` also implies `-s`, which hides the user site where `pip install --user`
+        // puts PyYAML (the usual setup on Windows). `-E` still ignores PYTHON* variables and `-P` (3.11+)
+        // still keeps the script directory and cwd off `sys.path`, so nothing is imported from the vault.
         let out = Command::new(&o.python)
-            .arg("-I")
+            .args(["-E", "-P"])
             .arg(&script)
             .arg("--spec")
             .arg(spec)

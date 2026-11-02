@@ -1,6 +1,6 @@
 ---
 title: "Phase 11: related và module OHS"
-status: in-progress
+status: done
 priority: P1
 effort: "1,5 ngày"
 prd: R09
@@ -43,4 +43,4 @@ needs_user: false
 - **`related`: xong.** `crates/pkm-core/src/related.rs` (PageRank cá nhân hoá, `via`, dạng hit), nhánh `related` của `tools::call`, OHS gắn vào phiên bằng `tools::Context::with_ohs` / `set_ohs`. Bộ so khớp kg-solo: `tools/related` 15/15 khớp, so chặt lệch số thực 0; thêm 400 lời gọi ngẫu nhiên qua `dump-python.py --replay` khớp hết. Chỉ có câu hỏi: hạt giống từ `Ohs::search`; OHS thiếu hay chưa sẵn sàng thì `ohs_not_ready` (D7). Test với OHS giả (`tests/related_ohs_fake.rs`) chạy trong CI; với OHS thật (`tests/related_ohs_real.rs`, `#[ignore]`) qua trên Linux. Báo cáo: `plans/reports/fullstack-developer-261102-1530-phase-11-related.md`.
 - **Còn lại (ngoài phase này):** so `related` chỉ có câu hỏi với Python trên máy có gói OHS, và thử OHS trên Windows thật (agent khác làm sau, theo quyết định của user). MCP server và CLI gắn `Ohs::launch` vào `Context` thuộc phase 12.
 
-Cổng còn chờ: mã đã xong; còn `related` chỉ có câu hỏi so với Python trên máy có gói OHS, và OHS chạy trên Windows thật, do agent Windows và bản B làm theo [handoff](./handoff-windows-test.md).
+Cổng đã qua (2026-11-02, [báo cáo Windows](../reports/windows-tester-261102-1816-windows-install.md)): gói OHS `0.17.2-vantt.3` chạy trên Windows thật, `doctor --deep` báo `ready`; `related` chỉ có câu hỏi trên kg-solo có hạt giống trùng Python (tập và thứ tự) ở cả 5 câu, cả hai nguồn `ohs-cli`; không còn `node` mồ côi.

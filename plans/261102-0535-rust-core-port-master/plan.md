@@ -116,17 +116,13 @@ Xem mục 16 PRD. Với lead, ba rủi ro cần theo dõi: YAML đọc khác PyY
 
 ## Trạng thái thực hiện (2026-11-02)
 
-Mã của phase 01–14 đã xong tới bộ cài. Đã phát hành thử `v0.1.0-rc.1` (pre-release, commit b8995f7, run 41424573303): đủ 7 file, `sha256sum -c checksums.txt` qua hết trên bản tải về. Trước đó chạy thử Release bằng `workflow_dispatch` (run 41417342596, commit 93d1251) ra đủ 7 file, `sha256sum -c checksums.txt` qua hết, binary Windows không cần `vcruntime140.dll`, `install.ps1` và `install.sh` qua bài thử trên runner; CI xanh trên ba nền, bộ so khớp kg-solo 64 mục, 0 lệch, 0 mục chưa có. Việc còn lại của 02–13 chỉ kiểm được trên Windows thật và trên bản B; agent Windows làm theo [handoff-windows-test.md](./handoff-windows-test.md).
+Mã của phase 01–14 đã xong tới bộ cài. Đã phát hành thử `v0.1.0-rc.1` (pre-release, commit b8995f7, run 41424573303): đủ 7 file, `sha256sum -c checksums.txt` qua hết trên bản tải về. Trước đó chạy thử Release bằng `workflow_dispatch` (run 41417342596, commit 93d1251) ra đủ 7 file, `sha256sum -c checksums.txt` qua hết, binary Windows không cần `vcruntime140.dll`, `install.ps1` và `install.sh` qua bài thử trên runner; CI xanh trên ba nền, bộ so khớp kg-solo 64 mục, 0 lệch, 0 mục chưa có. Agent Windows đã cài `v0.1.0-rc.1` trên Windows 11 thật và chạy bản B theo [handoff-windows-test.md](./handoff-windows-test.md) ([báo cáo](../reports/windows-tester-261102-1816-windows-install.md)): phase 02, 03, 05, 08, 09, 11 qua; 10 và 13 còn một việc nhỏ (bảng dưới).
 
 | Nhóm | Phase | Còn lại |
 |---|---|---|
-| Xong | 01, 04, 06, 07, 12, 14 | — |
-| Chờ agent Windows và bản B | 02 | bài thử S1 trên bản B |
-| | 03 | Claude Desktop trên Windows gọi được tool |
-| | 05 | Python so với chính nó trên bản B; `git grep` tên note bản B |
-| | 08, 09, 10 | bộ so khớp `--private` trên bản B |
-| | 11 | `related` chỉ có câu hỏi so với Python khi có gói OHS; OHS trên Windows thật |
-| | 13 | `pkm mcp install` trên Windows sạch, Claude Desktop gọi được `kg`, `doctor` không lỗi |
+| Xong | 01, 02, 03, 04, 05, 06, 07, 08, 09, 11, 12, 14 | — |
+| Chờ chạy lại trên Windows | 10 | tầng CLI trên bản B: 2 lệch đường dẫn vault do bộ so khớp, đã sửa `Scrub` của `dump-python.py`; chạy lại `parity.py run --private` |
+| Chờ máy Windows không có Python | 13 | mọi phép kiểm đã qua trên Windows thật, nhưng máy có Python nên "Windows sạch" chỉ đạt một phần |
 | Đang làm, theo lượt | 15 | lượt đuổi theo 2026-11-02: chuyển `223c9c3`, nâng ghim, dựng lại golden; `follow` báo 0. Lượt sau khi user bảo |
 | Chưa bắt đầu, chờ user | | |
 | | 16 | cần 15, kết quả Windows và bản B, user đồng ý gắn tag và chạy song song một tuần |

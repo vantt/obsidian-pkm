@@ -87,6 +87,10 @@ pub struct InstallArgs {
     /// Không làm ấm index tìm kiếm của OHS sau khi cài (OHS sẽ index lần đầu khi Claude Desktop mở pkm).
     #[arg(long)]
     pub no_warm: bool,
+    /// Dùng gói OHS đã cài sẵn ở thư mục này (ghi `--ohs DIR` vào mục `pkm`), không cài gói vào thư mục của pkm. Máy
+    /// đã có OHS cho vault (MCP `ohs`, script dự án) thì dùng cờ này để cả máy chỉ có một chỗ cài OHS.
+    #[arg(long, value_name = "DIR", conflicts_with_all = ["ohs_package", "no_ohs"])]
+    pub ohs: Option<PathBuf>,
     /// Hạn giờ bắt tay với server, giây.
     #[arg(long, default_value_t = 120, value_name = "SECS")]
     pub timeout: u64,
@@ -453,7 +457,17 @@ pub fn run_with(
         Some(db) => std::path::absolute(db).map_err(|e| format!("{}: {e}", db.display()))?,
         None => inst.default_db(&vault),
     };
-    let read_args = args.read_args();
+    let mut read_args = args.read_args();
+    if let Some(dir) = &args.ohs {
+        let pkg = OhsPackage::from_dir(dir).map_err(|e| format!("--ohs: {e}"))?;
+        let root = pkg.root.to_str().ok_or_else(|| {
+            format!(
+                "{} không phải UTF-8, không ghi được vào JSON",
+                pkg.root.display()
+            )
+        })?;
+        read_args.extend(["--ohs".to_owned(), root.to_owned()]);
+    }
     let mut entry = server_entry(&inst.exe, &vault, &db, &read_args, args.about.as_deref())?;
     if args.no_ohs {
         entry.env.push((NO_OHS_ENV.to_owned(), "1".to_owned()));
@@ -623,7 +637,8 @@ pub fn written_by_pkm(entry: &ServerEntry) -> bool {
 fn ohs_note(doc: &ConfigDoc) -> Option<String> {
     doc.server(OHS_SERVER_NAME).map(|_| {
         format!(
-            "giữ nguyên mục `{OHS_SERVER_NAME}` bạn tự thêm; `{SERVER_NAME}` đã có search và read nên có thể bỏ              `{OHS_SERVER_NAME}` (không bắt buộc; để cả hai thì agent thấy hai tool search và OHS nạp model hai lần)"
+            "giữ nguyên mục `{OHS_SERVER_NAME}` bạn tự thêm; `{SERVER_NAME}` đã có search và read nên có thể bỏ \
+             `{OHS_SERVER_NAME}` (không bắt buộc; để cả hai thì agent thấy hai tool search và OHS nạp model hai lần)"
         )
     })
 }
@@ -658,13 +673,16 @@ fn warm(
             "bỏ qua làm ấm index tìm kiếm (--no-warm); OHS sẽ index lần đầu khi Claude Desktop mở pkm".to_owned(),
         );
     }
-    let Ok(pkg) = OhsPackage::from_dir(&inst.ohs_dir()) else {
+    // Gói dùng chung chỉ ra bằng `--ohs DIR`, không thì gói cài ở thư mục của pkm.
+    let dir = args.ohs.clone().unwrap_or_else(|| inst.ohs_dir());
+    let Ok(pkg) = OhsPackage::from_dir(&dir) else {
         return Ok(());
     };
     w(
         out,
         format!(
-            "làm ấm index tìm kiếm của OHS cho {} (lần đầu có thể mất vài phút; Ctrl+C để bỏ, OHS sẽ index tiếp khi              Claude Desktop mở pkm)…",
+            "làm ấm index tìm kiếm của OHS cho {} (lần đầu có thể mất vài phút; Ctrl+C để bỏ, OHS sẽ index tiếp khi \
+             Claude Desktop mở pkm)…",
             vault.display()
         ),
     )?;
@@ -675,7 +693,8 @@ fn warm(
         w(
             out,
             format!(
-                "cảnh báo: index tìm kiếm chưa xong ({}): {} `{SERVER_NAME}` vẫn chạy; search báo ohs_not_ready tới                  khi xong",
+                "cảnh báo: index tìm kiếm chưa xong ({}): {} `{SERVER_NAME}` vẫn chạy; search báo ohs_not_ready tới \
+                 khi xong",
                 state.name(),
                 state.action()
             ),
@@ -683,7 +702,8 @@ fn warm(
     }
 }
 
-/// Mục `pkm`: `command` là binary `pkm`, `args` là `VAULT mcp --db DB <cờ đọc> [--about TEXT]`.
+/// Mục `pkm`: `command` là binary `pkm`, `args` là `VAULT mcp --db DB <cờ đọc> [--ohs DIR] [--about TEXT]`
+/// (`read_args` mang cả `--ohs`).
 pub fn server_entry(
     exe: &Path,
     vault: &Path,
@@ -724,11 +744,14 @@ pub fn reinstall_args(entry_args: &[String], no_ohs: bool) -> Option<Vec<String>
     Some(out)
 }
 
-/// Đối số `pkm` để dựng lại index của mục `pkm`: `VAULT build --db DB <cờ đọc>` (bỏ `--about`, cờ riêng của MCP).
+/// Đối số `pkm` để dựng lại index của mục `pkm`: `VAULT build --db DB <cờ đọc>` (bỏ `--about` và `--ohs`, cờ riêng
+/// của MCP).
 pub fn rebuild_args(entry_args: &[String]) -> Option<Vec<String>> {
     let mut args = reinstall_args(entry_args, false)?.split_off(2);
-    if let Some(i) = args.iter().position(|a| a == "--about") {
-        args.drain(i..(i + 2).min(args.len()));
+    for flag in ["--about", "--ohs"] {
+        if let Some(i) = args.iter().position(|a| a == flag) {
+            args.drain(i..(i + 2).min(args.len()));
+        }
     }
     args.insert(1, "build".to_owned());
     Some(args)
@@ -792,6 +815,14 @@ fn load_with_digest(path: &Path) -> Result<(ConfigDoc, Option<[u8; 32]>), String
         Err(e) => return Err(format!("đọc {}: {e}", path.display())),
     };
     Ok((ConfigDoc::load(path)?, digest))
+}
+
+/// Thư mục gói OHS mà mục `pkm` chỉ ra bằng `--ohs` (cài với `mcp install --ohs DIR`).
+pub fn entry_ohs(args: &[String]) -> Option<PathBuf> {
+    args.iter()
+        .position(|a| a == "--ohs")
+        .and_then(|i| args.get(i + 1))
+        .map(PathBuf::from)
 }
 
 /// Vault và DB đọc ngược từ `args` của mục `pkm` (dạng [`server_entry`] ghi).
@@ -922,11 +953,17 @@ fn ohs_plan(inst: &Install, args: &InstallArgs) -> String {
     if args.no_ohs {
         return "bỏ qua gói OHS (--no-ohs)".to_owned();
     }
+    if let Some(d) = &args.ohs {
+        return format!(
+            "dùng gói OHS có sẵn ở {} (--ohs), không cài gói",
+            d.display()
+        );
+    }
     if let Some(p) = &args.ohs_package {
         return format!("cài gói OHS từ {} vào {}", p.display(), dir.display());
     }
-    if OhsPackage::from_dir(&dir).is_ok() {
-        return format!("gói OHS đã có ở {}", dir.display());
+    if let Some(have) = installed_ohs(&dir, inst) {
+        return have;
     }
     if let Some(src) = &inst.ohs_source {
         return format!(
@@ -947,6 +984,23 @@ fn ohs_plan(inst: &Install, args: &InstallArgs) -> String {
     }
 }
 
+/// Dòng báo gói OHS ở `dir` đã dùng được, nên không cài: gói có, và không cũ hơn bản ghim
+/// ([`ohs_bundle::older_than_pin`]; gói mới hơn được giữ, không hạ cấp) hoặc người dùng đã chọn nguồn riêng
+/// ([`ohs_bundle::PACKAGE_ENV`]). `None`: chưa có gói, hoặc gói cũ hơn bản ghim (bộ cài nâng lên bản ghim; tải lỗi thì
+/// giữ gói cũ).
+fn installed_ohs(dir: &Path, inst: &Install) -> Option<String> {
+    let pkg = OhsPackage::from_dir(dir).ok()?;
+    let version = pkg.version();
+    if !ohs_bundle::older_than_pin(version.as_deref())
+        || inst.ohs_source.is_some()
+        || inst.bundle.is_none()
+    {
+        let v = version.unwrap_or_else(|| "không rõ phiên bản".to_owned());
+        return Some(format!("gói OHS đã có ở {} ({v})", dir.display()));
+    }
+    None
+}
+
 /// Cài gói OHS theo `args`. Gói chỉ ra bằng `--ohs-package` mà lỗi thì dừng; tự tải (từ
 /// [`ohs_bundle::PACKAGE_ENV`] nếu đặt, không thì gói ghim của bản phát hành) lỗi thì chỉ cảnh báo, vì `pkm` vẫn chạy được không
 /// cần OHS (chỉ `related` không có `hits` cần OHS).
@@ -958,6 +1012,14 @@ fn install_ohs(
 ) -> Result<(), String> {
     if args.no_ohs {
         return Ok(());
+    }
+    if let Some(d) = &args.ohs {
+        let v = OhsPackage::from_dir(d)
+            .ok()
+            .and_then(|p| p.version())
+            .unwrap_or_else(|| "không rõ phiên bản".to_owned());
+        return writeln!(out, "dùng gói OHS có sẵn ở {} ({v})", d.display())
+            .map_err(|e| e.to_string());
     }
     let dest = inst.ohs_dir();
     let fetch = |url: &str, file: &Path| hooks.fetch(url, file);
@@ -974,8 +1036,8 @@ fn install_ohs(
         let pkg = install(&source, out)?;
         return w(out, format!("đã cài gói OHS vào {}", pkg.root.display()));
     }
-    if OhsPackage::from_dir(&dest).is_ok() {
-        return w(out, format!("gói OHS đã có ở {}", dest.display()));
+    if let Some(have) = installed_ohs(&dest, inst) {
+        return w(out, have);
     }
     let (source, origin) = match &inst.ohs_source {
         Some(text) => (

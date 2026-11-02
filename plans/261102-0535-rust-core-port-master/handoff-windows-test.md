@@ -36,7 +36,7 @@ Mọi lệnh dưới đây là PowerShell. Thư mục làm việc gợi ý là `
 
 1. Kiểm máy có Python không: `Get-Command python, python3, py -ErrorAction SilentlyContinue`. Nghiệm thu phase 13 cần máy không có Python; nếu máy đã có, ghi rõ trong báo cáo (phần A vẫn làm được, nhưng nghiệm thu "Windows sạch" khi đó chỉ là một phần).
 2. Thoát hẳn Claude Desktop (cả biểu tượng ở khay hệ thống).
-3. Sao một bản cấu hình Claude Desktop để trả lại khi xong: `Copy-Item "$env:APPDATA\Claude\claude_desktop_config.json" C:\pkm-test\claude_desktop_config.before.json`. Bản Microsoft Store nằm ở `%LOCALAPPDATA%\Packages\Claude_*\LocalCache\Roaming\Claude\`.
+3. Sao một bản cấu hình Claude Desktop để trả lại khi xong: `Copy-Item "$env:APPDATA\Claude\claude_desktop_config.json" C:\pkm-test\claude_desktop_config.before.json`. Bản Microsoft Store 4.4212 (đã thử trên Windows 11 26200) cũng ghi ở `%APPDATA%\Claude\`; chỉ khi không thấy file ở đó mới tìm trong `%LOCALAPPDATA%\Packages\Claude_*\LocalCache\Roaming\Claude\`.
 4. Ghi vào báo cáo: có mục `kg` sẵn không, và nếu có thì nó chạy Python hay `pkm` (chỉ ghi loại, không ghi `args`, vì `args` có thể chứa đường dẫn bản B). **Nếu đã có mục `kg` chạy Python, hỏi user trước khi thay**, vì `pkm mcp install` sẽ thay đúng mục đó.
 
 ### A1. Lấy binary
@@ -51,6 +51,13 @@ gh release list -R vantt/obsidian-pkm
 
 ```powershell
 gh release download v0.1.0-rc.1 --repo vantt/obsidian-pkm --pattern install.ps1 --output - | Out-String | iex
+```
+
+Nếu chính sách quyền của agent chặn kiểu `| iex`, tải file trước rồi chạy bằng `-File` (bộ cài đã đóng dấu đúng phiên bản của Release và vẫn kiểm sha256 theo `checksums.txt`):
+
+```powershell
+gh release download v0.1.0-rc.1 --repo vantt/obsidian-pkm --pattern install.ps1 -D C:\pkm-test\rel
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\pkm-test\rel\install.ps1
 ```
 
 **Nếu chưa có Release** (trường hợp hiện tại), dùng artifact `release-assets` của workflow Release chạy bằng `workflow_dispatch`. Artifact này có bốn binary, `install.sh`, `install.ps1` đã đóng dấu phiên bản và `checksums.txt`, giống hệt bộ file của một Release.
@@ -110,7 +117,7 @@ pkm mcp install --check
 
 `--check` bắt tay với server `kg` đã cấu hình như Claude Desktop và phải báo đủ 11 tool.
 
-Cờ của lệnh (đúng theo `pkm mcp install --help`): `--db PATH`, `--packs`, `--no-aliases`, `--edge-keys schema|links`, `--body-edges`, `--adapter`, `--about TEXT`, `--config FILE`, `--check`, `--dry-run`, `--remove`, `--force`, `--allow-any-location`, `--ohs-package PATH|URL`, `--no-ohs`, `--timeout SECS` (mặc định 120). Hai cờ dễ nhầm:
+Cờ của lệnh (đúng theo `pkm mcp install --help`): `--db PATH`, `--packs`, `--no-aliases`, `--edge-keys schema|links`, `--body-edges`, `--adapter`, `--about TEXT`, `--config FILE`, `--check`, `--dry-run`, `--remove`, `--force`, `--allow-any-location`, `--ohs DIR`, `--ohs-package PATH|URL`, `--no-ohs`, `--timeout SECS` (mặc định 120). Hai cờ dễ nhầm:
 
 - `--force` chỉ bỏ qua bước kiểm Claude Desktop đang chạy. Claude Desktop ghi đè cấu hình khi thoát, nên chỉ dùng khi chắc nó đã tắt mà `pkm` vẫn nhận nhầm.
 - `--allow-any-location` cho phép ghi khi `pkm.exe` đang chạy không nằm ở chỗ cài chuẩn (`%LOCALAPPDATA%\pkm\bin`, `PKM_INSTALL_DIR`, hoặc thư mục có `.pkm-managed`). Cờ này không bỏ qua kiểm Claude Desktop.
@@ -133,16 +140,20 @@ pkm doctor --json
 
 ### A5. Gói OHS
 
-OHS là bản fork `vantt/obsidian-hybrid-search`, gói dựng sẵn có Node đi kèm, cài vào `%LOCALAPPDATA%\pkm\ohs`. Ba đường, theo thứ tự ưu tiên:
+OHS là bản fork `vantt/obsidian-hybrid-search`, gói dựng sẵn có Node và gói tiếng Việt (`lang\ohs-lang-vi`) đi kèm, cài vào `%LOCALAPPDATA%\pkm\ohs`. `pkm` ghim Release `v0.17.2-vantt.4` và chạy mọi tiến trình OHS với `OHS_LANGUAGE_PACK` trỏ vào gói tiếng Việt của gói. Ba đường, theo thứ tự ưu tiên:
 
-1. **Tự tải từ GitHub Release** (mặc định của `pkm mcp install` khi không có `--ohs-package`, `--no-ohs` hay `PKM_OHS_PACKAGE`): tải `ohs-0.17.2-vantt.3-win32-x64.zip` của Release `v0.17.2-vantt.3` (repo công khai, không cần đăng nhập, không cần `gh`) bằng `curl.exe` có sẵn trong Windows 10 trở lên, kiểm sha256 với bản ghim trong `pkm` (`ad63f1a59c06daa46d5c55c10d7eec1d912556b389f2c69062cbe46ed45e304d`). Ghi dòng `tải gói OHS … từ …` và `sha256 của gói khớp bản ghim` vào báo cáo.
-2. **File tải tay**, khi đường 1 hỏng (máy chặn GitHub, proxy…): tải file bằng trình duyệt ở https://github.com/vantt/obsidian-hybrid-search/releases/tag/v0.17.2-vantt.3, hoặc:
+1. **Tự tải từ GitHub Release** (mặc định của `pkm mcp install` khi không có `--ohs-package`, `--no-ohs` hay `PKM_OHS_PACKAGE`): tải `ohs-0.17.2-vantt.4-win32-x64.zip` của Release `v0.17.2-vantt.4` (repo công khai, không cần đăng nhập, không cần `gh`) bằng `curl.exe` có sẵn trong Windows 10 trở lên, kiểm sha256 với bản ghim trong `pkm` (`5cb480f81ded99abfb2ab3ef0c0582320de85430ebff0d7dcd2f582d53e94f12`). Ghi dòng `tải gói OHS … từ …` và `sha256 của gói khớp bản ghim` vào báo cáo.
+2. **File tải tay**, khi đường 1 hỏng (máy chặn GitHub, proxy…): tải file bằng trình duyệt ở https://github.com/vantt/obsidian-hybrid-search/releases/tag/v0.17.2-vantt.4, hoặc:
    ```powershell
-   curl.exe -fL -o C:\pkm-test\ohs-0.17.2-vantt.3-win32-x64.zip https://github.com/vantt/obsidian-hybrid-search/releases/download/v0.17.2-vantt.3/ohs-0.17.2-vantt.3-win32-x64.zip
-   pkm mcp install C:\pkm-test\vault-thu --ohs-package C:\pkm-test\ohs-0.17.2-vantt.3-win32-x64.zip
+   curl.exe -fL -o C:\pkm-test\ohs-0.17.2-vantt.4-win32-x64.zip https://github.com/vantt/obsidian-hybrid-search/releases/download/v0.17.2-vantt.4/ohs-0.17.2-vantt.4-win32-x64.zip
+   pkm mcp install C:\pkm-test\vault-thu --ohs-package C:\pkm-test\ohs-0.17.2-vantt.4-win32-x64.zip
    ```
    `--ohs-package` nhận file gói (phải khớp sha256 ghim), thư mục gói đã giải nén (có `node\` và `app\dist\`), hoặc URL `https://` của file gói kèm `<URL>.sha256`.
 3. **Biến `PKM_OHS_PACKAGE`**: cùng dạng giá trị như `--ohs-package`, dùng khi không muốn sửa lệnh.
+
+Máy đã có OHS của dự án (bản B: `C:\tools\ohs`, cũng là `0.17.2-vantt.4` có gói tiếng Việt) thì **không** cài thêm gói thứ hai cho vault đó: dùng `--ohs C:\tools\ohs` (mục A7). Hai bản OHS khác cấu hình gói ngôn ngữ cùng chạy trên một vault làm bên làm chủ index dựng lại bảng view qua lại, kết quả tìm đổi theo bên chạy sau.
+
+`pkm doctor` báo ở `ohs_package` phiên bản gói và có gói tiếng Việt không; cũ hơn bản ghim hoặc thiếu gói tiếng Việt là `warn`, bằng hay mới hơn là `ok`. Ghi dòng này vào báo cáo.
 
 Sau khi cài gói: `pkm doctor --deep` chạy thử OHS trên vault của mục `kg` (OHS có thể bắt đầu index và nạp model). Lần đầu thường là `warn` với trạng thái `starting` hoặc `indexing`; chạy lại sau một lúc phải thành `ok`. Ghi thời gian tới `ready` và mọi trạng thái `broken` hay `model_missing` kèm `action`.
 
@@ -160,7 +171,7 @@ Mở Claude Desktop. Trong Settings, phần Developer, server `kg` phải ở tr
 | 6 | "Dùng kg related với câu hỏi 'website', không đưa hits." | Khi OHS đã `ready`: `seed_source` là `ohs-cli`, hạt giống có `Dự án/Website Mới.md`. Khi OHS chưa xong: lỗi `ohs_not_ready` có đủ `state`, `progress`, `eta_s`, `action`; hỏi lại sau ít phút phải ra kết quả. `state: broken` kèm `action` cài đặt nghĩa là chưa có gói |
 | 7 | "Dùng kg paths từ 'Người/Trần Thị Mai.md' tới 'Khái niệm/Markdown.md' với max_len 13." | Lỗi `max_len 13 is too large: at most 12 …`, server vẫn trả lời các câu sau |
 
-Ghi cho mỗi câu: tool Claude đã gọi, câu trả lời (vault thử nên chép được), đúng hay sai. Lỗi thì chép phần cuối `%APPDATA%\Claude\logs\mcp-server-kg.log` (chỉ khi `kg` đang trỏ vào vault thử).
+Ghi cho mỗi câu: tool Claude đã gọi, câu trả lời (vault thử nên chép được), đúng hay sai. Lỗi thì chép phần cuối `%APPDATA%\Claude\logs\mcp-server-kg.log` (chỉ khi `kg` đang trỏ vào vault thử). Bản Store 4.4212 không ghi file log riêng cho `kg` ở đó; khi đó ghi "không có log".
 
 Sau cùng: thoát hẳn Claude Desktop, đợi vài giây, rồi `Get-Process node, pkm -ErrorAction SilentlyContinue`. Không được còn tiến trình `pkm` hay `node` nào do `kg` khởi động.
 
@@ -169,10 +180,12 @@ Sau cùng: thoát hẳn Claude Desktop, đợi vài giây, rồi `Get-Process no
 Chỉ làm khi user đồng ý thay mục `kg`. Claude Desktop tắt hẳn:
 
 ```powershell
-pkm mcp install "$B" --adapter e11 --packs capture --no-aliases --edge-keys links --body-edges
+pkm mcp install "$B" --adapter e11 --packs capture --no-aliases --edge-keys links --body-edges --ohs C:\tools\ohs
 pkm mcp install --check
 pkm doctor
 ```
+
+`--ohs C:\tools\ohs` ghi `--ohs` vào mục `kg`, không cài gói vào `%LOCALAPPDATA%\pkm\ohs`: `pkm`, MCP `ohs` và script dự án dùng chung một bản OHS và một gói tiếng Việt. `doctor` phải báo `ohs_package` là `C:\tools\ohs (0.17.2-vantt.4, có gói tiếng Việt)`. `doctor --deep` trên bản B chỉ ghi trạng thái (`ready` hay không), không ghi `action` nếu nó chứa đường dẫn vault.
 
 User tự hỏi Claude Desktop vài câu trên bản B và tự đánh giá. Báo cáo chỉ ghi: thời gian dựng index lần đầu, `--check` báo bao nhiêu tool, kết quả `doctor` theo mã mục, và user nói đúng hay sai (không chép câu hỏi hay câu trả lời).
 
@@ -184,15 +197,19 @@ Cài công cụ ở mục 2, rồi lấy mã đúng commit của binary đã th�
 
 ```powershell
 gh auth setup-git
-gh repo clone vantt/obsidian-pkm C:\src\obsidian-pkm
-git -C C:\src\obsidian-pkm checkout <headSha của RUN_ID ở A1>
-gh repo clone vantt/obsidian-pkm-automation C:\src\spec-223c9c3
+git clone https://github.com/vantt/obsidian-pkm.git C:\src\obsidian-pkm
+git -C C:\src\obsidian-pkm checkout <tag đã cài, ví dụ v0.1.0-rc.1, hoặc headSha của RUN_ID ở A1>
+git -c core.autocrlf=false clone https://github.com/vantt/obsidian-pkm-automation.git C:\src\spec-223c9c3
 git -C C:\src\spec-223c9c3 checkout 223c9c33c99c6a087d474b66da78736ad18f849c
 python --version
 python -c "import yaml; print(yaml.__version__)"
 cd C:\src\obsidian-pkm
 cargo build --locked -p pkm
 ```
+
+**Repo đặc tả phải clone với `core.autocrlf=false`.** Git for Windows mặc định `core.autocrlf=true` và đổi `schema.yaml` của spec sang CRLF; Python băm file đó còn Rust băm bản LF nhúng lúc build, nên `schema_digest` lệch ở `index/meta`, `cli/build-json`, `cli/stats`. Clone `obsidian-pkm` thì cờ này không bắt buộc. Dùng `git clone` sau `gh auth setup-git` thay cho `gh repo clone`, vì `gh repo clone` từng hỏng (`exit status 128`) trên máy đã đăng nhập.
+
+PyYAML cài kiểu nào cũng được (`pip install --user pyyaml` hay venv): bài thử YAML gọi Python với `-E -P`, nên vẫn thấy thư mục site của người dùng. Các script Python của bộ so khớp và bài thử tự đặt stdout, stderr về UTF-8, không cần `-X utf8` hay `PYTHONIOENCODING`.
 
 Trên Windows, `python3` thường là lối tắt của Microsoft Store chứ không phải Python thật; dùng `python` (đã kiểm phiên bản ở trên). Sha ghim nằm trong `spec/spec.lock`. `cargo build -p pkm` đặt `pkm.exe` cạnh binary `parity` để bộ so khớp chạy được tầng MCP và CLI; thiếu nó thì hai tầng này báo "chưa có" (không tính là khớp). Cách khác là đặt `PKM_BIN` trỏ tới một `pkm.exe` cùng commit.
 
@@ -232,7 +249,7 @@ Chỉ làm trên kg-solo (vault giả, ghi được kết quả), không làm tr
 npx --yes "github:vantt/obsidian-test-fixture#v0.7.0" generate --preset kg-solo --seed 11 --out C:\pkm-test\kg-solo
 ```
 
-(Tham số này lấy từ `cargo run -q --locked -p pkm-parity -- fixture-args`; chạy lệnh đó để chắc chúng chưa đổi.)
+(Tham số này lấy từ `cargo run -q --locked -p pkm-parity -- fixture-args`; chạy lệnh đó để chắc chúng chưa đổi.) Nếu `npx` của máy hỏng (ví dụ `EPERM … lstat` do cấu hình npm trỏ sang hồ sơ người dùng khác), clone `obsidian-test-fixture` ở đúng tag rồi chạy `node <clone>\bin\otf.mjs` với cùng tham số (bỏ phần `github:…`); `parity.py` nhận clone đó qua `--otf DIR`.
 
 Với mỗi câu trong `khách hàng`, `hợp đồng`, `báo giá`, `quy trình`, `Đà Nẵng`:
 
@@ -242,7 +259,9 @@ Với mỗi câu trong `khách hàng`, `hợp đồng`, `báo giá`, `quy trình
    ```
    Lấy danh sách `seeds[].id` theo `ohs_rank`.
 2. Phía Python ở sha ghim, cùng gói OHS, cùng DB OHS trong vault (`.obsidian-hybrid-search.db`, chỉ có sau khi bước 1 đã index xong):
+   `pkm` chạy OHS với `OBSIDIAN_IGNORE_PATTERNS` của gói tiếng Việt (theo `24f193a`, sau sha ghim `223c9c3`). Python ở `223c9c3` tự đặt `OHS_LANGUAGE_PACK` nhưng chưa đặt biến này, và để tiến trình con thừa hưởng môi trường; vì vậy đặt biến trước, không thì OHS báo lệch content policy và phép so không hợp lệ:
    ```powershell
+   $env:OBSIDIAN_IGNORE_PATTERNS = ".obsidian/**,templates/**,*.canvas,_ohs/**"
    python -c "import sys; sys.path.insert(0, r'C:\src\spec-223c9c3\scripts'); from kg.related import ohs_seeds; print(ohs_seeds(r'C:\pkm-test\kg-solo', 'khách hàng', cli=sys.argv[1], node=sys.argv[2]))" "$env:LOCALAPPDATA\pkm\ohs\app\dist\src\cli.js" "$env:LOCALAPPDATA\pkm\ohs\node\node.exe"
    ```
    Kết quả là `([(đường dẫn, điểm), …], 'ohs-cli')`. Nguồn khác `ohs-cli` (ví dụ `ohs-fts`) nghĩa là Python không chạy được OHS: ghi lại, phép so không hợp lệ.
@@ -263,7 +282,7 @@ Mỗi dòng ứng với một ô còn mở trong file phase. Ghi `pass`, `fail` 
 | 08 | `parity --private` bản B: 0 lệch chưa có tên ở bảng vault và schema | B2 | Các dòng của bảng `nodes`, `props`, `links`, `raw_links`, `blocks`, `names`, `schema_*` |
 | 09 | Như trên cho mọi bảng và `v3_deviations` | B2 | Các dòng bảng còn lại, `v3_deviations`, mã thoát |
 | 10 | Bộ câu tool tự sinh trên bản B: 0 lệch chưa có tên | B2 | Các dòng tầng `tools`, MCP, CLI |
-| 11 | `related` chỉ có câu hỏi khớp Python trên máy có gói OHS; OHS chạy trên Windows thật | A5, A6 câu 6, B3 | Thời gian tới `ready`; kết quả `doctor --deep`; danh sách hạt giống hai bên cho từng câu (kg-solo); không còn `node` mồ côi |
+| 11 | `related` chỉ có câu hỏi khớp Python trên máy có gói OHS; OHS chạy trên Windows thật | A5, A6 câu 6, B3 | Thời gian tới `ready`; kết quả `doctor --deep`; dòng `ohs_package` (phiên bản, gói tiếng Việt); danh sách hạt giống hai bên cho từng câu (kg-solo); không còn `node` mồ côi |
 | 12 | (Không có việc cho bạn: ô còn mở là quyết định của lead về cờ `--limit`, `--system`) | — | — |
 | 13 | `pkm mcp install` trên Windows sạch, Claude Desktop gọi được `kg`, `doctor` không lỗi | A0–A7 | Có Python trên máy không; dòng `installed:` của bộ cài; `--check` báo 11 tool; `doctor --json` (`ok` và `status` theo mã mục); kết quả bốn phép kiểm ở A3; A6; trạng thái `kg` trên bản B ở A7 |
 
@@ -271,7 +290,7 @@ Mỗi dòng ứng với một ô còn mở trong file phase. Ghi `pass`, `fail` 
 
 - **SmartScreen, Defender:** `pkm.exe` chưa ký mã. Cài bằng bộ cài thì không bị chặn (bộ cài gỡ dấu tải về). Mở file tải bằng trình duyệt có thể gặp "Windows protected your PC". Ghi lại nếu Defender chặn hay cách ly `pkm.exe` hoặc `node.exe` của gói OHS.
 - **Nhận diện Claude Code cài bằng winget chưa kiểm trên máy thật:** `pkm` tách Claude Code khỏi Claude Desktop theo đường dẫn exe; các thư mục `WinGet\Links` và `WinGet\Packages\Anthropic.ClaudeCode_*` suy từ cách winget đặt gói, chưa thử trên Windows. Nếu `pkm` nhận nhầm, ghi đường dẫn exe nó in ra.
-- **Gói OHS cho Windows:** `pkm` ghim gói win32-x64 của Release `v0.17.2-vantt.3`; smoke win32-x64 của fork qua ở bản này, nhưng `pkm` chưa chạy gói này trên Windows thật lần nào. OHS báo `ready` ngay khi mở DB, **trước** khi index xong; `pkm` vì vậy đọc `status` và trả `ohs_not_ready` (`starting`, `indexing`) tới khi index xong. Câu tìm ngay sau `ready` có thể rỗng mà không báo lỗi. OHS trả đường dẫn ở dạng NFD; `pkm` chuẩn hoá sang NFC trước khi tra index. Nếu thấy note có dấu bị báo "không có", đó là lỗi cần ghi.
+- **Gói OHS cho Windows:** `pkm` ghim gói win32-x64 của Release `v0.17.2-vantt.4`; smoke win32-x64 của fork qua ở bản này, nhưng `pkm` chưa chạy gói này trên Windows thật lần nào. OHS báo `ready` ngay khi mở DB, **trước** khi index xong; `pkm` vì vậy đọc `status` và trả `ohs_not_ready` (`starting`, `indexing`) tới khi index xong. Câu tìm ngay sau `ready` có thể rỗng mà không báo lỗi. OHS trả đường dẫn ở dạng NFD; `pkm` chuẩn hoá sang NFC trước khi tra index. Nếu thấy note có dấu bị báo "không có", đó là lỗi cần ghi.
 - **Artifact `release-assets` của `workflow_dispatch`** giữ theo hạn mặc định của repo; hết hạn thì chạy lại workflow.
 - **Trần `max_len` và hạn giờ:** `paths`, `loops`, `all_loops` từ chối `max_len` lớn hơn 12 và dừng sau 10 giây với lỗi `query too expensive`. Biến `PKM_QUERY_TIMEOUT` (giây, `0` là tắt) đổi hạn giờ. Đây là lệch có chủ ý so với Python, ghi trong `spec/PORTING.md`.
 - **`--force` khác `--allow-any-location`:** xem A3. Dùng nhầm `--force` khi Claude Desktop đang chạy thì app ghi đè cấu hình lúc thoát và mục `kg` mất.

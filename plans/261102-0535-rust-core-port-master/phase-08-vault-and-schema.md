@@ -1,6 +1,6 @@
 ---
 title: "Phase 8: vault và schema"
-status: in-progress
+status: done
 priority: P1
 effort: "2,5 ngày"
 prd: R06
@@ -44,7 +44,7 @@ needs_user: true
 
 Nghiệm thu:
 - [x] Bộ so khớp tầng bảng trên kg-solo so với golden: 0 lệch chưa có tên; chạy trong CI (bước so có sẵn, nay các bảng này báo "khớp").
-- [ ] `parity --private <bản B>` trên máy user: 0 lệch chưa có tên cho các bảng này (user hoãn bản B; agent khác chạy sau).
+- [x] `parity --private <bản B>` trên máy user: 0 lệch chưa có tên cho các bảng này (user hoãn bản B; agent khác chạy sau).
 - [x] `cargo test -p pkm-core` qua trên Linux; `cargo clippy --target x86_64-pc-windows-msvc` và `--target aarch64-apple-darwin` sạch (test trên Windows, macOS chạy ở CI).
 
 ## Cần user
@@ -53,4 +53,4 @@ Cổng G0; chạy bản B.
 ## Rủi ro
 YAML lệch dạng mà phase 02 chưa gặp: thêm vào lớp chuẩn hoá, ghi vào báo cáo; lệch không giải thích được thì gọi `kongming` với dòng lệch và giá trị Python tương ứng.
 
-Cổng còn chờ: mã đã xong; còn bộ so khớp `--private` trên bản B cho các bảng vault và schema, do agent Windows và bản B làm theo [handoff](./handoff-windows-test.md).
+Cổng đã qua (2026-11-02, [báo cáo Windows](../reports/windows-tester-261102-1816-windows-install.md)): `--private` trên bản B, `nodes`, `props`, `links`, `raw_links`, `blocks`, `names` và mọi bảng `schema_*` 0 lệch (repo đặc tả clone với `core.autocrlf=false`).

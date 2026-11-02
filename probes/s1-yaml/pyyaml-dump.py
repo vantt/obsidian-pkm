@@ -1,6 +1,6 @@
 """Dump every note's frontmatter exactly as the pinned spec reads it, as typed JSON lines.
 
-Usage: python3 -I pyyaml-dump.py --spec <spec repo> <vault>   (or a single .md file instead of a vault)
+Usage: python3 -E -P pyyaml-dump.py --spec <spec repo> <vault>   (or a single .md file instead of a vault)
 
 The note list, the frontmatter split, the YAML loader and the props come from the spec's own
 `scripts/kg/vault.py` (imported, not copied), so this is the reference side of the comparison.
@@ -49,6 +49,10 @@ def enc(v):
 
 
 def main():
+    # Notes are Vietnamese: on Windows a piped stdout defaults to the ANSI code page (cp1252) and the
+    # first non-Latin-1 character would crash the dump. A no-op on a UTF-8 Linux locale.
+    for s in (sys.stdout, sys.stderr):
+        s.reconfigure(encoding='utf-8')
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('--spec', required=True, help='spec repo checkout at the pinned sha')
     ap.add_argument('vault', help='vault directory, or one .md file')

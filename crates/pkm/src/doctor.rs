@@ -315,7 +315,12 @@ pub fn diagnose(args: &DoctorArgs, hooks: &dyn Hooks, exe: &Path) -> Report {
         .map(|e| install::entry_paths(&e.args))
         .unwrap_or_default();
     checks.push(check_db(args.db.clone().or(entry_db), &fixes, hooks));
-    let pkg = check_ohs_package(args.ohs.as_deref(), &fixes, &mut checks);
+    let entry_ohs = entry.as_ref().and_then(|e| install::entry_ohs(&e.args));
+    let pkg = check_ohs_package(
+        args.ohs.as_deref().or(entry_ohs.as_deref()),
+        &fixes,
+        &mut checks,
+    );
     checks.push(check_ohs_node(pkg.as_ref(), hooks));
     checks.push(check_ohs_state(
         pkg,
@@ -516,7 +521,52 @@ fn check_ohs_package(
     };
     match found {
         Ok(pkg) => {
-            checks.push(Check::ok(ID, pkg.root.display().to_string()));
+            let version = pkg.version();
+            let mut detail = format!(
+                "{} ({}",
+                pkg.root.display(),
+                version.as_deref().unwrap_or("không rõ phiên bản")
+            );
+            detail.push_str(match pkg.pack {
+                Some(_) => ", có gói tiếng Việt)",
+                None => ", không có gói tiếng Việt)",
+            });
+            let pinned = install::ohs_bundle::VERSION;
+            let check = if pkg.pack.is_none() {
+                Check::bad(
+                    ID,
+                    Status::Warn,
+                    detail,
+                    format!(
+                        "Gói OHS không có lang/ohs-lang-vi nên tìm tiếng Việt kém. Cài gói của fork bản {pinned}: thoát \
+                         hẳn Claude Desktop rồi chạy lại `pkm mcp install`."
+                    ),
+                )
+            } else if install::ohs_bundle::older_than_pin(version.as_deref()) {
+                // `pkm mcp install` chỉ nâng gói ở thư mục mặc định; gói chỉ bằng --ohs hay biến môi trường thì người
+                // dùng tự nâng, nên lệnh sửa chỉ gợi ý cho gói mặc định.
+                let default = OhsPackage::default_dir().ok();
+                let fix = if default.as_deref() == Some(pkg.root.as_path()) {
+                    fixes.reinstall()
+                } else {
+                    None
+                };
+                Check::bad(
+                    ID,
+                    Status::Warn,
+                    detail,
+                    format!(
+                        "pkm này đi với gói OHS {pinned}. Gói ở {} thì thoát hẳn Claude Desktop rồi chạy lại `pkm mcp \
+                         install` để nâng; gói chỉ bằng --ohs hay {} thì nâng gói đó.",
+                        default.map_or_else(|| "thư mục mặc định".to_owned(), |d| d.display().to_string()),
+                        pkm_core::ohs::OHS_DIR_ENV
+                    ),
+                )
+                .with_fix(fix)
+            } else {
+                Check::ok(ID, detail)
+            };
+            checks.push(check);
             Some(pkg)
         }
         Err(e) if fixes.no_ohs => {

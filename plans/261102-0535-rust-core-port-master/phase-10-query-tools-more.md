@@ -38,4 +38,4 @@ JSON của mọi tool trừ `related` khớp Python: `find`, `note`, `neighbors`
 ## Cần user
 Chạy bản B.
 
-Cổng còn chờ: mã đã xong; còn bộ câu tool tự sinh trên bản B, do agent Windows và bản B làm theo [handoff](./handoff-windows-test.md).
+Cổng còn chờ: mã đã xong. Trên bản B ([báo cáo Windows](../reports/windows-tester-261102-1816-windows-install.md)) tầng tool (10 tool, 757 câu) và MCP 0 lệch; tầng CLI có 2 lệch ở `build-json`, `stats` do `Scrub` của `dump-python.py` không che đường dẫn vault Windows dạng JSON (`\\`). Đã sửa `Scrub`; còn chạy lại `parity.py run --private` trên Windows để thấy CLI 0 lệch.

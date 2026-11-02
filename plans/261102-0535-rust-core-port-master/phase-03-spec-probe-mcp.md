@@ -1,6 +1,6 @@
 ---
 title: "Phase 3: Bài thử S2, MCP"
-status: in-progress
+status: done
 priority: P1
 effort: "0,5 ngày"
 prd: R02
@@ -26,7 +26,7 @@ Một MCP server Rust nhỏ, một tool, bắt tay được với Claude Desktop
 - [x] Viết server bằng `rmcp`. Nếu `rmcp` kéo async runtime nặng hoặc không cho kiểm soát đủ câu chữ `instructions`, mô tả tool, schema tham số, viết thêm bản JSON-RPC tự viết để so.
 - [x] Bắt tay với Claude Code: `initialize`, `tools/list`, gọi tool.
 - [x] Ghi phiên bản giao thức Python đang trả và làm bản Rust trả cùng giá trị.
-- [ ] Đưa user đoạn JSON cấu hình để thêm server thử vào Claude Desktop trên Windows; chờ user báo kết quả.
+- [x] Đưa user đoạn JSON cấu hình để thêm server thử vào Claude Desktop trên Windows; chờ user báo kết quả.
 
 ## Nghiệm thu
 - Claude Code gọi được tool của server thử (bản ghi phiên trong báo cáo).
@@ -39,4 +39,4 @@ Chạy thử trên Claude Desktop Windows.
 ## Tình trạng (2026-11-02)
 Xong phần máy: hai server thử ở `probes/s2-mcp/`, Claude Code 2.1.316 gọi được tool của cả hai, Q4 đã chốt (JSON-RPC tự viết). Còn chờ user chạy thử Claude Desktop trên Windows theo hướng dẫn ở [báo cáo](../reports/probe-s2-mcp-261102-1317.md#6-việc-của-user-claude-desktop-trên-windows).
 
-Cổng còn chờ: Claude Desktop trên Windows gọi được tool (thử bằng chính `pkm`), do agent Windows và bản B làm theo [handoff](./handoff-windows-test.md).
+Cổng đã qua (2026-11-02, [báo cáo Windows](../reports/windows-tester-261102-1816-windows-install.md)): Claude Desktop Store 4.4212 trên Windows 11 26200 gọi được tool của `kg` (chính `pkm`), `find` trả đúng id có dấu; không cần chạy lại hai server thử.

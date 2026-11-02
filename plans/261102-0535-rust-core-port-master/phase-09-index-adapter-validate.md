@@ -1,6 +1,6 @@
 ---
 title: "Phase 9: index, adapter e11, validate"
-status: in-progress
+status: done
 priority: P1
 effort: "3 ngày"
 prd: R07
@@ -35,7 +35,7 @@ Dựng index đủ và tăng dần như Python, cùng adapter bản B và valida
 
 ## Nghiệm thu
 - [x] Bộ so khớp tầng bảng: **mọi** bảng của mục 6 PRD và `v3_deviations` khớp golden kg-solo (CI), 0 lệch chưa có tên.
-- [ ] Như trên trên bản B (máy user): 0 lệch chưa có tên (user hoãn bản B).
+- [x] Như trên trên bản B (máy user): 0 lệch chưa có tên (user hoãn bản B).
 - [x] Build tăng dần hai lần liên tiếp không đổi gì cho DB giống hệt build đủ (so bằng bộ so khớp).
 - [x] Số đo hiệu năng build đủ và tăng dần đã ghi; Rust không chậm hơn Python.
 
@@ -44,4 +44,4 @@ Báo cáo: [fullstack-developer-261102-1440-phase-09-index.md](../reports/fullst
 ## Cần user
 Chạy bản B.
 
-Cổng còn chờ: mã đã xong; còn bộ so khớp `--private` trên bản B cho mọi bảng và `v3_deviations`, do agent Windows và bản B làm theo [handoff](./handoff-windows-test.md).
+Cổng đã qua (2026-11-02, [báo cáo Windows](../reports/windows-tester-261102-1816-windows-install.md)): `--private` trên bản B, `edges`, `meta`, `v3_deviations` và mọi bảng còn lại 0 lệch; mã thoát 1 của lần chạy đó chỉ do hai lệch CLI của phase 10.

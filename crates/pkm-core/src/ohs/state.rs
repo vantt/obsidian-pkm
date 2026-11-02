@@ -119,9 +119,13 @@ impl OhsState {
     /// 1. `model` (model đã dựng index) khác `active_model`: `model_missing`.
     /// 2. `indexing_errors` có lỗi `operation: "initialize"` (index ngừng hẳn): `model_missing` nếu lỗi nói tới
     ///    model, huggingface hay onnx; ngược lại `broken`.
-    /// 3. `pending` > 0: `indexing`.
-    /// 4. `total` = 0 và `model` = null (chưa nhúng note nào): `starting`.
-    /// 5. Còn lại: `ready`.
+    /// 3. `language_pack.loaded` = false (có `OHS_LANGUAGE_PACK` mà gói không nạp được; OHS vẫn chạy nhưng tìm
+    ///    không có xử lý tiếng Việt): `broken`.
+    /// 4. `pending` > 0: `indexing`.
+    /// 5. `total` = 0 và `model` = null (chưa nhúng note nào): `starting`.
+    /// 6. Còn lại: `ready`. `failed_indexing` > 0 không chặn: note lỗi được ghi lại và thử lại ở lần index sau, các
+    ///    note khác vẫn tìm được. Điều kiện `indexed + notes_without_chunks == total` luôn đúng (OHS tính
+    ///    `notes_without_chunks` = `total - indexed`), nên `pending` = 0 là tín hiệu index xong.
     pub fn from_status(status: &Value) -> Self {
         let num = |k: &str| status.get(k).and_then(Value::as_u64).unwrap_or(0);
         let model = status.get("model").and_then(Value::as_str);
@@ -160,6 +164,21 @@ impl OhsState {
                          động lại pkm."
                     ),
                 }
+            };
+        }
+        if let Some(pack) = status.get("language_pack")
+            && pack.get("loaded").and_then(Value::as_bool) == Some(false)
+        {
+            let requested = pack.get("requested").and_then(Value::as_str).unwrap_or("?");
+            let error = pack
+                .get("error")
+                .and_then(Value::as_str)
+                .unwrap_or("không rõ lỗi");
+            return Self::Broken {
+                action: format!(
+                    "OHS không nạp được gói ngôn ngữ {requested} ({error}), nên tìm tiếng Việt không đáng tin. Cài lại \
+                     gói OHS (`pkm mcp install --ohs-package …`) rồi khởi động lại pkm."
+                ),
             };
         }
         let (indexed, pending) = (num("indexed"), num("pending"));
@@ -268,6 +287,32 @@ mod tests {
         }));
         assert!(s.is_ready());
         assert_eq!(s.not_ready_error(), None);
+    }
+
+    #[test]
+    fn ready_with_notes_without_chunks_and_failed_notes() {
+        // Số đo trên bản B sau khi index lại (0.17.2-vantt.2): 9 note không có đoạn để nhúng.
+        let s = OhsState::from_status(&json!({
+            "total": 2081, "indexed": 2072, "notes_without_chunks": 9, "pending": 0,
+            "failed_indexing": 1, "model": "local:m", "active_model": "local:m", "indexing_errors": [],
+            "language_pack": {"requested": "/ohs/lang/ohs-lang-vi", "loaded": true, "id": "vi"}
+        }));
+        assert!(s.is_ready());
+    }
+
+    #[test]
+    fn language_pack_that_did_not_load_is_broken() {
+        let s = OhsState::from_status(&json!({
+            "total": 747, "indexed": 747, "pending": 0,
+            "model": "local:m", "active_model": "local:m", "indexing_errors": [],
+            "language_pack": {"requested": "/ohs/lang/ohs-lang-vi", "loaded": false, "error": "boom"}
+        }));
+        assert_eq!(s.name(), "broken");
+        assert!(
+            s.action().contains("ohs-lang-vi") && s.action().contains("boom"),
+            "{}",
+            s.action()
+        );
     }
 
     #[test]

@@ -29,6 +29,38 @@ pub const TAG: &str = "v0.17.2-vantt.4";
 /// Biến môi trường thay nguồn tự tải của bộ cài: đường dẫn (như `--ohs-package`) hoặc URL `https://` của file gói.
 pub const PACKAGE_ENV: &str = "PKM_OHS_PACKAGE";
 
+/// Gói có phiên bản `version` (`MANIFEST.json`, xem [`OhsPackage::version`]) cũ hơn bản ghim [`VERSION`], nên bộ cài
+/// nâng lên. Không có phiên bản (gói cũ không có `MANIFEST.json`): cũ. Phiên bản bằng hay mới hơn bản ghim, hoặc dạng
+/// không so được (không phải `X.Y.Z` hay `X.Y.Z-vantt.N`): không cũ, để không bao giờ hạ cấp hay ghi đè gói người dùng
+/// tự đặt.
+pub fn older_than_pin(version: Option<&str>) -> bool {
+    let Some(version) = version else {
+        return true;
+    };
+    match (version_key(version), version_key(VERSION)) {
+        (Some(have), Some(pin)) => have < pin,
+        _ => false,
+    }
+}
+
+/// Khoá so phiên bản `X.Y.Z[-vantt.N]`: bản không hậu tố đứng sau mọi `-vantt.N` cùng `X.Y.Z` (như semver).
+fn version_key(version: &str) -> Option<([u64; 3], u64)> {
+    let (core, pre) = match version.split_once('-') {
+        Some((core, pre)) => (core, Some(pre)),
+        None => (version, None),
+    };
+    let mut parts = core.split('.').map(|p| p.parse::<u64>().ok());
+    let core = [parts.next()??, parts.next()??, parts.next()??];
+    if parts.next().is_some() {
+        return None;
+    }
+    let pre = match pre {
+        Some(p) => p.strip_prefix("vantt.")?.parse().ok()?,
+        None => u64::MAX,
+    };
+    Some((core, pre))
+}
+
 /// Một gói ghim cho một nền tảng.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Bundle {
@@ -766,6 +798,22 @@ mod tests {
                 .contains("https")
         );
         assert!(Source::parse("file:///x.zip").is_err());
+    }
+
+    #[test]
+    fn older_than_pin_never_counts_newer_or_unknown_forms_as_old() {
+        let (core, n) = VERSION.split_once("-vantt.").unwrap();
+        let n: u64 = n.parse().unwrap();
+        assert!(older_than_pin(None));
+        assert!(older_than_pin(Some(&format!("{core}-vantt.{}", n - 1))));
+        assert!(older_than_pin(Some("0.16.9-vantt.99")));
+        assert!(!older_than_pin(Some(VERSION)));
+        assert!(!older_than_pin(Some(&format!("{core}-vantt.{}", n + 1))));
+        assert!(!older_than_pin(Some(&format!("{core}-vantt.{}", n + 10))));
+        assert!(!older_than_pin(Some(core)));
+        assert!(!older_than_pin(Some("1.0.0")));
+        assert!(!older_than_pin(Some("0.17.2-beta.1")));
+        assert!(!older_than_pin(Some("dev")));
     }
 
     #[test]
