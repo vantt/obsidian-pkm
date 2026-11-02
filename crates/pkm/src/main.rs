@@ -1,6 +1,8 @@
 //! Binary `pkm`: CLI và MCP server trên lõi `pkm-core` (docs/PRD.md mục 10).
 
 mod cli;
+mod doctor;
+mod install;
 mod mcp;
 
 use clap::Parser;
