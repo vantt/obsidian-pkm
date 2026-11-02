@@ -398,7 +398,11 @@ pub fn dump_with(vault: &Path, like: &Dump, out: &Path, pkm: Option<&Path>) -> R
             }
         }
         if !done.is_empty() {
-            w.json("cli/commands.json", &serde_json::to_value(&done)?)?;
+            // Khoá theo thứ tự chữ như `write_json` của `dump-python.py`, để file giống golden từng byte.
+            w.json(
+                "cli/commands.json",
+                &sort_keys(serde_json::to_value(&done)?),
+            )?;
         }
     }
 
