@@ -36,7 +36,7 @@ Mọi lệnh dưới đây là PowerShell. Thư mục làm việc gợi ý là `
 
 1. Kiểm máy có Python không: `Get-Command python, python3, py -ErrorAction SilentlyContinue`. Nghiệm thu phase 13 cần máy không có Python; nếu máy đã có, ghi rõ trong báo cáo (phần A vẫn làm được, nhưng nghiệm thu "Windows sạch" khi đó chỉ là một phần).
 2. Thoát hẳn Claude Desktop (cả biểu tượng ở khay hệ thống).
-3. Sao một bản cấu hình Claude Desktop để trả lại khi xong: `Copy-Item "$env:APPDATA\Claude\claude_desktop_config.json" C:\pkm-test\claude_desktop_config.before.json`. Bản Microsoft Store nằm ở `%LOCALAPPDATA%\Packages\Claude_*\LocalCache\Roaming\Claude\`.
+3. Sao một bản cấu hình Claude Desktop để trả lại khi xong: `Copy-Item "$env:APPDATA\Claude\claude_desktop_config.json" C:\pkm-test\claude_desktop_config.before.json`. Bản Microsoft Store 4.4212 (đã thử trên Windows 11 26200) cũng ghi ở `%APPDATA%\Claude\`; chỉ khi không thấy file ở đó mới tìm trong `%LOCALAPPDATA%\Packages\Claude_*\LocalCache\Roaming\Claude\`.
 4. Ghi vào báo cáo: có mục `kg` sẵn không, và nếu có thì nó chạy Python hay `pkm` (chỉ ghi loại, không ghi `args`, vì `args` có thể chứa đường dẫn bản B). **Nếu đã có mục `kg` chạy Python, hỏi user trước khi thay**, vì `pkm mcp install` sẽ thay đúng mục đó.
 
 ### A1. Lấy binary
@@ -51,6 +51,13 @@ gh release list -R vantt/obsidian-pkm
 
 ```powershell
 gh release download v0.1.0-rc.1 --repo vantt/obsidian-pkm --pattern install.ps1 --output - | Out-String | iex
+```
+
+Nếu chính sách quyền của agent chặn kiểu `| iex`, tải file trước rồi chạy bằng `-File` (bộ cài đã đóng dấu đúng phiên bản của Release và vẫn kiểm sha256 theo `checksums.txt`):
+
+```powershell
+gh release download v0.1.0-rc.1 --repo vantt/obsidian-pkm --pattern install.ps1 -D C:\pkm-test\rel
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\pkm-test\rel\install.ps1
 ```
 
 **Nếu chưa có Release** (trường hợp hiện tại), dùng artifact `release-assets` của workflow Release chạy bằng `workflow_dispatch`. Artifact này có bốn binary, `install.sh`, `install.ps1` đã đóng dấu phiên bản và `checksums.txt`, giống hệt bộ file của một Release.
@@ -164,7 +171,7 @@ Mở Claude Desktop. Trong Settings, phần Developer, server `kg` phải ở tr
 | 6 | "Dùng kg related với câu hỏi 'website', không đưa hits." | Khi OHS đã `ready`: `seed_source` là `ohs-cli`, hạt giống có `Dự án/Website Mới.md`. Khi OHS chưa xong: lỗi `ohs_not_ready` có đủ `state`, `progress`, `eta_s`, `action`; hỏi lại sau ít phút phải ra kết quả. `state: broken` kèm `action` cài đặt nghĩa là chưa có gói |
 | 7 | "Dùng kg paths từ 'Người/Trần Thị Mai.md' tới 'Khái niệm/Markdown.md' với max_len 13." | Lỗi `max_len 13 is too large: at most 12 …`, server vẫn trả lời các câu sau |
 
-Ghi cho mỗi câu: tool Claude đã gọi, câu trả lời (vault thử nên chép được), đúng hay sai. Lỗi thì chép phần cuối `%APPDATA%\Claude\logs\mcp-server-kg.log` (chỉ khi `kg` đang trỏ vào vault thử).
+Ghi cho mỗi câu: tool Claude đã gọi, câu trả lời (vault thử nên chép được), đúng hay sai. Lỗi thì chép phần cuối `%APPDATA%\Claude\logs\mcp-server-kg.log` (chỉ khi `kg` đang trỏ vào vault thử). Bản Store 4.4212 không ghi file log riêng cho `kg` ở đó; khi đó ghi "không có log".
 
 Sau cùng: thoát hẳn Claude Desktop, đợi vài giây, rồi `Get-Process node, pkm -ErrorAction SilentlyContinue`. Không được còn tiến trình `pkm` hay `node` nào do `kg` khởi động.
 
@@ -190,15 +197,19 @@ Cài công cụ ở mục 2, rồi lấy mã đúng commit của binary đã th�
 
 ```powershell
 gh auth setup-git
-gh repo clone vantt/obsidian-pkm C:\src\obsidian-pkm
-git -C C:\src\obsidian-pkm checkout <headSha của RUN_ID ở A1>
-gh repo clone vantt/obsidian-pkm-automation C:\src\spec-223c9c3
+git clone https://github.com/vantt/obsidian-pkm.git C:\src\obsidian-pkm
+git -C C:\src\obsidian-pkm checkout <tag đã cài, ví dụ v0.1.0-rc.1, hoặc headSha của RUN_ID ở A1>
+git -c core.autocrlf=false clone https://github.com/vantt/obsidian-pkm-automation.git C:\src\spec-223c9c3
 git -C C:\src\spec-223c9c3 checkout 223c9c33c99c6a087d474b66da78736ad18f849c
 python --version
 python -c "import yaml; print(yaml.__version__)"
 cd C:\src\obsidian-pkm
 cargo build --locked -p pkm
 ```
+
+**Repo đặc tả phải clone với `core.autocrlf=false`.** Git for Windows mặc định `core.autocrlf=true` và đổi `schema.yaml` của spec sang CRLF; Python băm file đó còn Rust băm bản LF nhúng lúc build, nên `schema_digest` lệch ở `index/meta`, `cli/build-json`, `cli/stats`. Clone `obsidian-pkm` thì cờ này không bắt buộc. Dùng `git clone` sau `gh auth setup-git` thay cho `gh repo clone`, vì `gh repo clone` từng hỏng (`exit status 128`) trên máy đã đăng nhập.
+
+PyYAML cài kiểu nào cũng được (`pip install --user pyyaml` hay venv): bài thử YAML gọi Python với `-E -P`, nên vẫn thấy thư mục site của người dùng. Các script Python của bộ so khớp và bài thử tự đặt stdout, stderr về UTF-8, không cần `-X utf8` hay `PYTHONIOENCODING`.
 
 Trên Windows, `python3` thường là lối tắt của Microsoft Store chứ không phải Python thật; dùng `python` (đã kiểm phiên bản ở trên). Sha ghim nằm trong `spec/spec.lock`. `cargo build -p pkm` đặt `pkm.exe` cạnh binary `parity` để bộ so khớp chạy được tầng MCP và CLI; thiếu nó thì hai tầng này báo "chưa có" (không tính là khớp). Cách khác là đặt `PKM_BIN` trỏ tới một `pkm.exe` cùng commit.
 
@@ -238,7 +249,7 @@ Chỉ làm trên kg-solo (vault giả, ghi được kết quả), không làm tr
 npx --yes "github:vantt/obsidian-test-fixture#v0.7.0" generate --preset kg-solo --seed 11 --out C:\pkm-test\kg-solo
 ```
 
-(Tham số này lấy từ `cargo run -q --locked -p pkm-parity -- fixture-args`; chạy lệnh đó để chắc chúng chưa đổi.)
+(Tham số này lấy từ `cargo run -q --locked -p pkm-parity -- fixture-args`; chạy lệnh đó để chắc chúng chưa đổi.) Nếu `npx` của máy hỏng (ví dụ `EPERM … lstat` do cấu hình npm trỏ sang hồ sơ người dùng khác), clone `obsidian-test-fixture` ở đúng tag rồi chạy `node <clone>\bin\otf.mjs` với cùng tham số (bỏ phần `github:…`); `parity.py` nhận clone đó qua `--otf DIR`.
 
 Với mỗi câu trong `khách hàng`, `hợp đồng`, `báo giá`, `quy trình`, `Đà Nẵng`:
 

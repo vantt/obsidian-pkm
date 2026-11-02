@@ -39,4 +39,4 @@ Thư viện `install` và `doctor` xong, có test (`cargo test -p pkm`); gói OH
 ## Cần user
 Thử trên Windows sạch.
 
-Cổng còn chờ: mã đã xong (`cli` đã đăng ký `pkm mcp install`, `pkm doctor` và có lệnh `build`); còn thử trên Windows sạch, do agent Windows làm theo [handoff](./handoff-windows-test.md).
+Cổng còn chờ: mã đã xong (`cli` đã đăng ký `pkm mcp install`, `pkm doctor` và có lệnh `build`). Trên Windows thật ([báo cáo Windows](../reports/windows-tester-261102-1816-windows-install.md)) bộ cài, `mcp install` (bốn phép kiểm), `--check` 11 tool, `doctor` `ok`, Claude Desktop 7/7 câu và bản B đều qua; nhưng máy có sẵn Python, nên "Windows sạch" mới đạt một phần. Còn thử trên một máy Windows không có Python.
