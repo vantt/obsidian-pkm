@@ -61,3 +61,15 @@ Nguồn: `scripts/tests/test_platform_paths.py` ở sha ghim, 19 test. Test Rust
 Test Rust thêm, không có bản Python: `move_with_zero_tries_still_tries_once` (lệch có chủ ý ở trên), `move_renames_into_vietnamese_name`, `name_taken_in_missing_folder_is_none`, `name_taken_resolves_dot_segments_of_src`, `verbatim_prefixes_drive_and_unc_paths` (Windows: tiền tố `\\?\` cho đường dẫn dài).
 
 Trên Windows, Rust đổi tên bằng `MoveFileExW` không cờ (như `os.rename` của Python), vì `std::fs::rename` của Rust đè đích trên Windows.
+
+## Module `ohs`
+
+Bản Python không có module tương ứng: `scripts/kg/related.py` (`ohs_seeds`) chạy `node cli.js --db VAULT/.obsidian-hybrid-search.db search --json` mỗi lần một tiến trình. Rust thay bằng `pkm_core::ohs` theo PRD mục 9 và D6, D7: một tiến trình `serve --stdio` sống lâu, request có `id` đồng thời, khởi động lại có giới hạn rồi `broken`, trạng thái và lỗi `ohs_not_ready`. `OhsConfig::db` mặc định `None`: OHS tự chọn DB như MCP `ohs` của người dùng, nên hai bên dùng chung một index như bản Python. Thư mục gói mặc định là `<thư mục pkm>/ohs` (`platform::pkm_dir`); bộ cài đặt gói vào đây. Test: `crates/pkm-core/tests/ohs_fake.rs` (server giả, chạy trong CI) và `tests/ohs_real.rs` (`#[ignore]`, cần gói thật).
+
+### Không lùi về đọc thẳng DB của OHS
+
+- **Python** (`5a3eb2f`, `scripts/kg/related.py`, `ohs_seeds`): CLI lỗi hoặc không có thì mở chỉ đọc `.obsidian-hybrid-search.db` của OHS và tìm từ khoá BM25 trong bảng FTS5; nguồn hạt giống ghi `ohs-fts`.
+- **Rust:** không có đường lùi. OHS chưa sẵn sàng hoặc không chạy được thì tool trả `ohs_not_ready` với `state` và `action`.
+- **Lý do:** D7 (không có đường lùi cho ra kết quả kém) và PRD mục 9 (không bao giờ đọc thẳng DB của OHS; lược đồ DB là chi tiết nội bộ của OHS).
+- **Ngoại lệ trong bộ so khớp:** `related` chỉ có câu hỏi so trên máy có gói OHS (PRD mục 6); trường hợp không có OHS không so với nhánh `ohs-fts` của Python. Phần `related` ghi tên ngoại lệ khi nối bộ so khớp.
+- **Issue ở repo đặc tả:** không cần; bản Python giữ đường lùi vì chạy được không cần Node.

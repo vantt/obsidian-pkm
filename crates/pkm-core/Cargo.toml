@@ -8,6 +8,7 @@ publish.workspace = true
 
 [dependencies]
 caseless = "0.2"
+serde_json = { version = "1", features = ["preserve_order"] }
 unicode-normalization = "0.1"
 
 [target.'cfg(windows)'.dependencies]
@@ -15,3 +16,12 @@ windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem"] }
 
 [dev-dependencies]
 tempfile = "3"
+
+# Server giả nói giao thức stdio của OHS, chỉ để test module `ohs` (không cần Node hay model). Không phát hành:
+# bản phát hành chỉ dựng `-p pkm`.
+[[bin]]
+name = "fake-ohs"
+path = "tests/support/fake_ohs.rs"
+test = false
+doctest = false
+bench = false

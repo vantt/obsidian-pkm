@@ -1,6 +1,6 @@
 ---
 title: "Phase 11: related và module OHS"
-status: todo
+status: in-progress
 priority: P1
 effort: "1,5 ngày"
 prd: R09
@@ -26,13 +26,19 @@ needs_user: false
 ## Việc cần làm
 - [ ] PageRank cá nhân hoá: trọng số theo lớp (`WEIGHT`), `alpha`, `eps`, `k` như Python.
 - [ ] Chạy PageRank theo đúng thứ tự cạnh của Python (điểm lệch tối đa 1e-6). Dựa trên `probes/s3-ohs` và mục "phase 11" trong `plans/reports/probe-s3-ohs-261102-1317.md`: OHS trả đường dẫn NFD, báo `ready` trước khi index xong, không có `eta_s` (tự tính từ tốc độ).
-- [ ] Module `ohs`: tìm gói (cờ `--ohs`, `PKM_OHS_DIR`, thư mục mặc định); khởi động với `OBSIDIAN_VAULT_PATH` (và `OBSIDIAN_DB_PATH` khi fork có P02); chờ ready; request có `id`, đồng thời; khởi động lại có giới hạn rồi `broken`; tắt khi `pkm` thoát.
-- [ ] Trạng thái `starting`, `indexing` (tiến độ từ `status` của OHS), `model_missing`, `broken`, `ready`.
+- [x] Module `ohs`: tìm gói (cờ `--ohs`, `PKM_OHS_DIR`, thư mục mặc định); khởi động với `OBSIDIAN_VAULT_PATH` (và `OBSIDIAN_DB_PATH` khi fork có P02); chờ ready; request có `id`, đồng thời; khởi động lại có giới hạn rồi `broken`; tắt khi `pkm` thoát.
+- [x] Trạng thái `starting`, `indexing` (tiến độ từ `status` của OHS), `model_missing`, `broken`, `ready`.
 - [ ] Tool cần OHS khi chưa ready trả đúng `{"error":"ohs_not_ready","state":…,"progress":…,"eta_s":…,"action":…}`; không có đường lùi cho kết quả kém (D7). Tool không cần OHS chạy bình thường.
-- [ ] Chuẩn hoá đường dẫn OHS trả về sang NFC trước khi tra index.
-- [ ] Không đọc thẳng DB hay `node_modules` của OHS.
+- [x] Chuẩn hoá đường dẫn OHS trả về sang NFC trước khi tra index.
+- [x] Không đọc thẳng DB hay `node_modules` của OHS.
 
 ## Nghiệm thu
 - `related` có `hits` trên kg-solo: tập note và thứ hạng khớp golden, điểm lệch tối đa 1e-6 (CI).
 - `related` chỉ có câu hỏi: khớp Python trên máy có gói OHS (CI không có OHS; ghi rõ điều này trong `parity/README.md`).
 - Test: OHS thiếu gói trả `state: broken` kèm `action` cài đặt; tiến trình OHS bị giết thì được khởi động lại; sau khi `pkm` thoát không còn tiến trình `node` con.
+
+## Trạng thái thực hiện (2026-11-02)
+
+- **Module `ohs`: xong.** `crates/pkm-core/src/ohs.rs` và `ohs/{package,process,state}.rs`. Test với server giả `fake-ohs` (`crates/pkm-core/tests/ohs_fake.rs`, không cần Node) chạy được trên cả ba nền; test với OHS thật (`tests/ohs_real.rs`, `#[ignore]`) qua trên Linux. Báo cáo: `plans/reports/fullstack-developer-261102-1400-phase-11-ohs-module.md`.
+- Mục `ohs_not_ready` chưa tick: dạng lỗi đã có (`OhsState::not_ready_error`, `OhsError::NotReady`) nhưng chưa nối vào `tools`; việc này làm cùng nhánh `related`.
+- **Còn lại:** PageRank và `related` (chờ tầng truy vấn), nối `related` vào `tools`.

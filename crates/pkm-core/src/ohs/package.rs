@@ -1,0 +1,228 @@
+//! Tìm gói OHS dựng sẵn của fork: thư mục có Node đi kèm (`node/`) và `app/dist/src/cli.js`.
+
+use std::ffi::OsString;
+use std::fmt;
+use std::io;
+use std::path::{Path, PathBuf};
+
+use crate::platform;
+
+/// Biến môi trường chỉ tới gói OHS khi không có cờ `--ohs`.
+pub const OHS_DIR_ENV: &str = "PKM_OHS_DIR";
+
+/// Tên thư mục gói OHS trong [`platform::pkm_dir`], nơi bộ cài đặt gói.
+pub const DEFAULT_DIR_NAME: &str = "ohs";
+
+/// Đường dẫn của `cli.js` trong gói.
+const CLI_REL: &str = "app/dist/src/cli.js";
+
+/// Không tìm thấy gói OHS, hoặc gói thiếu file. Thông điệp nêu thư mục đã thử.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PackageError(pub String);
+
+impl fmt::Display for PackageError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for PackageError {}
+
+/// Gói OHS đã kiểm đủ file.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OhsPackage {
+    /// Thư mục gói; OHS chạy với thư mục hiện tại là đây.
+    pub root: PathBuf,
+    /// Node đi kèm gói.
+    pub node: PathBuf,
+    /// `app/dist/src/cli.js`.
+    pub cli: PathBuf,
+}
+
+impl OhsPackage {
+    /// Tìm gói theo thứ tự: `flag` (cờ `--ohs`), biến [`OHS_DIR_ENV`], rồi [`OhsPackage::default_dir`]. Nguồn nào
+    /// được chỉ ra mà sai thì báo lỗi ngay, không lặng lẽ thử nguồn sau.
+    pub fn locate(flag: Option<&Path>) -> Result<Self, PackageError> {
+        locate_from(flag, std::env::var_os(OHS_DIR_ENV), Self::default_dir())
+    }
+
+    /// Thư mục gói mặc định: `<pkm_dir>/ohs` (xem [`platform::pkm_dir`]).
+    pub fn default_dir() -> io::Result<PathBuf> {
+        platform::cache_dir(DEFAULT_DIR_NAME)
+    }
+
+    /// Kiểm một thư mục gói có đủ Node đi kèm và `cli.js`. Đường dẫn trả về là tuyệt đối, vì OHS chạy với thư mục
+    /// hiện tại là thư mục gói.
+    pub fn from_dir(dir: &Path) -> Result<Self, PackageError> {
+        let dir = &std::path::absolute(dir)
+            .map_err(|e| PackageError(format!("{}: {e}", dir.display())))?;
+        if !dir.is_dir() {
+            return Err(PackageError(format!(
+                "{} không phải thư mục gói OHS (không tồn tại)",
+                dir.display()
+            )));
+        }
+        let candidates = node_candidates();
+        let node = candidates
+            .iter()
+            .map(|rel| dir.join(rel))
+            .find(|p| p.is_file())
+            .ok_or_else(|| {
+                PackageError(format!(
+                    "{} không có Node đi kèm ({})",
+                    dir.display(),
+                    candidates.join(" hoặc ")
+                ))
+            })?;
+        let cli = dir.join(CLI_REL);
+        if !cli.is_file() {
+            return Err(PackageError(format!(
+                "{} không có {CLI_REL}",
+                dir.display()
+            )));
+        }
+        Ok(Self {
+            root: dir.to_path_buf(),
+            node,
+            cli,
+        })
+    }
+}
+
+/// Node trong gói: `node/node.exe` trên Windows, `node/bin/node` (hoặc `node/node`) nơi khác.
+fn node_candidates() -> &'static [&'static str] {
+    if cfg!(windows) {
+        &["node/node.exe"]
+    } else {
+        &["node/bin/node", "node/node"]
+    }
+}
+
+/// [`OhsPackage::locate`] với giá trị biến môi trường và thư mục mặc định truyền vào, để test không đổi môi trường
+/// của tiến trình. Biến rỗng coi như không đặt.
+fn locate_from(
+    flag: Option<&Path>,
+    env: Option<OsString>,
+    default: io::Result<PathBuf>,
+) -> Result<OhsPackage, PackageError> {
+    if let Some(dir) = flag {
+        return OhsPackage::from_dir(dir).map_err(|e| PackageError(format!("cờ --ohs: {e}")));
+    }
+    if let Some(dir) = env.filter(|v| !v.is_empty()) {
+        return OhsPackage::from_dir(Path::new(&dir))
+            .map_err(|e| PackageError(format!("{OHS_DIR_ENV}: {e}")));
+    }
+    let dir = default.map_err(|e| {
+        PackageError(format!(
+            "chưa chỉ gói OHS (cờ --ohs, {OHS_DIR_ENV}) và không xác định được thư mục mặc định: {e}"
+        ))
+    })?;
+    OhsPackage::from_dir(&dir).map_err(|e| {
+        PackageError(format!(
+            "chưa chỉ gói OHS (cờ --ohs, {OHS_DIR_ENV}) và thư mục mặc định không dùng được: {e}"
+        ))
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    fn make_package(dir: &Path) {
+        let node = dir.join(node_candidates()[0]);
+        fs::create_dir_all(node.parent().unwrap()).unwrap();
+        fs::write(&node, b"").unwrap();
+        fs::create_dir_all(dir.join("app/dist/src")).unwrap();
+        fs::write(dir.join(CLI_REL), b"").unwrap();
+    }
+
+    #[test]
+    fn package_requires_node_and_cli() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        fs::create_dir_all(dir.join("app/dist/src")).unwrap();
+        let err = OhsPackage::from_dir(dir).unwrap_err();
+        assert!(err.0.contains("Node đi kèm"), "{err}");
+        let node = dir.join(node_candidates()[0]);
+        fs::create_dir_all(node.parent().unwrap()).unwrap();
+        fs::write(&node, b"").unwrap();
+        let err = OhsPackage::from_dir(dir).unwrap_err();
+        assert!(err.0.contains(CLI_REL), "{err}");
+        fs::write(dir.join(CLI_REL), b"").unwrap();
+        let pkg = OhsPackage::from_dir(dir).unwrap();
+        assert_eq!((pkg.node, pkg.cli), (node, dir.join(CLI_REL)));
+    }
+
+    #[test]
+    fn missing_package_dir_is_an_error() {
+        let tmp = tempfile::tempdir().unwrap();
+        let err = OhsPackage::from_dir(&tmp.path().join("không có")).unwrap_err();
+        assert!(err.0.contains("không tồn tại"), "{err}");
+    }
+
+    #[test]
+    fn flag_wins_over_env_and_default() {
+        let (a, b, c) = (
+            tempfile::tempdir().unwrap(),
+            tempfile::tempdir().unwrap(),
+            tempfile::tempdir().unwrap(),
+        );
+        for d in [&a, &b, &c] {
+            make_package(d.path());
+        }
+        let got = locate_from(
+            Some(a.path()),
+            Some(b.path().into()),
+            Ok(c.path().to_path_buf()),
+        )
+        .unwrap();
+        assert_eq!(got.root, a.path());
+        let got = locate_from(None, Some(b.path().into()), Ok(c.path().to_path_buf())).unwrap();
+        assert_eq!(got.root, b.path());
+        let got = locate_from(None, Some(OsString::new()), Ok(c.path().to_path_buf())).unwrap();
+        assert_eq!(got.root, c.path());
+    }
+
+    #[test]
+    fn a_wrong_source_is_reported_not_skipped() {
+        let good = tempfile::tempdir().unwrap();
+        make_package(good.path());
+        let empty = tempfile::tempdir().unwrap();
+        let err = locate_from(Some(empty.path()), None, Ok(good.path().to_path_buf())).unwrap_err();
+        assert!(err.0.starts_with("cờ --ohs:"), "{err}");
+        let err = locate_from(
+            None,
+            Some(empty.path().into()),
+            Ok(good.path().to_path_buf()),
+        )
+        .unwrap_err();
+        assert!(err.0.starts_with(OHS_DIR_ENV), "{err}");
+    }
+
+    #[test]
+    fn missing_default_names_every_source() {
+        let tmp = tempfile::tempdir().unwrap();
+        let err = locate_from(None, None, Ok(tmp.path().join(DEFAULT_DIR_NAME))).unwrap_err();
+        assert!(
+            err.0.contains("--ohs") && err.0.contains(OHS_DIR_ENV),
+            "{err}"
+        );
+        let err = locate_from(
+            None,
+            None,
+            Err(io::Error::new(io::ErrorKind::NotFound, "no home")),
+        )
+        .unwrap_err();
+        assert!(err.0.contains("no home"), "{err}");
+    }
+
+    #[test]
+    fn default_dir_is_inside_pkm_dir() {
+        let got = OhsPackage::default_dir().unwrap();
+        assert!(
+            got.ends_with(Path::new("pkm").join(DEFAULT_DIR_NAME)),
+            "{got:?}"
+        );
+    }
+}
