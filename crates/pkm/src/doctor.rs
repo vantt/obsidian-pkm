@@ -3,9 +3,6 @@
 //!
 //! Lệnh con được đăng ký ở `cli`: gọi [`run`] với [`DoctorArgs`]; mã thoát khác 0 khi [`Report::healthy`] là `false`.
 
-// Module chạy được ngay nhưng chưa được `cli` gọi tới; bỏ dòng này khi `cli` đăng ký lệnh con.
-#![allow(dead_code)]
-
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::Duration;

@@ -23,10 +23,10 @@ pub struct Built {
 }
 
 /// Thư mục tạm, xoá khi ra khỏi phạm vi.
-struct TempDir(PathBuf);
+pub(super) struct TempDir(pub(super) PathBuf);
 
 impl TempDir {
-    fn new() -> Result<Self> {
+    pub(super) fn new() -> Result<Self> {
         let nanos = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_nanos())
@@ -44,7 +44,7 @@ impl Drop for TempDir {
 }
 
 /// Cách đọc vault từ `run` của dump mẫu.
-fn read_run(run: &Value) -> Result<(Vec<String>, String, Options)> {
+pub(super) fn read_run(run: &Value) -> Result<(Vec<String>, String, Options)> {
     let s = |k: &str| run.get(k).and_then(Value::as_str).unwrap_or_default();
     let b = |k: &str| run.get(k).and_then(Value::as_bool).unwrap_or(false);
     let packs = s("packs")
@@ -65,10 +65,10 @@ fn read_run(run: &Value) -> Result<(Vec<String>, String, Options)> {
 }
 
 /// Thay đường dẫn tuyệt đối (cả bản đã giải symlink) bằng dấu; đường dài trước.
-struct Scrub(Vec<(String, &'static str)>);
+pub(super) struct Scrub(Vec<(String, &'static str)>);
 
 impl Scrub {
-    fn new(vault: &Path, db: &Path) -> Self {
+    pub(super) fn new(vault: &Path, db: &Path) -> Self {
         let mut pairs = Vec::new();
         for (p, mark) in [(db, "<DB>"), (vault, "<VAULT>")] {
             for q in [std::path::absolute(p).ok(), std::fs::canonicalize(p).ok()]
@@ -85,7 +85,7 @@ impl Scrub {
         Scrub(pairs)
     }
 
-    fn text(&self, s: &str) -> String {
+    pub(super) fn text(&self, s: &str) -> String {
         self.0
             .iter()
             .fold(s.to_owned(), |acc, (p, mark)| acc.replace(p.as_str(), mark))

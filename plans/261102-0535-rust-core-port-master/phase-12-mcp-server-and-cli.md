@@ -1,6 +1,6 @@
 ---
 title: "Phase 12: MCP server và CLI"
-status: todo
+status: in-progress
 priority: P1
 effort: "2 ngày"
 prd: R10
@@ -26,11 +26,15 @@ MCP stdio thay được MCP `kg` Python: bắt tay khớp từng chữ, refresh 
 ## Việc cần làm
 - [ ] MCP theo Q4: tên server, tên tool, mô tả, schema tham số, dạng kết quả giống Python từng chữ (11 tool, gồm `related` qua điểm vào chung của `tools`).
 - [ ] Cờ khởi động đủ như mục 8 PRD; cờ OHS đổi nghĩa thành đường dẫn gói OHS.
-- [ ] `instructions` ghép như Python: mô tả vault (`--about`), mô tả từng loại trong schema, số note và quan hệ, đoạn của adapter, khối cố định.
-- [ ] Refresh nền mặc định 5 s bằng `std::thread`; log JSONL (`--log`); giới hạn ký tự (`--max-chars`).
+- [x] `instructions` ghép như Python: mô tả vault (`--about`), mô tả từng loại trong schema, số note và quan hệ, đoạn của adapter, khối cố định.
+- [x] Refresh nền mặc định 5 s bằng `std::thread`; log JSONL (`--log`); giới hạn ký tự (`--max-chars`).
 - [ ] CLI bằng `clap`: `build [--full]`, `stats`, `validate`, `find`, `note`, `neighbors`, `reach`, `paths`, `loops`, `provenance`, `select`, `valid`, `mcp`, cùng tuỳ chọn chung của mục 10.
-- [ ] `pkm --version` in phiên bản và sha đặc tả đã khớp.
+- [x] `pkm --version` in phiên bản và sha đặc tả đã khớp.
 - [ ] Chuyển 13 test của `test_mcp.py`.
+
+## Trạng thái (2026-11-02)
+
+Xong phần không cần tầng tool: giao thức MCP, `instructions`, dựng nền và refresh, thu gọn, cắt, log; CLI `build`, `stats`, `validate`, `pkm mcp install`, `pkm doctor`. Bộ so khớp trên kg-solo: `initialize`, `instructions` và 8 lệnh CLI giống golden từng byte. Còn: nối `pkm_core::tools` vào `installed()` trong `crates/pkm/src/mcp/tool_layer.rs` (danh mục tool, `Server.call`, `Tools.<method>` cho CLI), rồi `tools/list`, 13 lệnh CLI hỏi graph và 9 test `test_mcp.py` còn lại (`spec/PORTING.md`). Cờ: có đủ cờ của `parser()` Python; `--limit`, `--system` mà PRD mục 8 kể không có trong parser MCP của Python nên chưa thêm (chờ lead quyết); `--ohs-cli`, `--ohs-node` chuyển nguyên cho tầng tool. Báo cáo: `plans/reports/fullstack-developer-261102-1500-phase-12-cli-mcp.md`.
 
 ## Nghiệm thu
 - Bộ so khớp tầng MCP (`initialize`, `tools/list`, `instructions`) và tầng CLI trên kg-solo: 0 lệch chưa có tên (CI).

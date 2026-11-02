@@ -7,9 +7,6 @@
 //! trạng thái OHS) đi qua [`Hooks`]; [`SystemHooks`] là bản thật. Lệnh con được đăng ký ở `cli`: gọi [`run`] với
 //! [`InstallArgs`].
 
-// Module chạy được ngay nhưng chưa được `cli` gọi tới; bỏ dòng này khi `cli` đăng ký lệnh con.
-#![allow(dead_code)]
-
 pub mod config;
 pub mod desktop;
 pub mod handshake;
