@@ -73,3 +73,7 @@ Bản Python không có module tương ứng: `scripts/kg/related.py` (`ohs_seed
 - **Lý do:** D7 (không có đường lùi cho ra kết quả kém) và PRD mục 9 (không bao giờ đọc thẳng DB của OHS; lược đồ DB là chi tiết nội bộ của OHS).
 - **Ngoại lệ trong bộ so khớp:** `related` chỉ có câu hỏi so trên máy có gói OHS (PRD mục 6); trường hợp không có OHS không so với nhánh `ohs-fts` của Python. Phần `related` ghi tên ngoại lệ khi nối bộ so khớp.
 - **Issue ở repo đặc tả:** không cần; bản Python giữ đường lùi vì chạy được không cần Node.
+
+### Lỗi `ohs_not_ready`: `progress` và `eta_s` có thể là `null`
+
+Lỗi luôn có đủ năm khoá `error`, `state`, `progress`, `eta_s`, `action` theo thứ tự đó (PRD mục 8). Ví dụ ở PRD có số cho `progress` và `eta_s`, nhưng hai khoá này chỉ có số khi `state` là `indexing`. Ở trạng thái khác, cả hai là `null`. Ngay trong `indexing`, `eta_s` vẫn là `null` cho tới khi đo được tốc độ index, vì OHS không báo `eta_s`. Người gọi (agent, plugin) phải xử lý được giá trị `null`. Khi thêm `docs/MCP-CHANGELOG.md` thì ghi điều này vào đó.

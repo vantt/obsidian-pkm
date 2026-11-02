@@ -50,3 +50,26 @@ Module chạy đồng bộ bằng `std::thread`, không dùng async runtime (Q4)
 2. Thư mục gói mặc định chọn là `<pkm_dir>/ohs`. Bộ cài (phase 13) phải đặt gói vào đây, hoặc đổi `DEFAULT_DIR_NAME`.
 3. Vault rỗng thì trạng thái đứng mãi ở `starting` (đã ghi trong báo cáo bài thử S3). Chưa xử lý vì cần tín hiệu "quét xong" từ fork.
 4. Khi tắt trong lúc luồng giám sát đang chờ `status`, việc tắt chậm thêm tối đa `status_timeout` (5 s).
+
+## Sửa sau review (`plans/reports/code-reviewer-261102-1411-ohs-module.md`)
+
+| Mục | Sửa | Test chặn lỗi |
+|---|---|---|
+| H1, M1 | Đọc stdout và stderr bằng `read_until` + `from_utf8_lossy`, luôn đọc tới EOF. Dòng stdout không parse được coi là nhiễu. Mỗi dòng stderr giữ tối đa 2000 ký tự | `invalid_utf8_and_a_full_stderr_pipe_do_not_stall_or_restart_ohs` (`0xFF` rồi 256 KB stderr, dòng stdout không phải UTF-8); unit `lines_with_invalid_utf8_are_kept_and_reading_continues_to_eof` |
+| H2 | stdin do một luồng ghi riêng giữ, nhận dòng qua channel. `call` chỉ xếp hàng nên không chặn quá thời hạn. `close` bỏ sender (không cần lock mà luồng ghi giữ), chờ rồi kill; kill làm luồng ghi đang chặn nhận lỗi và thoát | `ohs_that_stops_reading_stdin_cannot_block_callers_or_shutdown` (câu tìm 300 KB khi OHS ngừng đọc stdin: mỗi lần trả `Timeout` dưới 2 s, tắt dưới 3 s, không còn tiến trình) |
+| M2 | Luồng giám sát gọi `try_wait` mỗi `poll_interval`, cả lúc chờ `ready`. Unix: OHS làm trưởng process group riêng (`process_group(0)`), kill cả nhóm bằng `libc::kill(-pgid, SIGKILL)` trước khi reap, và quét nhóm đúng một lần ngay sau khi reap (POSIX không cấp lại PID khi còn nhóm mang id đó). Windows: Job Object có `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`, kill bằng `TerminateJobObject`; không tạo hoặc gán được job thì chỉ kill node | `ohs_death_is_noticed_even_when_a_child_keeps_stdout_open`, `shutdown_kills_children_of_ohs_too` |
+| M3 | Luồng giám sát hỏi `status` ngay sau `ready` rồi định kỳ và lưu kết quả. `search` và `state()` dùng kết quả này nếu chưa cũ quá `2 * poll_interval`. `status` hết hạn thì giữ trạng thái lần trước | phần cuối của test H2 (`state` không thành `starting` khi OHS bận) |
+| M4 | `status` bị từ chối hoặc sai định dạng phải 3 lần liên tiếp mới thành `broken`; trước đó giữ trạng thái lần trước. OHS trả lời đúng trở lại thì về `ready` | `a_rejected_status_is_not_broken_until_it_keeps_failing` |
+| L1 | Ba luồng nền tạo bằng `thread::Builder`. Lỗi tạo luồng hoặc thiếu pipe thì kill cả nhóm rồi reap | (khó gây lỗi tạo luồng trong test) |
+| L2 | `wait_ready` không tự hỏi `status`; dựa vào lần hỏi định kỳ nên trả đúng hạn | `wait_ready_returns_on_time_while_status_is_slow` |
+| L4 | Doc của `not_ready_error` và mục mới trong `spec/PORTING.md`: `progress` và `eta_s` có thể là `null` | |
+| Test dễ chập chờn | Restart ổn định: tiến trình sống 500 ms so với `stable_after` 50 ms. Song song: độ trễ 600..100 ms (tuần tự 2100 ms), ngưỡng 1500 ms | |
+
+Thêm phụ thuộc: `libc` (Unix) và các feature `Win32_Foundation`, `Win32_Security`, `Win32_System_JobObjects`, `Win32_System_Threading` của `windows-sys`. `cargo clippy -p pkm-core --all-targets --target x86_64-pc-windows-msvc` và `--target aarch64-apple-darwin` với `-D warnings` đều sạch. Test Windows và macOS chỉ chạy được trên CI.
+
+Kiểm lại:
+- fmt, clippy workspace và test workspace (`--locked`) qua.
+- `pkm-core` có 39 unit test và 23 test với server giả. Chạy 5 lần liên tiếp rồi 4 bộ song song: đều qua, mỗi bộ khoảng 3 s, không còn `fake-ohs` nào (kể cả tiến trình con giữ pipe).
+- Test OHS thật qua trong 6,5 s, không còn node sau khi tắt.
+
+Còn mở thêm: L3 (tắt đúng lúc luồng giám sát đang chờ `status` thì chậm thêm tối đa `status_timeout`) vẫn như cũ, vì có giới hạn. Nếu `pkm` bị giết cứng, tiến trình cháu của OHS trên Unix vẫn có thể còn lại; OHS tự thoát nhờ EOF stdin. Fork 0.17.2 có sinh tiến trình con hay không vẫn chưa kiểm.

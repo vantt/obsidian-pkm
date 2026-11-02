@@ -194,7 +194,7 @@ fn concurrent_searches_are_matched_by_id_even_out_of_order() {
             .map(|(i, q)| {
                 let ohs = &ohs;
                 // Câu đầu chậm nhất: phản hồi về theo thứ tự ngược.
-                let delay = 300 - 50 * i as u64;
+                let delay = 600 - 100 * i as u64;
                 s.spawn(move || ohs.search(q, json!({ "delayMs": delay })).unwrap())
             })
             .collect();
@@ -204,9 +204,9 @@ fn concurrent_searches_are_matched_by_id_even_out_of_order() {
             .collect()
     });
     assert_eq!(answers, queries);
-    // Chạy song song: tổng thời gian gần câu chậm nhất (300 ms), không phải tổng (1050 ms).
+    // Chạy song song: tổng thời gian gần câu chậm nhất (600 ms), xa tổng tuần tự (2100 ms).
     assert!(
-        started.elapsed() < Duration::from_millis(1000),
+        started.elapsed() < Duration::from_millis(1500),
         "{:?}",
         started.elapsed()
     );
@@ -391,7 +391,7 @@ fn killed_ohs_is_restarted_and_old_process_is_gone() {
 #[test]
 fn restart_budget_is_refilled_after_ohs_runs_stably() {
     // Mỗi lần sống lâu hơn `stable_after`: chết bao nhiêu lần cũng không thành broken.
-    let f = Fixture::new(json!({"exit_after_ready": 4, "exit_after_ready_ms": 150}));
+    let f = Fixture::new(json!({"exit_after_ready": 4, "exit_after_ready_ms": 500}));
     let ohs = Ohs::start(
         f.package(),
         OhsConfig {
@@ -447,4 +447,144 @@ fn ohs_ignoring_eof_is_killed_after_shutdown_timeout() {
     ohs.shutdown();
     assert!(started.elapsed() >= Duration::from_millis(300));
     assert!(!alive(pid));
+}
+
+#[test]
+fn invalid_utf8_and_a_full_stderr_pipe_do_not_stall_or_restart_ohs() {
+    // Byte không phải UTF-8 (cảnh báo theo code page Windows) rồi 256 KB stderr, lớn hơn pipe trên mọi nền: nếu
+    // `pkm` ngừng đọc stderr, OHS chặn khi ghi và không bao giờ trả lời.
+    let f = Fixture::new(json!({"noise_kb": 256}));
+    let ohs = f.start();
+    ready(&ohs);
+    assert_eq!(
+        ohs.search("sau nhiễu", Value::Null).unwrap()[0]["path"],
+        "sau nhiễu"
+    );
+    // Dòng stdout không phải UTF-8 là nhiễu, không phải dấu hiệu OHS đã thoát.
+    assert_eq!(f.starts(), 1);
+}
+
+#[test]
+fn ohs_that_stops_reading_stdin_cannot_block_callers_or_shutdown() {
+    let f = Fixture::new(json!({"stop_on": "stop"}));
+    let ohs = Ohs::start(
+        f.package(),
+        OhsConfig {
+            request_timeout: Duration::from_millis(300),
+            status_timeout: Duration::from_millis(200),
+            shutdown_timeout: Duration::from_millis(300),
+            ..f.config()
+        },
+    );
+    ready(&ohs);
+    let pid = ohs.pid().unwrap();
+    assert!(matches!(
+        ohs.search("stop", Value::Null),
+        Err(OhsError::Timeout(_))
+    ));
+    // Câu tìm lớn hơn pipe stdin: luồng ghi chặn, người gọi thì không.
+    let big = "a".repeat(300 * 1024);
+    for _ in 0..3 {
+        let started = Instant::now();
+        let got = ohs.search(&big, Value::Null);
+        assert!(matches!(got, Err(OhsError::Timeout(_))), "{got:?}");
+        assert!(
+            started.elapsed() < Duration::from_secs(2),
+            "{:?}",
+            started.elapsed()
+        );
+    }
+    // OHS bận (status hết hạn) không bị báo là đang khởi động.
+    assert_ne!(ohs.state().name(), "starting");
+    let started = Instant::now();
+    ohs.shutdown();
+    assert!(
+        started.elapsed() < Duration::from_secs(3),
+        "{:?}",
+        started.elapsed()
+    );
+    assert!(!alive(pid));
+}
+
+fn holder_pid(f: &Fixture) -> u32 {
+    let file = f.vault().join("fake-ohs.holder");
+    eventually("tiến trình con đã chạy", || file.exists());
+    let mut pid = None;
+    eventually("đọc PID tiến trình con", || {
+        pid = fs::read_to_string(&file)
+            .ok()
+            .and_then(|s| s.trim().parse().ok());
+        pid.is_some()
+    });
+    pid.unwrap()
+}
+
+#[test]
+fn ohs_death_is_noticed_even_when_a_child_keeps_stdout_open() {
+    let f = Fixture::new(json!({
+        "spawn_holder": true, "exit_after_ready": 1, "exit_after_ready_ms": 100
+    }));
+    let ohs = f.start();
+    let first_holder = holder_pid(&f);
+    eventually("khởi động lại dù stdout chưa đóng", || {
+        f.starts() == 2
+    });
+    ready(&ohs);
+    // Tiến trình con của lần chạy đầu bị giết cùng nhóm.
+    eventually("tiến trình con của lần đầu đã chết", || {
+        !alive(first_holder)
+    });
+}
+
+#[test]
+fn shutdown_kills_children_of_ohs_too() {
+    let f = Fixture::new(json!({"spawn_holder": true}));
+    let ohs = f.start();
+    ready(&ohs);
+    let holder = holder_pid(&f);
+    let pid = ohs.pid().unwrap();
+    ohs.shutdown();
+    assert!(!alive(pid));
+    eventually("tiến trình con đã chết", || !alive(holder));
+}
+
+#[test]
+fn wait_ready_returns_on_time_while_status_is_slow() {
+    let f = Fixture::new(json!({"status_delay_ms": 3000}));
+    let ohs = Ohs::start(
+        f.package(),
+        OhsConfig {
+            status_timeout: Duration::from_secs(1),
+            ..f.config()
+        },
+    );
+    let started = Instant::now();
+    let state = ohs.wait_ready(Duration::from_millis(300));
+    assert!(!state.is_ready());
+    assert!(
+        started.elapsed() < Duration::from_millis(700),
+        "{:?}",
+        started.elapsed()
+    );
+}
+
+#[test]
+fn a_rejected_status_is_not_broken_until_it_keeps_failing() {
+    let f = Fixture::new(json!({}));
+    let ohs = f.start();
+    ready(&ohs);
+    // `status` không phải object: OHS trả lời sai định dạng.
+    f.configure(&json!({"status": "oops"}));
+    let mut seen = Vec::new();
+    eventually("broken sau nhiều lần lỗi liên tiếp", || {
+        let s = ohs.state();
+        seen.push(s.name());
+        s.is_terminal()
+    });
+    // Trước khi đủ số lần lỗi, trạng thái cũ (`ready`) được giữ, không nhảy sang `starting`.
+    assert!(!seen.contains(&"starting"), "{seen:?}");
+    assert!(ohs.state().action().contains("giao thức"));
+    // Trở lại bình thường thì luồng giám sát (vẫn hỏi `status` định kỳ) đưa trạng thái về `ready`.
+    f.configure(&json!({}));
+    eventually("hết broken", || ohs.state().is_ready());
 }

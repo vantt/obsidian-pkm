@@ -52,7 +52,9 @@ impl OhsState {
     }
 
     /// Lỗi `{"error":"ohs_not_ready","state":…,"progress":…,"eta_s":…,"action":…}` (D7), đúng năm khoá theo thứ tự
-    /// đó. `progress` (làm tròn 2 chữ số) và `eta_s` là `null` ngoài trạng thái `indexing`. `None` khi `ready`.
+    /// đó, luôn có mặt. Người gọi phải coi `progress` và `eta_s` là có thể `null`: cả hai là `null` ngoài trạng thái
+    /// `indexing`; trong `indexing`, `progress` là số từ 0 tới 1 (làm tròn 2 chữ số) còn `eta_s` là `null` khi chưa đủ
+    /// số đo tốc độ. `None` khi `ready`.
     pub fn not_ready_error(&self) -> Option<Value> {
         let (progress, eta_s) = match self {
             Self::Ready => return None,

@@ -241,6 +241,7 @@ name = "pkm-core"
 version = "0.1.0"
 dependencies = [
  "caseless",
+ "libc",
  "serde_json",
  "tempfile",
  "unicode-normalization",

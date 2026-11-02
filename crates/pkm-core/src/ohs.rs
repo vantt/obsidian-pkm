@@ -35,6 +35,10 @@ const EXIT_GRACE: Duration = Duration::from_secs(2);
 /// Số dòng stderr cuối của OHS đưa vào thông báo lỗi.
 const STDERR_IN_ERRORS: usize = 5;
 
+/// Số lần liên tiếp `status` bị từ chối hoặc sai định dạng thì coi gói OHS không tương thích (`broken`). Một lần lỗi
+/// lẻ không đủ.
+const STATUS_ERRORS_BROKEN: u32 = 3;
+
 /// Cấu hình chạy OHS.
 #[derive(Debug, Clone)]
 pub struct OhsConfig {
@@ -57,7 +61,8 @@ pub struct OhsConfig {
     pub restart_backoff: Duration,
     /// Tiến trình đã sống (sau `ready`) ít nhất chừng này rồi mới chết thì đếm lại số lần khởi động lại từ đầu.
     pub stable_after: Duration,
-    /// Khi OHS chưa index xong, luồng giám sát hỏi `status` mỗi khoảng này để có số đo cho `eta_s`.
+    /// Luồng giám sát hỏi `status` và kiểm tiến trình còn sống mỗi khoảng này. Trạng thái mà `search` dùng là kết
+    /// quả lần hỏi gần nhất nếu chưa cũ quá hai khoảng, nên `search` thường không tốn thêm một lượt `status`.
     pub poll_interval: Duration,
 }
 
@@ -129,18 +134,32 @@ enum Phase {
     Stopped,
 }
 
+/// Kết quả lần hỏi `status` gần nhất của một tiến trình.
+struct Observed {
+    generation: u64,
+    at: Instant,
+    state: OhsState,
+    /// Số lần liên tiếp `status` bị từ chối hoặc sai định dạng.
+    errors: u32,
+}
+
 struct Shared {
     phase: Mutex<Phase>,
+    last: Mutex<Option<Observed>>,
     eta: Mutex<EtaTracker>,
     status_timeout: Duration,
+    /// Trạng thái đã lưu cũ hơn chừng này thì hỏi lại `status`.
+    max_age: Duration,
 }
 
 impl Shared {
-    fn new(phase: Phase, status_timeout: Duration) -> Self {
+    fn new(phase: Phase, status_timeout: Duration, poll_interval: Duration) -> Self {
         Self {
             phase: Mutex::new(phase),
+            last: Mutex::default(),
             eta: Mutex::default(),
             status_timeout,
+            max_age: poll_interval * 2,
         }
     }
 
@@ -166,33 +185,89 @@ impl Shared {
         }
     }
 
-    /// Hỏi `status` của tiến trình và suy trạng thái D7, kèm `eta_s` khi đang index.
+    /// Trạng thái đã lưu của `proc` (bất kể cũ mới), không hỏi OHS.
+    fn remembered(&self, proc: &Proc) -> Option<OhsState> {
+        lock(&self.last)
+            .as_ref()
+            .filter(|o| o.generation == proc.generation())
+            .map(|o| o.state.clone())
+    }
+
+    /// Trạng thái hiện tại không chặn: theo pha, hoặc lần hỏi `status` gần nhất khi tiến trình đang chạy.
+    fn peek(&self) -> OhsState {
+        match self.running() {
+            Ok(proc) => self.remembered(&proc).unwrap_or(OhsState::Starting),
+            Err(state) => state,
+        }
+    }
+
+    /// Trạng thái của `proc`: lần hỏi gần nhất nếu chưa cũ quá `max_age`, ngược lại hỏi lại `status`.
+    fn current(&self, proc: &Proc) -> OhsState {
+        let fresh = lock(&self.last)
+            .as_ref()
+            .filter(|o| o.generation == proc.generation() && o.at.elapsed() <= self.max_age)
+            .map(|o| o.state.clone());
+        fresh.unwrap_or_else(|| self.observe(proc))
+    }
+
+    /// Hỏi `status` của tiến trình, suy trạng thái D7 (kèm `eta_s` khi đang index) và lưu lại.
+    ///
+    /// Lỗi tạm không đổi trạng thái đã biết: `status` hết hạn (OHS bận) thì giữ trạng thái lần trước; mất kết nối
+    /// (tiến trình đang chết, luồng giám sát sẽ khởi động lại) thì `starting`. `status` bị từ chối hoặc sai định dạng
+    /// [`STATUS_ERRORS_BROKEN`] lần liên tiếp mới là `broken`.
     fn observe(&self, proc: &Proc) -> OhsState {
         let mut req = Map::new();
         req.insert("action".into(), "status".into());
-        let mut state = match proc.call(req, self.status_timeout) {
+        let reply = proc.call(req, self.status_timeout);
+        let previous = self.remembered(proc);
+        let parsed = match reply {
             Ok(body) => match body.get("status") {
-                Some(s) if s.is_object() => OhsState::from_status(s),
-                _ => OhsState::Broken {
-                    action: incompatible_package_action("phản hồi status không có object status"),
-                },
+                Some(s) if s.is_object() => Ok(OhsState::from_status(s)),
+                _ => Err("phản hồi status không có object status".to_owned()),
             },
-            // Tiến trình vừa chết (sắp khởi động lại) hoặc đang bận: thử lại sau.
-            Err(CallError::Disconnected | CallError::Timeout(_)) => OhsState::Starting,
-            Err(CallError::Remote(m)) => OhsState::Broken {
-                action: incompatible_package_action(&format!("OHS từ chối lệnh status: {m}")),
-            },
+            Err(CallError::Remote(m)) => Err(format!("OHS từ chối lệnh status: {m}")),
+            Err(CallError::Timeout(_)) => return previous.unwrap_or(OhsState::Starting),
+            Err(CallError::Disconnected) => return OhsState::Starting,
         };
-        let mut eta = lock(&self.eta);
-        match &mut state {
-            OhsState::Indexing {
-                indexed,
-                pending,
-                eta_s,
-                ..
-            } => *eta_s = eta.observe(proc.generation(), Instant::now(), *indexed, *pending),
-            _ => eta.reset(),
-        }
+        let mut last = lock(&self.last);
+        let errors_before = last
+            .as_ref()
+            .filter(|o| o.generation == proc.generation())
+            .map_or(0, |o| o.errors);
+        let (state, errors) = match parsed {
+            Ok(mut state) => {
+                let mut eta = lock(&self.eta);
+                match &mut state {
+                    OhsState::Indexing {
+                        indexed,
+                        pending,
+                        eta_s,
+                        ..
+                    } => {
+                        *eta_s = eta.observe(proc.generation(), Instant::now(), *indexed, *pending)
+                    }
+                    _ => eta.reset(),
+                }
+                (state, 0)
+            }
+            Err(detail) => {
+                let errors = errors_before + 1;
+                let state = if errors >= STATUS_ERRORS_BROKEN {
+                    OhsState::Broken {
+                        action: incompatible_package_action(&detail),
+                    }
+                } else {
+                    previous.unwrap_or(OhsState::Starting)
+                };
+                (state, errors)
+            }
+        };
+        *last = Some(Observed {
+            generation: proc.generation(),
+            at: Instant::now(),
+            state: state.clone(),
+            errors,
+        });
         state
     }
 }
@@ -227,7 +302,11 @@ impl Ohs {
         // OHS chạy với thư mục hiện tại là thư mục gói: đường dẫn tương đối phải được giải trước.
         cfg.vault = absolute(&cfg.vault);
         cfg.db = cfg.db.as_deref().map(absolute);
-        let shared = Arc::new(Shared::new(Phase::Starting(None), cfg.status_timeout));
+        let shared = Arc::new(Shared::new(
+            Phase::Starting(None),
+            cfg.status_timeout,
+            cfg.poll_interval,
+        ));
         let (tx, rx) = mpsc::channel();
         let request_timeout = cfg.request_timeout;
         let supervisor = Supervisor {
@@ -260,27 +339,29 @@ impl Ohs {
             other => Phase::Broken(other.action()),
         };
         Self {
-            shared: Arc::new(Shared::new(phase, Duration::ZERO)),
+            shared: Arc::new(Shared::new(phase, Duration::ZERO, Duration::ZERO)),
             events: None,
             supervisor: None,
             request_timeout: Duration::ZERO,
         }
     }
 
-    /// Trạng thái hiện tại (hỏi `status` của OHS khi tiến trình đang chạy).
+    /// Trạng thái hiện tại. Khi tiến trình đang chạy: lần hỏi `status` gần nhất của luồng giám sát, hoặc hỏi lại
+    /// (chặn tối đa `status_timeout`) nếu lần đó đã cũ.
     pub fn state(&self) -> OhsState {
         match self.shared.running() {
-            Ok(proc) => self.shared.observe(&proc),
+            Ok(proc) => self.shared.current(&proc),
             Err(state) => state,
         }
     }
 
-    /// Chờ tới khi OHS `ready`, thành `broken`, hoặc hết `timeout`; trả trạng thái cuối. Cho lệnh chạy một lần (CLI);
+    /// Chờ tới khi OHS `ready`, thành `broken`, hoặc hết `timeout`; trả trạng thái cuối. Không tự hỏi `status` (dựa
+    /// vào lần hỏi định kỳ của luồng giám sát), nên không chờ quá `timeout` đáng kể. Cho lệnh chạy một lần (CLI);
     /// tool MCP không chờ mà trả `ohs_not_ready` ngay (D7).
     pub fn wait_ready(&self, timeout: Duration) -> OhsState {
         let deadline = Instant::now() + timeout;
         loop {
-            let state = self.state();
+            let state = self.shared.peek();
             let left = deadline.saturating_duration_since(Instant::now());
             if state.is_ready() || state.is_terminal() || left.is_zero() {
                 return state;
@@ -308,7 +389,7 @@ impl Ohs {
             }
         };
         let proc = self.shared.running().map_err(OhsError::NotReady)?;
-        let state = self.shared.observe(&proc);
+        let state = self.shared.current(&proc);
         if !state.is_ready() {
             return Err(OhsError::NotReady(state));
         }
@@ -467,7 +548,7 @@ impl Supervisor {
         let deadline = Instant::now() + self.cfg.ready_timeout;
         loop {
             let left = deadline.saturating_duration_since(Instant::now());
-            match self.rx.recv_timeout(left) {
+            match self.rx.recv_timeout(left.min(self.cfg.poll_interval)) {
                 Ok(Event::Ready(g)) if g == generation => break,
                 Ok(Event::Exited(g)) if g == generation => {
                     let (status, _) = proc.close(EXIT_GRACE);
@@ -485,6 +566,19 @@ impl Supervisor {
                     return Run::Stopped;
                 }
                 Ok(_) => {}
+                // Tiến trình con của OHS có thể giữ stdout mở sau khi OHS chết: kiểm trực tiếp.
+                Err(RecvTimeoutError::Timeout) if proc.try_exit().is_some() => {
+                    let (status, _) = proc.close(EXIT_GRACE);
+                    return Run::Failed {
+                        detail: format!(
+                            "OHS thoát trước khi sẵn sàng ({}); stderr: {}",
+                            exit_text(status),
+                            proc.stderr_tail(STDERR_IN_ERRORS)
+                        ),
+                        ran: Duration::ZERO,
+                    };
+                }
+                Err(RecvTimeoutError::Timeout) if Instant::now() < deadline => {}
                 Err(RecvTimeoutError::Timeout) => {
                     proc.close(Duration::ZERO);
                     return Run::Failed {
@@ -501,32 +595,36 @@ impl Supervisor {
 
         let ready_at = Instant::now();
         self.shared.set(Phase::Running(Arc::clone(&proc)));
-        // Hỏi `status` định kỳ tới khi index xong để `eta_s` có số đo ngay ở lần tool hỏi đầu tiên.
-        let mut settled = false;
+        // Hỏi `status` ngay rồi định kỳ: `search` dùng kết quả này, và `eta_s` có số đo từ lần tool hỏi đầu tiên.
+        self.shared.observe(&proc);
         loop {
-            match self.rx.recv_timeout(self.cfg.poll_interval) {
-                Ok(Event::Exited(g)) if g == generation => {
-                    self.shared.set(Phase::Starting(None));
-                    let (status, _) = proc.close(EXIT_GRACE);
-                    return Run::Failed {
-                        detail: format!(
-                            "OHS thoát ({}); stderr: {}",
-                            exit_text(status),
-                            proc.stderr_tail(STDERR_IN_ERRORS)
-                        ),
-                        ran: ready_at.elapsed(),
-                    };
-                }
+            let died = match self.rx.recv_timeout(self.cfg.poll_interval) {
+                Ok(Event::Exited(g)) => g == generation,
                 Ok(Event::Shutdown) | Err(RecvTimeoutError::Disconnected) => {
                     proc.close(self.cfg.shutdown_timeout);
                     return Run::Stopped;
                 }
-                Ok(_) => {}
-                Err(RecvTimeoutError::Timeout) if !settled => {
-                    let state = self.shared.observe(&proc);
-                    settled = !matches!(state, OhsState::Starting | OhsState::Indexing { .. });
+                Ok(Event::Ready(_)) => false,
+                // Tiến trình con của OHS có thể giữ stdout mở sau khi OHS chết: kiểm trực tiếp.
+                Err(RecvTimeoutError::Timeout) => {
+                    let died = proc.try_exit().is_some();
+                    if !died {
+                        self.shared.observe(&proc);
+                    }
+                    died
                 }
-                Err(RecvTimeoutError::Timeout) => {}
+            };
+            if died {
+                self.shared.set(Phase::Starting(None));
+                let (status, _) = proc.close(EXIT_GRACE);
+                return Run::Failed {
+                    detail: format!(
+                        "OHS thoát ({}); stderr: {}",
+                        exit_text(status),
+                        proc.stderr_tail(STDERR_IN_ERRORS)
+                    ),
+                    ran: ready_at.elapsed(),
+                };
             }
         }
     }

@@ -6,7 +6,12 @@
 //! - `exit_after_ready_ms` + `exit_after_ready`: số lần khởi động đầu tiên tự thoát (mã 4) sau `ready` chừng ấy ms;
 //! - `silent`: không bao giờ in `ready`;
 //! - `ignore_eof`: không thoát khi stdin đóng;
-//! - `status`: payload `status` (mặc định: index xong).
+//! - `status`: giá trị trả trong `status`, kể cả không phải object (mặc định: index xong);
+//! - `status_delay_ms`: trả `status` chậm chừng ấy ms;
+//! - `noise_kb`: sau `ready`, in ra stderr và stdout byte không phải UTF-8 rồi chừng ấy KB rác vào stderr (lớn hơn
+//!   pipe), trước khi đọc request;
+//! - `spawn_holder`: sinh một tiến trình con giữ stdout, stderr mở và ngủ mãi (PID ghi vào `<vault>/fake-ohs.holder`);
+//! - `stop_on`: gặp câu tìm này thì ngừng đọc stdin hẳn (và không thoát).
 //!
 //! Mỗi lần khởi động ghi một dòng vào `<vault>/fake-ohs.starts` và ghi môi trường nhận được vào
 //! `<vault>/fake-ohs.env.json`. `search` trả sau `options.delayMs` ms một kết quả có `path` là câu tìm ở dạng NFD;
@@ -35,9 +40,23 @@ fn say(out: &Mutex<std::io::Stdout>, v: &Value) {
     let _ = o.flush();
 }
 
+fn sleep_forever() -> ! {
+    loop {
+        thread::sleep(Duration::from_secs(60));
+    }
+}
+
 fn main() {
     let vault =
         PathBuf::from(std::env::var_os("OBSIDIAN_VAULT_PATH").expect("OBSIDIAN_VAULT_PATH"));
+    if std::env::var_os("FAKE_OHS_HOLDER").is_some() {
+        fs::write(
+            vault.join("fake-ohs.holder"),
+            std::process::id().to_string(),
+        )
+        .expect("ghi fake-ohs.holder");
+        sleep_forever();
+    }
     let starts_file = vault.join("fake-ohs.starts");
     let start = fs::read_to_string(&starts_file)
         .map(|s| s.lines().count() as u64)
@@ -66,13 +85,38 @@ fn main() {
         std::process::exit(3);
     }
     if cfg["silent"].as_bool().unwrap_or(false) {
-        loop {
-            thread::sleep(Duration::from_secs(60));
-        }
+        sleep_forever();
+    }
+    if cfg["spawn_holder"].as_bool().unwrap_or(false) {
+        // stdin không thừa kế: chỉ stdout, stderr bị giữ mở. Không chờ: tiến trình con phải sống lâu hơn server giả;
+        // test kiểm `pkm` giết nó cùng nhóm.
+        #[allow(clippy::zombie_processes)]
+        std::process::Command::new(std::env::current_exe().expect("current_exe"))
+            .env("FAKE_OHS_HOLDER", "1")
+            .stdin(std::process::Stdio::null())
+            .spawn()
+            .expect("sinh tiến trình giữ pipe");
     }
     let out = Arc::new(Mutex::new(std::io::stdout()));
     say(&out, &json!({"event": "noise"}));
     say(&out, &json!({"ready": true}));
+    let noise_kb = count("noise_kb");
+    if noise_kb > 0 {
+        let mut err = std::io::stderr().lock();
+        err.write_all(b"\xff\xfe c\xe1nh b\xe1o CP1258\n")
+            .expect("ghi stderr");
+        let line = [b'x'; 1023];
+        for _ in 0..noise_kb {
+            err.write_all(&line).expect("ghi stderr");
+            err.write_all(b"\n").expect("ghi stderr");
+        }
+        err.flush().expect("ghi stderr");
+        let mut o = out.lock().unwrap_or_else(PoisonError::into_inner);
+        o.write_all(b"\xff{\"id\":\"r0\"}\nnot json\n")
+            .expect("ghi stdout");
+        o.flush().expect("ghi stdout");
+    }
+    let stop_on = cfg["stop_on"].as_str().map(str::to_owned);
     if start < count("exit_after_ready") {
         let ms = count("exit_after_ready_ms");
         thread::spawn(move || {
@@ -88,14 +132,19 @@ fn main() {
         let Ok(req) = serde_json::from_str::<Value>(&line) else {
             continue;
         };
+        if stop_on.is_some() && req["query"].as_str() == stop_on.as_deref() {
+            sleep_forever();
+        }
         let out = Arc::clone(&out);
         let vault = vault.clone();
         workers.push(thread::spawn(move || {
             let id = req["id"].clone();
             let reply = match req["action"].as_str() {
                 Some("status") => {
+                    let delay = config(&vault)["status_delay_ms"].as_u64().unwrap_or(0);
+                    thread::sleep(Duration::from_millis(delay));
                     let status = match config(&vault).get("status") {
-                        Some(s) if s.is_object() => s.clone(),
+                        Some(s) => s.clone(),
                         _ => json!({"total": 4, "indexed": 4, "pending": 0,
                                     "model": "local:m", "active_model": "local:m", "indexing_errors": []}),
                     };
@@ -121,8 +170,6 @@ fn main() {
         let _ = w.join();
     }
     if config(&vault)["ignore_eof"].as_bool().unwrap_or(false) {
-        loop {
-            thread::sleep(Duration::from_secs(60));
-        }
+        sleep_forever();
     }
 }
