@@ -1,7 +1,7 @@
 ---
 title: "Kế hoạch tổng: chuyển lõi kg sang Rust (pkm)"
 description: "Bản đồ việc cho agent lead: mọi hạng mục R00–R14 của docs/PRD.md, xếp theo đợt chạy song song, có cổng người dùng và tiêu chí xong đo được."
-status: pending
+status: in-progress
 priority: P1
 effort: "20-24 ngày công + 1 tuần chạy song song"
 branch: main
@@ -113,3 +113,13 @@ Lead gom các việc cần user thành một danh sách, hỏi một lần cho m
 Xem mục 16 PRD. Với lead, ba rủi ro cần theo dõi: YAML đọc khác PyYAML (chặn P08, giảm bằng P02); Python sửa nhanh hơn Rust đuổi (đo bằng `follow`, mục tiêu dưới 5 commit và dưới 7 ngày); mô tả tool MCP lệch câu chữ (so chuỗi ở tầng MCP của bộ so khớp).
 
 <!-- slug: rust-core-port-master -->
+
+## Trạng thái thực hiện (2026-11-02)
+
+| Phase | Trạng thái | Còn lại |
+|---|---|---|
+| 01, 04, 06, 07, 14 | done | — |
+| 02 | in-progress | chạy probe trên bản B (user) |
+| 03 | in-progress | thử Claude Desktop trên Windows (user) |
+| 05 | in-progress | so khớp Python với Python trên bản B (user) |
+| 08–13, 15–17 | todo | chờ cổng G0 và C0 (user) |

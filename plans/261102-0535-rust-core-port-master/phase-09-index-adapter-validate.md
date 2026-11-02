@@ -25,6 +25,7 @@ Dựng index đủ và tăng dần như Python, cùng adapter bản B và valida
 
 ## Việc cần làm
 - [ ] SQLite qua `rusqlite` (feature `bundled`); DDL, view validator chép nguyên từ Python.
+- [ ] Liệt kê note theo đường dẫn đã sắp và ghi cạnh đúng thứ tự Python (xem mục "Thứ tự liệt kê file" trong `docs/DECISIONS.md`); `rusqlite` chỉ thêm vào `pkm-core`, bộ so khớp đọc DB qua `pkm-core`.
 - [ ] Build đủ (`--full`) và tăng dần theo mtime và hash; thứ tự ghi và chuẩn hoá giá trị như Python.
 - [ ] Hai lớp cạnh; cửa sổ hiệu lực; nguồn gốc (`origin`, `proposed_by`, `extracted_by`); `--edge-keys`, `--body-edges`.
 - [ ] Trait `Adapter` (impl đầu tiên là `e11`): cạnh `topic` theo trang chủ đề (`toc`, tên `(chủ đề).md`), cạnh từ hàng chờ đề xuất, cạnh OHS từ file cặp gần nghĩa, danh sách trang hệ thống. Giữ phần e11 nhỏ, tách riêng để commit chỉ đổi adapter chuyển được độc lập.

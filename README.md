@@ -6,4 +6,4 @@ Bản Python là đặc tả chạy được, ghim ở `spec/spec.lock`. Repo n�
 
 Đọc trước: [docs/PRD.md](docs/PRD.md).
 
-Trạng thái (2026-11-02): mới có PRD. Chưa có mã.
+Trạng thái (2026-11-02): xong khung workspace, CI ba nền, workflow release, ba bài thử (YAML: `unsafe-libyaml` + lớp tương thích; MCP: JSON-RPC tự viết; OHS stdio), bộ so khớp và golden kg-solo, lệnh `follow`, module `platform`. Chưa có lõi; chờ cổng G0.

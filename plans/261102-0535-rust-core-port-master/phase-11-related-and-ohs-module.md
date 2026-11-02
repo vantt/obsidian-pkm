@@ -25,6 +25,7 @@ needs_user: false
 
 ## Việc cần làm
 - [ ] PageRank cá nhân hoá: trọng số theo lớp (`WEIGHT`), `alpha`, `eps`, `k` như Python.
+- [ ] Chạy PageRank theo đúng thứ tự cạnh của Python (điểm lệch tối đa 1e-6). Dựa trên `probes/s3-ohs` và mục "phase 11" trong `plans/reports/probe-s3-ohs-261102-1317.md`: OHS trả đường dẫn NFD, báo `ready` trước khi index xong, không có `eta_s` (tự tính từ tốc độ).
 - [ ] Module `ohs`: tìm gói (cờ `--ohs`, `PKM_OHS_DIR`, thư mục mặc định); khởi động với `OBSIDIAN_VAULT_PATH` (và `OBSIDIAN_DB_PATH` khi fork có P02); chờ ready; request có `id`, đồng thời; khởi động lại có giới hạn rồi `broken`; tắt khi `pkm` thoát.
 - [ ] Trạng thái `starting`, `indexing` (tiến độ từ `status` của OHS), `model_missing`, `broken`, `ready`.
 - [ ] Tool cần OHS khi chưa ready trả đúng `{"error":"ohs_not_ready","state":…,"progress":…,"eta_s":…,"action":…}`; không có đường lùi cho kết quả kém (D7). Tool không cần OHS chạy bình thường.
