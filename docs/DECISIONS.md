@@ -149,3 +149,12 @@ Mỗi quyết định một mục, theo khung:
   - Dựng index có thể mất vài phút; trong lúc đó, nếu Claude Desktop mở hoặc app khác sửa file mà ta vẫn ghi thì thay đổi đó mất.
   - Artifact ghim hết hạn ngày 2027-01-31, và máy khách không có `gh`. Đổi nguồn bằng biến môi trường thì không cần ra bản `pkm` mới. Nguồn URL kiểm bằng `.sha256` đi kèm, như asset của Release.
 - **Bằng chứng:** `crates/pkm/src/install.rs`, `crates/pkm/src/install/{ohs_bundle,shell,tests}.rs`.
+
+## `mcp install`: tách `--allow-any-location` khỏi `--force`; trần và hạn giờ cho liệt kê đường, vòng
+- **Ngày:** 2026-11-02
+- **Lựa chọn:**
+  - `--force` chỉ bỏ qua kiểm Claude Desktop đang chạy (hoặc không kiểm được). Binary ngoài chỗ cài ổn định cần cờ riêng `--allow-any-location`, cờ này không bỏ qua kiểm Desktop. Lời từ chối vì Desktop đang chạy in đường dẫn exe bị coi là Claude Desktop. Thay cho lựa chọn "dùng lại `--force` thay vì thêm cờ" ở mục `pkm mcp install` phía trên.
+  - Claude Code cài qua winget, scoop, `%LOCALAPPDATA%\Programs` không còn bị coi là Claude Desktop (danh sách `CLAUDE_CODE_DIRS` trong `crates/pkm/src/install/desktop.rs`). Claude Desktop (`AnthropicClaude\app-*`, gói MS Store `WindowsApps\Claude_*`) và đường dẫn không đọc được vẫn tính là Desktop.
+  - `paths`, `loops`, `all_loops` từ chối `max_len` > 12 và dừng sau 10 s (`PKM_QUERY_TIMEOUT` đổi được, `0` tắt) với lỗi `query too expensive`. Chi tiết: `spec/PORTING.md`, mục "Lệch có chủ ý".
+- **Lý do:** review mã ngày 2026-11-02. Gộp hai ý vào `--force` khiến người qua lỗi Claude Code bị nhận nhầm là Desktop cũng mất luôn cảnh báo binary nằm trong Downloads, và ngược lại. Một lời gọi tool liệt kê đường trên vault dày khoá cả MCP server một luồng.
+- **Bằng chứng:** `crates/pkm/src/install.rs`, `crates/pkm/src/install/{desktop,tests}.rs`, `crates/pkm-core/src/query.rs`, `crates/pkm-core/src/query/tests.rs`; bộ so khớp kg-solo 0 lệch chưa có tên.
