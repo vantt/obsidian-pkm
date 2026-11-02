@@ -80,8 +80,14 @@ impl Scrub {
                 .flatten()
             {
                 let q = q.to_string_lossy().into_owned();
-                if !pairs.iter().any(|(x, _)| *x == q) {
-                    pairs.push((q, mark));
+                // Trong JSON (đầu ra `--json` của CLI), `\` của đường dẫn Windows được thoát thành `\\`.
+                let escaped = serde_json::to_string(&q)
+                    .map(|s| s[1..s.len() - 1].to_owned())
+                    .unwrap_or_default();
+                for form in [q, escaped] {
+                    if !form.is_empty() && !pairs.iter().any(|(x, _)| *x == form) {
+                        pairs.push((form, mark));
+                    }
                 }
             }
         }
