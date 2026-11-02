@@ -95,12 +95,12 @@ Ba cách cho bản Rust:
 | B. Hai cửa như hiện nay | Hai MCP `pkm` và `ohs` | Chỉ khi `related` không có `hits` | Không phải chuyển tiếp gì; tool `ohs` mới của upstream có ngay | Hai server, hai lần nạp model (MCP của OHS và tiến trình con của `pkm`); agent phải gọi `search` rồi `related` (thêm lượt, thêm token); hai chỗ báo lỗi |
 | C. `pkm` không gọi OHS | Hai MCP | Không | Đơn giản nhất | `related` không chạy được khi chỉ có câu hỏi; plugin, `material` (sau này), điện thoại đều phải tự nói với OHS: trái D6 |
 
-**Đề xuất: A cho sản phẩm, đi qua B trong lúc chuyển.**
+**Đã chốt (user 2026-11-02): hai cửa (B) trong lúc so khớp, rồi một cửa (A) sau khi chuyển hẳn.**
 1. **Giai đoạn so khớp (khớp với Python):** giữ đúng hợp đồng của MCP `kg` Python (mục 8), tức cách B. `pkm` thay `kg`; MCP `ohs` vẫn được cài như hiện nay. Module OHS của `pkm` chỉ dùng cho `related` khi không có `hits` (như Python, nhưng một tiến trình sống lâu thay vì mỗi lần một tiến trình).
 2. **Sau khi chuyển hẳn:** thêm `search`, `read` (chuyển tiếp mỏng sang OHS qua stdio, giữ tên tham số của OHS) và cho `related` nhận câu hỏi làm đường chính. Bộ cài thôi đăng ký MCP `ohs` cho khách. Người dùng nâng cao vẫn tự thêm MCP `ohs` được; `pkm` không cấm.
 3. Ghi chú: `related` của A tiết kiệm token đúng như E11.20 (Bản đồ bài) cần: mỗi ý một câu tìm, một lần gọi.
 
-Chờ user chốt (Q1, mục 15). Cho tới khi chốt, làm theo bước 1 (không đổi gì với Python).
+Việc của bước 2 nằm trong lộ trình ở R14 (mục 14).
 
 ---
 
@@ -171,7 +171,7 @@ Chạy cả hai bản trên cùng vault, so kết quả. Đây là tiêu chuẩn
 - `instructions` ghép giống Python (mô tả vault, mô tả từng loại trong schema, số note và quan hệ, đoạn của adapter, khối cố định).
 - Link `obsidian://open` trong kết quả như Python.
 - Lỗi OHS chưa sẵn sàng (D7): tool cần OHS trả `{"error":"ohs_not_ready","state":"indexing|starting|model_missing|broken","progress":0.64,"eta_s":180,"action":"…"}`. Tool không cần OHS chạy bình thường.
-- Sau khi chuyển hẳn (theo Q1): thêm `search`, `read`; mọi thay đổi hợp đồng ghi vào `docs/MCP-CHANGELOG.md`.
+- Sau khi chuyển hẳn (Q1 đã chốt: một cửa): thêm `search`, `read`, cho `related` nhận câu hỏi làm đường chính (R14); mọi thay đổi hợp đồng ghi vào `docs/MCP-CHANGELOG.md`.
 
 ## 9. Nối OHS (`pkm-core::ohs`)
 
@@ -238,14 +238,15 @@ Sau khi chuyển hẳn: `setup_vault.py` và hướng dẫn cài ở repo đặc
 | R11 | `platform` + `pkm mcp install` + `pkm doctor` | R10 | 1,5 | Cài trên Windows sạch, Claude Desktop gọi được tool |
 | R12 | Đuổi theo các commit Python phát sinh trong lúc làm | R05 | 10–20% công trên | `follow` về 0 |
 | R13 | Chạy song song một tuần trên máy user, chuyển hẳn | R11, R12 | 0,5 + 1 tuần dùng | Mục 13 đủ |
-| | **Cộng** | | **khoảng 18–22 ngày** | |
+| R14 | Một cửa (Q1): tool `search`, `read` chuyển tiếp sang OHS qua stdio (giữ tên tham số của OHS), `related` nhận câu hỏi làm đường chính, `instructions` hướng dẫn agent chỉ dùng `pkm`; bộ cài thôi đăng ký MCP `ohs`; cập nhật `CLAUDE.md` mẫu của vault và hướng dẫn cài ở repo đặc tả | R13 | 1,5 | Agent làm đủ nhóm A–D của playbook thử thách kg chỉ với `pkm`; số lượt gọi tool và token mỗi câu không tăng so với hai cửa (ghi số) |
+| | **Cộng** | | **khoảng 20–24 ngày** | |
 
 Song song được: R01–R05 sau R00; R06 chờ R01.
 
 ## 15. Quyết định còn mở
 | # | Câu hỏi | Đề xuất | Ai quyết |
 |---|---|---|---|
-| Q1 | MCP mới: một cửa (agent chỉ nói với `pkm`, `pkm` chuyển tiếp OHS) hay hai cửa (agent nói với `pkm` và `ohs`) | Hai cửa trong giai đoạn so khớp; một cửa sau khi chuyển hẳn (mục 3.1) | User |
+| Q1 | ~~MCP mới: một cửa hay hai cửa~~ | **Đã chốt (user 2026-11-02):** hai cửa trong giai đoạn so khớp, một cửa sau khi chuyển hẳn (mục 3.1, R14) | — |
 | Q2 | Giữ tên MCP `kg` hay đổi thành `pkm` | Giữ `kg` tới khi chuyển hẳn (Project instructions, `CLAUDE.md` của vault, playbook đang gọi tên `kg`); đổi sau cùng đợt với Q1 nếu muốn | User |
 | Q3 | Crate YAML | Theo kết quả R01 | Agent |
 | Q4 | `rmcp` hay JSON-RPC tự viết | Theo kết quả R02 | Agent |
