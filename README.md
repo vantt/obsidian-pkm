@@ -2,11 +2,11 @@
 
 Hỏi Claude Desktop về graph của vault Obsidian: note nào nối với note nào, đi từ ý này tới ý kia qua đâu, note nào lạc khỏi mạng. Một file `pkm`, không cần Python.
 
-Trạng thái (2026-11-02): **chưa phát hành bản nào.** Mã đã xong tới bộ cài: lõi, CLI, MCP `kg`, `related` với OHS, `pkm mcp install` và `pkm doctor`, khớp bản Python trên vault thử kg-solo. Đang chờ thử trên Windows thật và trên vault thật. Các bước dưới đây chạy được từ bản `v0.1.0`.
+Trạng thái (2026-11-02): **chưa phát hành bản nào.** Mã đã xong tới bộ cài: lõi, CLI, MCP `kg`, `related` với OHS, `pkm mcp install` và `pkm doctor`, khớp bản Python trên vault thử kg-solo. Đang chờ thử trên Windows thật và trên vault thật. Bản thử đầu tiên là pre-release `v0.1.0-rc.1`; các bước dưới đây dùng bản đó. GitHub không coi pre-release là bản mới nhất, nên lệnh `gh release download` phải ghi tag (bỏ tag khi đã có bản chính thức).
 
 ## Bắt đầu nhanh (Windows)
 
-Từ máy Windows trống tới Claude Desktop hỏi được graph vault trong khoảng 5 phút. Cần: Claude Desktop, một vault Obsidian, và GitHub CLI `gh` đã đăng nhập (repo còn private nên tải bản phát hành phải qua `gh`).
+Từ máy Windows trống tới Claude Desktop hỏi được graph vault trong khoảng 5 phút. Cần: Claude Desktop, một vault Obsidian, và GitHub CLI `gh` đã đăng nhập (repo `pkm` còn private nên tải `pkm` phải qua `gh`). Gói OHS (tìm kiếm ngữ nghĩa cho `related`) thì `pkm mcp install` tự tải từ bản phát hành công khai của fork, không cần `gh`.
 
 1. Cài `gh` rồi đăng nhập (bỏ qua nếu đã có). Mở PowerShell mới sau khi cài:
    ```powershell
@@ -15,17 +15,18 @@ Từ máy Windows trống tới Claude Desktop hỏi được graph vault trong 
    ```
 2. Cài `pkm` vào `%LOCALAPPDATA%\pkm\bin` và thêm vào PATH (không cần quyền admin):
    ```powershell
-   gh release download --repo vantt/obsidian-pkm --pattern install.ps1 --output - | Out-String | iex
+   gh release download v0.1.0-rc.1 --repo vantt/obsidian-pkm --pattern install.ps1 --output - | Out-String | iex
    ```
 3. Thoát hẳn Claude Desktop (cả biểu tượng ở khay hệ thống), rồi nối vault vào Claude Desktop:
    ```powershell
    pkm mcp install "D:\Duong\dan\toi\Vault"
    ```
+   Lệnh này dựng index, tải gói OHS `0.17.2-vantt.3` (khoảng 100 MB, kiểm sha256) vào `%LOCALAPPDATA%\pkm\ohs`, rồi ghi mục `kg`. Máy không ra được GitHub thì tải file gói ở [bản phát hành của fork](https://github.com/vantt/obsidian-hybrid-search/releases/tag/v0.17.2-vantt.3) rồi thêm `--ohs-package <file vừa tải>`; không cần OHS thì thêm `--no-ohs`.
 4. Mở Claude Desktop và hỏi: *"Dùng kg: vault có bao nhiêu note, note nào được liên kết tới nhiều nhất?"*
 
 Có lỗi thì chạy `pkm doctor`: lệnh này kiểm index, cấu hình Claude Desktop, gói OHS, đường dẫn dài, và in cách sửa.
 
-macOS, Linux: bước 2 là `gh release download --repo vantt/obsidian-pkm --pattern install.sh --output - | sh` (cài vào `~/.local/bin`).
+macOS, Linux: bước 2 là `gh release download v0.1.0-rc.1 --repo vantt/obsidian-pkm --pattern install.sh --output - | sh` (cài vào `~/.local/bin`).
 
 <details>
 <summary>Cập nhật, gỡ cài, tuỳ chọn của bộ cài</summary>
@@ -34,7 +35,7 @@ macOS, Linux: bước 2 là `gh release download --repo vantt/obsidian-pkm --pat
 - **Gỡ cài:** gỡ mục `kg` khỏi Claude Desktop trước, rồi gỡ `pkm`:
   ```powershell
   pkm mcp install --remove
-  $env:PKM_UNINSTALL = '1'; gh release download --repo vantt/obsidian-pkm --pattern install.ps1 --output - | Out-String | iex
+  $env:PKM_UNINSTALL = '1'; gh release download v0.1.0-rc.1 --repo vantt/obsidian-pkm --pattern install.ps1 --output - | Out-String | iex
   ```
   Index và gói OHS vẫn nằm ở `%LOCALAPPDATA%\pkm`; xoá thư mục đó nếu muốn bỏ hẳn.
 - **Cài và nối vault một lần:** `$env:PKM_MCP_INSTALL = 'D:\Vault'` trước lệnh ở bước 2.

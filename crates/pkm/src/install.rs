@@ -71,8 +71,9 @@ pub struct InstallArgs {
     /// Ghi kể cả khi binary pkm đang chạy không nằm ở chỗ cài chuẩn (Claude Desktop sẽ gọi đúng file đó).
     #[arg(long)]
     pub allow_any_location: bool,
-    /// Cài gói OHS từ file zip artifact, file gói, thư mục gói đã giải nén, hoặc URL https của file gói (kèm
-    /// `<URL>.sha256`). Không có cờ này thì tự tải từ PKM_OHS_PACKAGE nếu đặt, không thì artifact ghim qua gh.
+    /// Cài gói OHS từ file gói đã tải (phải khớp sha256 ghim), thư mục gói đã giải nén, hoặc URL https của file gói
+    /// (kèm `<URL>.sha256`). Không có cờ này thì tự tải từ PKM_OHS_PACKAGE nếu đặt, không thì gói ghim từ GitHub
+    /// Release của fork (không cần đăng nhập).
     #[arg(long, value_name = "PATH|URL")]
     pub ohs_package: Option<PathBuf>,
     /// Không cài hay kiểm gói OHS.
@@ -160,7 +161,7 @@ pub trait Hooks {
         long_paths_enabled()
     }
 
-    /// Tải `url` (https) vào file `out`, cho gói OHS theo URL. Mặc định dùng `curl`.
+    /// Tải `url` (https) vào file `out`, cho gói OHS. Mặc định dùng `curl`.
     fn fetch(&self, url: &str, out: &Path) -> Result<(), String> {
         ohs_bundle::curl(url, out)
     }
@@ -233,7 +234,7 @@ pub struct Install {
     /// Thư mục cài được coi là ổn định: [`INSTALL_DIR_ENV`] nếu đặt, rồi [`standard_bin_dir`]. Thư mục đầu là chỗ
     /// gợi ý khi binary nằm chỗ khác.
     pub bin_dirs: Vec<PathBuf>,
-    /// Nguồn tự tải gói OHS thay cho artifact ghim (biến [`ohs_bundle::PACKAGE_ENV`]).
+    /// Nguồn tự tải gói OHS thay cho gói ghim (biến [`ohs_bundle::PACKAGE_ENV`]).
     pub ohs_source: Option<String>,
 }
 
@@ -578,15 +579,20 @@ fn rerun_args(entry_args: &[String], args: &InstallArgs) -> Vec<String> {
     out
 }
 
-/// Lệnh bộ cài cho shell của máy này (repo riêng tư nên tải bộ cài qua `gh` đã đăng nhập).
+/// Lệnh bộ cài cho shell của máy này (repo riêng tư nên tải bộ cài qua `gh` đã đăng nhập). Ghim tag của chính bản
+/// đang chạy: `gh release download` không tag lấy bản "latest", mà bản pre-release (`v0.1.0-rc.1`) không bao giờ là
+/// "latest".
 pub fn installer_command() -> String {
+    let tag = concat!("v", env!("CARGO_PKG_VERSION"));
     if cfg!(windows) {
         format!(
-            "& ([scriptblock]::Create((gh release download --repo {RELEASE_REPO} --pattern install.ps1 --output - | \
-             Out-String)))"
+            "& ([scriptblock]::Create((gh release download {tag} --repo {RELEASE_REPO} --pattern install.ps1 \
+             --output - | Out-String)))"
         )
     } else {
-        format!("gh release download --repo {RELEASE_REPO} --pattern install.sh --output - | sh")
+        format!(
+            "gh release download {tag} --repo {RELEASE_REPO} --pattern install.sh --output - | sh"
+        )
     }
 }
 
@@ -750,17 +756,18 @@ fn ohs_plan(inst: &Install, args: &InstallArgs) -> String {
     }
     match inst.bundle {
         Some(b) => format!(
-            "tải gói OHS bundle-{} (run {}) bằng gh vào {}",
+            "tải gói OHS {} cho {} từ {} (không cần đăng nhập), kiểm sha256 ghim, cài vào {}",
+            ohs_bundle::VERSION,
             b.platform,
-            ohs_bundle::RUN_ID,
+            b.url(),
             dir.display()
         ),
-        None => "fork chưa có gói OHS cho nền tảng này; bỏ qua".to_owned(),
+        None => format!("{}; bỏ qua", ohs_bundle::unsupported_platform()),
     }
 }
 
 /// Cài gói OHS theo `args`. Gói chỉ ra bằng `--ohs-package` mà lỗi thì dừng; tự tải (từ
-/// [`ohs_bundle::PACKAGE_ENV`] nếu đặt, không thì artifact ghim) lỗi thì chỉ cảnh báo, vì `kg` vẫn chạy được không
+/// [`ohs_bundle::PACKAGE_ENV`] nếu đặt, không thì gói ghim của bản phát hành) lỗi thì chỉ cảnh báo, vì `kg` vẫn chạy được không
 /// cần OHS (chỉ `related` không có `hits` cần OHS).
 fn install_ohs(
     inst: &Install,
@@ -794,11 +801,17 @@ fn install_ohs(
             Source::parse(text),
             format!("{}={text}", ohs_bundle::PACKAGE_ENV),
         ),
-        None if inst.bundle.is_some() => (Ok(Source::Download), "artifact ghim".to_owned()),
+        None if inst.bundle.is_some() => (
+            Ok(Source::Download),
+            format!("bản phát hành {}", ohs_bundle::TAG),
+        ),
         None => {
             return w(
                 out,
-                format!("cảnh báo: fork chưa có gói OHS cho nền tảng này. {not_ready}"),
+                format!(
+                    "cảnh báo: {}. {not_ready}",
+                    ohs_bundle::unsupported_platform()
+                ),
             );
         }
     };
