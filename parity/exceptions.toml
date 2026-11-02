@@ -22,3 +22,29 @@ layer = "index"
 item = "nodes"
 fields = ["/yaml_error"]
 reason = "Alias lồng nhau vượt ngân sách của note (1 triệu props hoặc 64 MiB): Rust ghi `YAML lỗi: MemoryError` thay vì hết bộ nhớ"
+
+[[exception]]
+name = "mot-cua-ten-server"
+layer = "mcp"
+item = "initialize"
+fields = ["/serverInfo/name"]
+reason = "Một cửa (Q2): MCP server tên `pkm` thay cho `kg`"
+
+[[exception]]
+name = "mot-cua-instructions"
+layer = "mcp"
+item = "instructions"
+reason = "Một cửa: dòng đầu ghi `(pkm)`, dòng cuối dặn chỉ dùng `pkm` và cách chọn tool thay đoạn phối hợp hai server"
+
+[[exception]]
+name = "mot-cua-tools-list"
+layer = "mcp"
+item = "tools_list"
+reason = "Một cửa: thêm `search` (sau `find`), `read` (sau `note`), viết lại `related`; mười tool còn lại so từng chữ ở test tools::tests"
+
+[[exception]]
+name = "mot-cua-related"
+layer = "tools"
+item = "related"
+fields = ["/result/error"]
+reason = "Một cửa: `related` nhận query, queries, node hoặc hits; câu lỗi khi thiếu cả bốn đổi theo"
