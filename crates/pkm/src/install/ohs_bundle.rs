@@ -23,9 +23,9 @@ use sha2::{Digest, Sha256};
 /// Repo fork của OHS (công khai).
 pub const REPO: &str = "vantt/obsidian-hybrid-search";
 /// Phiên bản OHS của gói.
-pub const VERSION: &str = "0.17.2-vantt.3";
+pub const VERSION: &str = "0.17.2-vantt.4";
 /// Tag của bản phát hành có gói ghim.
-pub const TAG: &str = "v0.17.2-vantt.3";
+pub const TAG: &str = "v0.17.2-vantt.4";
 /// Biến môi trường thay nguồn tự tải của bộ cài: đường dẫn (như `--ohs-package`) hoặc URL `https://` của file gói.
 pub const PACKAGE_ENV: &str = "PKM_OHS_PACKAGE";
 
@@ -42,19 +42,19 @@ pub struct Bundle {
 pub const BUNDLES: [Bundle; 4] = [
     Bundle {
         platform: "win32-x64",
-        sha256: "ad63f1a59c06daa46d5c55c10d7eec1d912556b389f2c69062cbe46ed45e304d",
+        sha256: "5cb480f81ded99abfb2ab3ef0c0582320de85430ebff0d7dcd2f582d53e94f12",
     },
     Bundle {
         platform: "darwin-arm64",
-        sha256: "8c32b8aaf0375b4436708bfbc45e2414114fb6eaf797095d3e2c33051c04b8e1",
+        sha256: "ac2c3175776415a07fe3a933569c81e71fcc532890b49a56b2ed00d8fbcc9952",
     },
     Bundle {
         platform: "darwin-x64",
-        sha256: "f67d90f7739de5a504f12b21822efc3d737e82aa617d7fc909c3737551630046",
+        sha256: "37eed430ac9697e8db0bab411a017fedd32a6c7e7d3bd14da2b67396f95a2a22",
     },
     Bundle {
         platform: "linux-x64",
-        sha256: "a4178475b6245361c152024d638ed884b4141e7817f2486926c7e96dd547d743",
+        sha256: "e6972863f284a254d1d6c8b33e778cd53df7246df2ac5794e06bcb92838110b4",
     },
 ];
 
@@ -781,12 +781,12 @@ mod tests {
         );
         assert_eq!(
             BUNDLES[0].url(),
-            "https://github.com/vantt/obsidian-hybrid-search/releases/download/v0.17.2-vantt.3/\
-             ohs-0.17.2-vantt.3-win32-x64.zip"
+            "https://github.com/vantt/obsidian-hybrid-search/releases/download/v0.17.2-vantt.4/\
+             ohs-0.17.2-vantt.4-win32-x64.zip"
         );
         assert_eq!(
             BUNDLES[3].archive_name(),
-            "ohs-0.17.2-vantt.3-linux-x64.tar.gz"
+            "ohs-0.17.2-vantt.4-linux-x64.tar.gz"
         );
         assert_eq!(TAG, format!("v{VERSION}"));
     }

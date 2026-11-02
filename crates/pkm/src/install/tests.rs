@@ -823,7 +823,7 @@ fn ohs_is_downloaded_from_the_pinned_release_without_login() {
     // Tải hỏng (404) chỉ cảnh báo, nêu nguồn là bản phát hành ghim.
     let out = s.run(&args, &Fake::new()).unwrap();
     assert!(
-        out.contains("cảnh báo: chưa cài được gói OHS từ bản phát hành v0.17.2-vantt.3"),
+        out.contains("cảnh báo: chưa cài được gói OHS từ bản phát hành v0.17.2-vantt.4"),
         "{out}"
     );
     let out = s.run(&args, &hooks).unwrap();
