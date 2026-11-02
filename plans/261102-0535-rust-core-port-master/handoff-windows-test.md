@@ -142,7 +142,7 @@ pkm doctor --json
 
 OHS là bản fork `vantt/obsidian-hybrid-search`, gói dựng sẵn có Node và gói tiếng Việt (`lang\ohs-lang-vi`) đi kèm, cài vào `%LOCALAPPDATA%\pkm\ohs`. `pkm` ghim Release `v0.17.2-vantt.4` và chạy mọi tiến trình OHS với `OHS_LANGUAGE_PACK` trỏ vào gói tiếng Việt của gói. Ba đường, theo thứ tự ưu tiên:
 
-1. **Tự tải từ GitHub Release** (mặc định của `pkm mcp install` khi không có `--ohs-package`, `--no-ohs` hay `PKM_OHS_PACKAGE`): tải `ohs-0.17.2-vantt.4-win32-x64.zip` của Release `v0.17.2-vantt.4` (repo công khai, không cần đăng nhập, không cần `gh`) bằng `curl.exe` có sẵn trong Windows 10 trở lên, kiểm sha256 với bản ghim trong `pkm` (`ad63f1a59c06daa46d5c55c10d7eec1d912556b389f2c69062cbe46ed45e304d`). Ghi dòng `tải gói OHS … từ …` và `sha256 của gói khớp bản ghim` vào báo cáo.
+1. **Tự tải từ GitHub Release** (mặc định của `pkm mcp install` khi không có `--ohs-package`, `--no-ohs` hay `PKM_OHS_PACKAGE`): tải `ohs-0.17.2-vantt.4-win32-x64.zip` của Release `v0.17.2-vantt.4` (repo công khai, không cần đăng nhập, không cần `gh`) bằng `curl.exe` có sẵn trong Windows 10 trở lên, kiểm sha256 với bản ghim trong `pkm` (`5cb480f81ded99abfb2ab3ef0c0582320de85430ebff0d7dcd2f582d53e94f12`). Ghi dòng `tải gói OHS … từ …` và `sha256 của gói khớp bản ghim` vào báo cáo.
 2. **File tải tay**, khi đường 1 hỏng (máy chặn GitHub, proxy…): tải file bằng trình duyệt ở https://github.com/vantt/obsidian-hybrid-search/releases/tag/v0.17.2-vantt.4, hoặc:
    ```powershell
    curl.exe -fL -o C:\pkm-test\ohs-0.17.2-vantt.4-win32-x64.zip https://github.com/vantt/obsidian-hybrid-search/releases/download/v0.17.2-vantt.4/ohs-0.17.2-vantt.4-win32-x64.zip
@@ -153,7 +153,7 @@ OHS là bản fork `vantt/obsidian-hybrid-search`, gói dựng sẵn có Node v�
 
 Máy đã có OHS của dự án (bản B: `C:\tools\ohs`, cũng là `0.17.2-vantt.4` có gói tiếng Việt) thì **không** cài thêm gói thứ hai cho vault đó: dùng `--ohs C:\tools\ohs` (mục A7). Hai bản OHS khác cấu hình gói ngôn ngữ cùng chạy trên một vault làm bên làm chủ index dựng lại bảng view qua lại, kết quả tìm đổi theo bên chạy sau.
 
-`pkm doctor` báo ở `ohs_package` phiên bản gói và có gói tiếng Việt không; khác bản ghim hoặc thiếu gói tiếng Việt là `warn`. Ghi dòng này vào báo cáo.
+`pkm doctor` báo ở `ohs_package` phiên bản gói và có gói tiếng Việt không; cũ hơn bản ghim hoặc thiếu gói tiếng Việt là `warn`, bằng hay mới hơn là `ok`. Ghi dòng này vào báo cáo.
 
 Sau khi cài gói: `pkm doctor --deep` chạy thử OHS trên vault của mục `kg` (OHS có thể bắt đầu index và nạp model). Lần đầu thường là `warn` với trạng thái `starting` hoặc `indexing`; chạy lại sau một lúc phải thành `ok`. Ghi thời gian tới `ready` và mọi trạng thái `broken` hay `model_missing` kèm `action`.
 
