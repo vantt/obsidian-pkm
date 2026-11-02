@@ -15,10 +15,20 @@ Mỗi quyết định một mục, theo khung:
 Đổi một quyết định thì thêm mục mới trỏ về mục cũ, không sửa đè.
 
 ## Q3: Crate YAML
-- **Ngày:**
-- **Lựa chọn:**
-- **Lý do:**
-- **Bằng chứng:** (bài thử S1, PRD mục 14 R01)
+- **Ngày:** 2026-11-02
+- **Lựa chọn:** `unsafe-libyaml` 0.2.11, chỉ dùng luồng sự kiện của parser, cộng một lớp tương thích PyYAML tự viết trong `pkm-core::vault`: composer như `CParser`, resolver YAML 1.1 của PyYAML (tắt timestamp cho frontmatter như `vault.LOADER`, bật cho `schema.yaml`), constructor như `SafeConstructor`, và `str()`/`repr()` của Python để ra `props`. Phần `unsafe` nằm gọn trong một module. Không dùng thẳng crate YAML nào ở mức giá trị.
+- **Lý do:** `vault.py` đọc bằng `CSafeLoader`, tức libyaml 0.2.5, và lưu dòng đầu thông báo lỗi YAML vào `nodes.error`; muốn khớp cả giá trị lẫn câu lỗi thì parser phải là libyaml. Crate dùng thẳng (`serde_norway`, `saphyr`) theo YAML 1.2 nên lệch ở bool `yes/no/on/off`, số `010`, `1_000`, `10:30`, `0912…`, `1e3`, khoá trùng, `<<`, tag tường minh và câu lỗi. `saphyr-parser` kèm cùng lớp vẫn lệch vì parser khác libyaml. `libyaml-safer` 0.3.0 (bản an toàn của libyaml) panic khi block scalar là giá trị cuối của frontmatter (issue #6, #7 ở upstream, còn mở). `unsafe-libyaml` đã đóng băng (archived 2024-03) nhưng libyaml 0.2.5 cũng đóng băng và là đúng bản PyYAML dùng. Khi `libyaml-safer` sửa hai issue thì chạy lại bài thử; 0 lệch thì đổi sang để bỏ `unsafe`.
+- **Bằng chứng:** bài thử S1 (PRD mục 14 R01), `probes/s1-yaml/`, báo cáo `plans/reports/probe-s1-yaml-261102-1317.md`. Số note mà index thấy khác Python:
+
+  | Ứng viên | kg-solo (746) | 58 ca biên | 25.000 note ngẫu nhiên | Bản B |
+  |---|---|---|---|---|
+  | `unsafe-libyaml` + lớp | 0 | 0 | 0 | chờ user |
+  | `libyaml-safer` + lớp | 0 | 1 | 242 (đều là panic) | |
+  | `saphyr-parser` + lớp | 0 | 9 | 6.510 | |
+  | `serde_norway` dùng thẳng | 0 | 35 | 20.916 | |
+  | `saphyr` dùng thẳng | 0 | 36 | 21.317 | |
+
+  kg-solo không có dạng YAML rủi ro nào (chỉ chuỗi, số nguyên thường, danh sách; ngày được cả hai bên giữ là chuỗi), nên mọi ứng viên đều 0 lệch ở đó; bảng lệch theo loại và cách xử lý ở mục 3 của báo cáo. Bốn dạng làm bản Python dừng hẳn (`!!bool` chữ lạ, `!!timestamp` sai dạng, `!!int ""`, alias tự lồng) để phase 08 chốt cách xử lý.
 
 ## Q4: `rmcp` hay JSON-RPC tự viết
 - **Ngày:**

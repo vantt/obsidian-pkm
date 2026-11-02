@@ -1,0 +1,3 @@
+# Edge-case notes must keep their exact bytes (CRLF, BOM, bad UTF-8).
+cases/** -text
+cases.pyyaml.jsonl -text

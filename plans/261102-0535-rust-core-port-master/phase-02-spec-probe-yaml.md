@@ -1,6 +1,6 @@
 ---
 title: "Phase 2: Bài thử S1, YAML"
-status: todo
+status: in-progress
 priority: P1
 effort: "1 ngày"
 prd: R01
@@ -23,12 +23,12 @@ Chọn crate YAML cho Rust và liệt kê mọi chỗ đọc khác PyYAML trên 
 - Thêm mục Q3 vào `docs/DECISIONS.md`.
 
 ## Việc cần làm
-- [ ] Script Python nhỏ (chạy trên máy) đọc frontmatter của mọi note đúng như `vault.py`, xuất JSON có kiểu giá trị rõ (bool, int, float, date, datetime, str, null, list, map).
-- [ ] Chương trình Rust đọc cùng các note bằng hai hoặc ba crate ứng viên, xuất JSON cùng định dạng.
-- [ ] So từng note; phân loại lệch (`yes/no/on/off`, ngày và giờ, số bát phân hoặc có gạch dưới, `~`, khoá trùng, chuỗi nhiều dòng, tiếng Việt và NFC/NFD, CRLF).
-- [ ] Chạy trên kg-solo (dựng bằng `npx github:vantt/obsidian-test-fixture#v0.7.0` với preset và seed trong `spec.lock`).
+- [x] Script Python nhỏ (chạy trên máy) đọc frontmatter của mọi note đúng như `vault.py`, xuất JSON có kiểu giá trị rõ (bool, int, float, date, datetime, str, null, list, map).
+- [x] Chương trình Rust đọc cùng các note bằng hai hoặc ba crate ứng viên, xuất JSON cùng định dạng.
+- [x] So từng note; phân loại lệch (`yes/no/on/off`, ngày và giờ, số bát phân hoặc có gạch dưới, `~`, khoá trùng, chuỗi nhiều dòng, tiếng Việt và NFC/NFD, CRLF).
+- [x] Chạy trên kg-solo (dựng bằng `npx github:vantt/obsidian-test-fixture#v0.7.0` với preset và seed trong `spec.lock`).
 - [ ] Chạy trên bản B ở máy user: chỉ in số lệch theo loại, không in nội dung.
-- [ ] Chọn crate; nếu cần, thiết kế lớp chuẩn hoá kiểu giá trị để ra đúng như Python. Ghi thiết kế trong báo cáo để phase 08 làm theo.
+- [x] Chọn crate; nếu cần, thiết kế lớp chuẩn hoá kiểu giá trị để ra đúng như Python. Ghi thiết kế trong báo cáo để phase 08 làm theo.
 
 ## Nghiệm thu
 - `docs/DECISIONS.md` có Q3: crate đã chọn, lý do, bảng lệch.
@@ -39,3 +39,6 @@ Chọn crate YAML cho Rust và liệt kê mọi chỗ đọc khác PyYAML trên 
 
 ## Rủi ro
 Bản B có dạng YAML mà kg-solo không có, nên phải chạy cả hai. Không crate nào gần PyYAML thì gọi `kongming` trước khi chốt.
+
+## Trạng thái (2026-11-02)
+Xong mọi việc trừ bản B. Q3 đã chốt theo kg-solo, 58 ca biên và 25.000 note ngẫu nhiên: `unsafe-libyaml` + lớp tương thích, 0 lệch ([báo cáo](../reports/probe-s1-yaml-261102-1317.md)). **Còn chờ user** chạy lệnh ở mục 6 của báo cáo trên bản B; user tạm hoãn việc này. Phase 08 có thể bắt đầu theo thiết kế ở mục 5 của báo cáo; nếu bản B ra lệch khác 0 thì bổ sung lớp tương thích.
