@@ -1,6 +1,6 @@
 ---
 title: "Phase 7: Module platform"
-status: todo
+status: done
 priority: P2
 effort: "0,5 ngày"
 prd: "R11 (platform)"
@@ -22,11 +22,11 @@ Chuyển phần không phải WSL của `scripts/platform_paths.py`: thư mục 
 - `crates/pkm-core/src/platform*` và test của nó. Thêm phụ thuộc vào `crates/pkm-core/Cargo.toml` nếu cần (`dirs`, `unicode-normalization`).
 
 ## Việc cần làm
-- [ ] Thư mục cache và dữ liệu: `%LOCALAPPDATA%\pkm`, `~/Library/Application Support/pkm`, `~/.cache/pkm`, giống quy ước của Python.
-- [ ] `move` không đè đích; báo lỗi rõ khi đích đã có.
-- [ ] Phát hiện trùng tên khác hoa thường và khác dạng NFC/NFD.
-- [ ] Thử lại có giới hạn khi file bị giữ (OneDrive, Obsidian trên Windows).
-- [ ] Chuyển 19 test không phải WSL; test nào chỉ dành cho WSL ghi "không áp dụng" trong `spec/PORTING.md`.
+- [x] Thư mục cache và dữ liệu: `%LOCALAPPDATA%\pkm`, `~/Library/Application Support/pkm`, `~/.cache/pkm`, giống quy ước của Python.
+- [x] `move` không đè đích; báo lỗi rõ khi đích đã có.
+- [x] Phát hiện trùng tên khác hoa thường và khác dạng NFC/NFD.
+- [x] Thử lại có giới hạn khi file bị giữ (OneDrive, Obsidian trên Windows).
+- [x] Chuyển 19 test không phải WSL; test nào chỉ dành cho WSL ghi "không áp dụng" trong `spec/PORTING.md`.
 
 ## Nghiệm thu
 - `cargo test -p pkm-core platform` qua trên cả ba nền trong CI.
