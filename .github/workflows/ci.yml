@@ -46,9 +46,11 @@ jobs:
         run: |
           args=$(cargo run -q --locked -p pkm-parity -- fixture-args)
           npx --yes $args --out "$RUNNER_TEMP/kg-solo"
+      # Dump ghi ra RUNNER_TEMP, không vào target/: rust-cache lưu target/ nhưng xoá mọi file ngoài thư mục profile,
+      # để lại khung thư mục rỗng (tables/, cli/, mcp/) thiếu manifest.json, lần chạy sau `check` từ chối ghi đè.
       - name: So bản Rust với golden
         shell: bash
-        run: cargo run -q --locked -p pkm-parity -- check --vault "$RUNNER_TEMP/kg-solo" --report "$RUNNER_TEMP/parity-report.json"
+        run: cargo run -q --locked -p pkm-parity -- check --vault "$RUNNER_TEMP/kg-solo" --dump-out "$RUNNER_TEMP/rust-dump" --report "$RUNNER_TEMP/parity-report.json"
 
   # Dựng, đóng gói, chạy thử bốn binary phát hành và thử bộ cài trên mọi PR, không đăng gì.
   assets:
