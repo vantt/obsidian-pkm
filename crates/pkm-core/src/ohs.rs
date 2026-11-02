@@ -23,7 +23,7 @@ use std::time::{Duration, Instant};
 use serde_json::{Map, Value};
 use unicode_normalization::{UnicodeNormalization, is_nfc};
 
-pub use package::{DEFAULT_DIR_NAME, OHS_DIR_ENV, OhsPackage, PackageError};
+pub use package::{DEFAULT_DIR_NAME, LANGUAGE_PACK_ENV, OHS_DIR_ENV, OhsPackage, PackageError};
 pub use state::OhsState;
 
 use process::{CallError, Event, Proc, lock};
@@ -522,6 +522,11 @@ impl Supervisor {
             .env_remove("NODE_OPTIONS");
         if let Some(db) = &self.cfg.db {
             cmd.env("OBSIDIAN_DB_PATH", db);
+        }
+        // Gói tiếng Việt đi kèm: đặt cho mọi lần chạy, để index không bị dựng lại bảng view qua lại giữa các bên
+        // gọi. Gói không có thì để nguyên môi trường.
+        if let Some(pack) = &self.pkg.pack {
+            cmd.env(LANGUAGE_PACK_ENV, pack);
         }
         #[cfg(windows)]
         {

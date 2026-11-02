@@ -54,6 +54,7 @@ impl Fixture {
             root: self.tmp.path().to_path_buf(),
             node: PathBuf::from(env!("CARGO_BIN_EXE_fake-ohs")),
             cli: self.tmp.path().join("app/dist/src/cli.js"),
+            pack: None,
         };
         let cfg = OhsConfig {
             ready_timeout: Duration::from_secs(10),

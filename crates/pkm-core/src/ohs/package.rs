@@ -1,4 +1,5 @@
-//! Tìm gói OHS dựng sẵn của fork: thư mục có Node đi kèm (`node/`) và `app/dist/src/cli.js`.
+//! Tìm gói OHS dựng sẵn của fork: thư mục có Node đi kèm (`node/`), `app/dist/src/cli.js` và gói tiếng Việt
+//! (`lang/ohs-lang-vi`, nếu có).
 
 use std::ffi::OsString;
 use std::fmt;
@@ -15,6 +16,13 @@ pub const DEFAULT_DIR_NAME: &str = "ohs";
 
 /// Đường dẫn của `cli.js` trong gói.
 const CLI_REL: &str = "app/dist/src/cli.js";
+
+/// Thư mục gói ngôn ngữ tiếng Việt trong gói.
+const PACK_REL: &str = "lang/ohs-lang-vi";
+
+/// Biến môi trường OHS đọc để nạp gói ngôn ngữ. Mọi tiến trình dùng chung một index phải cùng một giá trị, nếu không
+/// OHS dựng lại bảng view qua lại.
+pub const LANGUAGE_PACK_ENV: &str = "OHS_LANGUAGE_PACK";
 
 /// Không tìm thấy gói OHS, hoặc gói thiếu file. Thông điệp nêu thư mục đã thử.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -37,6 +45,8 @@ pub struct OhsPackage {
     pub node: PathBuf,
     /// `app/dist/src/cli.js`.
     pub cli: PathBuf,
+    /// Gói tiếng Việt `lang/ohs-lang-vi` khi gói có; OHS chạy với [`LANGUAGE_PACK_ENV`] trỏ tới đây.
+    pub pack: Option<PathBuf>,
 }
 
 impl OhsPackage {
@@ -81,10 +91,12 @@ impl OhsPackage {
                 dir.display()
             )));
         }
+        let pack = Some(dir.join(PACK_REL)).filter(|p| p.is_dir());
         Ok(Self {
             root: dir.to_path_buf(),
             node,
             cli,
+            pack,
         })
     }
 }
@@ -151,7 +163,26 @@ mod tests {
         assert!(err.0.contains(CLI_REL), "{err}");
         fs::write(dir.join(CLI_REL), b"").unwrap();
         let pkg = OhsPackage::from_dir(dir).unwrap();
-        assert_eq!((pkg.node, pkg.cli), (node, dir.join(CLI_REL)));
+        assert_eq!(
+            (pkg.node, pkg.cli, pkg.pack),
+            (node, dir.join(CLI_REL), None)
+        );
+    }
+
+    #[test]
+    fn vietnamese_pack_is_found_only_as_a_folder() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        make_package(dir);
+        fs::create_dir_all(dir.join("lang")).unwrap();
+        fs::write(dir.join(PACK_REL), b"").unwrap();
+        assert_eq!(OhsPackage::from_dir(dir).unwrap().pack, None);
+        fs::remove_file(dir.join(PACK_REL)).unwrap();
+        fs::create_dir(dir.join(PACK_REL)).unwrap();
+        assert_eq!(
+            OhsPackage::from_dir(dir).unwrap().pack,
+            Some(dir.join(PACK_REL))
+        );
     }
 
     #[test]

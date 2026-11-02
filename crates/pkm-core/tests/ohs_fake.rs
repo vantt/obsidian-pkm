@@ -43,6 +43,7 @@ impl Fixture {
             root: self.tmp.path().to_path_buf(),
             node: PathBuf::from(env!("CARGO_BIN_EXE_fake-ohs")),
             cli: self.tmp.path().join("app/dist/src/cli.js"),
+            pack: None,
         }
     }
 
@@ -128,10 +129,29 @@ fn ohs_is_started_with_vault_db_and_clean_environment() {
     assert_eq!(seen["db"], db.to_string_lossy().as_ref());
     assert_eq!(seen["update_check"], "1");
     assert_eq!(seen["node_options"], Value::Null);
+    assert_eq!(seen["language_pack"], Value::Null);
     let cwd = PathBuf::from(seen["cwd"].as_str().unwrap());
     assert_eq!(
         cwd.canonicalize().unwrap(),
         f.tmp.path().canonicalize().unwrap()
+    );
+}
+
+#[test]
+fn ohs_runs_with_the_vietnamese_pack_of_its_package() {
+    let f = Fixture::new(json!({}));
+    let pack = f.tmp.path().join("lang/ohs-lang-vi");
+    let ohs = Ohs::start(
+        OhsPackage {
+            pack: Some(pack.clone()),
+            ..f.package()
+        },
+        f.config(),
+    );
+    ready(&ohs);
+    assert_eq!(
+        f.seen_env()["language_pack"],
+        pack.to_string_lossy().as_ref()
     );
 }
 
