@@ -123,3 +123,21 @@ Nguồn ở sha ghim: `scripts/kg/tests/test_kg.py` không có test riêng cho `
 | `vault.parse`, `vault.Resolver`, `vault.fold` (hành vi) | `vault::tests::*`, `vault::resolve::tests::*`, `vault::pystr::tests::*` | đã chuyển | Giá trị mong đợi đã đối chiếu với `vault.py` ở sha ghim; `nesting_boundaries_match_python` giữ mốc list 996/997 và dict 999/1000/1001/3000 đo bằng Python 3.14 |
 | PyYAML `SafeConstructor` (hành vi) | `vault::yaml::tests::*`, `vault::yaml::scalar::tests::*`, `vault::yaml::repr::tests::*` | đã chuyển | Khoá dict so như Python, alias vòng in `{...}`, `<<`, `=`, câu lỗi `int()`, `float()`, `binascii`, `datetime` của Python 3.14 |
 | `schema.resolve`, `schema.load`, `schema.digest` (hành vi) | `schema::tests::*` | đã chuyển | Schema nhúng có digest `bbaa9f0197ef` như golden; schema tự viết đối chiếu với `schema.py` (gói, `extends` vòng, `widen`, `required_if`, `enum_of_edges`) |
+
+## Bộ cài `pkm mcp install` và `pkm doctor`
+
+Thay `scripts/kg/desktop_config.py` (`5a3eb2f`). Mã: `crates/pkm/src/install.rs` (và `install/`), `crates/pkm/src/doctor.rs`. Bản Python không có test cho file này; test Rust nằm trong hai module (`cargo test -p pkm`). Đây là công cụ cài đặt, không thuộc tầng nào của bộ so khớp, nên các chỗ khác dưới đây không cần ngoại lệ có tên.
+
+Giống Python: tìm cấu hình ở `%APPDATA%\Claude` và bản Microsoft Store (`%LOCALAPPDATA%\Packages\Claude_*\LocalCache\Roaming\Claude`), thấy nhiều file thì bắt chọn `--config`; chỉ thay mục `kg`, giữ mọi khoá và mục khác theo thứ tự; `mcpServers` không phải object thì thay bằng object mới; thụt lề 2, không thoát ký tự ngoài ASCII, giữ CRLF, bỏ BOM; sao lưu `<file>.bak-<thời điểm>` trước khi ghi; từ chối ghi khi Claude Desktop đang chạy trừ khi `--force`; dựng index trước, lỗi thì không đổi cấu hình; `--check` bắt tay `initialize` rồi `tools/list` với `protocolVersion` `2025-06-18`.
+
+Khác Python (cố ý, vì binary thay cho bản chép mã Python):
+- `command` là chính binary `pkm`, `args` là `VAULT mcp --db DB <cờ đọc> [--about TEXT]`; không chép file mã nào, không cần Python hay `wsl.exe`. Python ghim sẵn vault bản B và cờ đọc `e11`; Rust bắt buộc truyền `VAULT` và cờ đọc.
+- Index mặc định ở `<thư mục pkm>/kg/<tên vault>-<8 hex sha256 đường dẫn vault>.db` (Python: `workshop-b.db` cố định).
+- Có macOS (`~/Library/Application Support/Claude`) và Linux (`$XDG_CONFIG_HOME/Claude`, chỉ để test và cho bản cộng đồng).
+- Chưa có file cấu hình nào nhưng đúng một thư mục Claude có sẵn thì tạo file mới (Python dừng với "found 0 config files").
+- Ghi nguyên tử (file tạm cùng thư mục rồi đổi tên); thời điểm của bản sao lưu là UTC có hậu tố `Z`, thêm `-2`, `-3`… nếu trùng (Python dùng giờ máy và ghi đè trong file cũ).
+- Mục `kg` không đổi thì không ghi lại; `--remove` khi không có `kg` thì không ghi (Python luôn ghi và sao lưu).
+- `--dry-run` in kế hoạch (cấu hình, gói OHS, index) và phần khác của mục `kg`; dùng được với `--remove`.
+- Bắt tay: chờ trả lời `initialize` rồi mới gửi `notifications/initialized` và `tools/list` (Python gửi cả ba một lúc), có hạn giờ (`--timeout`, mặc định 120 giây), bỏ qua dòng stdout không phải JSON.
+- Kiểm Claude Desktop đang chạy: Windows liệt kê đường dẫn mọi `claude.exe` qua PowerShell và bỏ qua Claude Code (`~\.local\bin`, npm), không được thì lùi về `tasklist` như Python; macOS `pgrep -x Claude`; Linux `pgrep -x claude-desktop`. Không hỏi được thì từ chối và gợi ý `--force`.
+- Cài gói OHS dựng sẵn vào `<thư mục pkm>/ohs` (Python trỏ tới `cli.js` của OHS cài sẵn qua `--ohs-cli` và `node` trên PATH).
