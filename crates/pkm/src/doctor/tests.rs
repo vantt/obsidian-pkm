@@ -34,7 +34,7 @@ impl Hooks for Fake {
         unreachable!("doctor không bắt tay")
     }
 
-    fn desktop_running(&self) -> io::Result<bool> {
+    fn desktop_process(&self) -> io::Result<Option<String>> {
         unreachable!("doctor không hỏi Claude Desktop")
     }
 

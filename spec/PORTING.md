@@ -101,6 +101,16 @@ Chỗ bản Python sai rõ ràng và Rust không làm theo (PRD mục 4). Mỗi 
 - **Ngoại lệ trong bộ so khớp:** không cần (kết quả của build thành công trên vault không đổi giữa chừng giống hệt Python).
 - **Issue ở repo đặc tả:** đề xuất, chưa mở.
 
+### `paths`, `loops`, `all_loops`: trần `max_len` và hạn giờ
+
+- **Python** (`5a3eb2f`, `scripts/kg/query.py`, `paths`, `loops`, `all_loops`): không giới hạn `max_len`, không hạn giờ. Số đường đơn tăng theo hàm mũ với độ dài, nên trên vault liên kết dày một lời gọi `max_len=8..10` chạy mãi và ăn hết bộ nhớ; MCP server một luồng kẹt theo, mọi request sau (kể cả `ping`) không được trả lời.
+- **Rust** (`pkm_core::query::Graph`):
+  - `max_len` lớn hơn `MAX_LEN_CAP` = 12 thì trả `ValueError` (`max_len N is too large: at most 12 ...`) trước khi chạy. Áp cho cả ba hàm, nên cả tool MCP, CLI và bộ câu đáp án.
+  - Mỗi lần liệt kê có hạn giờ, mặc định `WALK_BUDGET` = 10 s; biến `PKM_QUERY_TIMEOUT` (số giây, có thể lẻ; `0` là không giới hạn) hoặc `Graph::set_walk_budget` đổi được. CTE của `paths`, `loops` bị ngắt qua progress handler của SQLite (kiểm mỗi 1000 lệnh máy ảo); DFS của `all_loops` tự kiểm hạn. Quá hạn thì trả `TimeoutError` (`query too expensive: stopped after 10.0 s; lower max_len or narrow rels ...`); kết nối vẫn dùng tiếp được, câu không phải liệt kê không bị hạn.
+- **Lý do:** review mã ngày 2026-11-02: một lời gọi tool không được khoá cả server. Mọi lời gọi trong bộ so khớp dùng `max_len` tối đa 4, bộ câu đáp án tối đa 10, mặc định của `paths` là 6, của câu `cycles` là 10; tất cả xong trong vài ms.
+- **Ngoại lệ trong bộ so khớp:** không cần (không lời gọi nào chạm trần hay hạn giờ; bộ so khớp kg-solo 0 lệch).
+- **Issue ở repo đặc tả:** đề xuất, chưa mở.
+
 ## Test `platform` chuyển từ Python
 
 Nguồn: `scripts/tests/test_platform_paths.py` ở sha ghim, 19 test. Test Rust nằm trong `crates/pkm-core/src/platform.rs` (`platform::tests::…`), chạy bằng `cargo test -p pkm-core platform` trên cả ba nền. Test có `#[cfg(...)]` chỉ chạy trên nền tương ứng (Python giả nền bằng mock; Rust kiểm nền thật trong CI).
@@ -168,16 +178,16 @@ Giống Python: tìm cấu hình ở `%APPDATA%\Claude` và bản Microsoft Stor
 
 Khác Python (cố ý, vì binary thay cho bản chép mã Python):
 - `command` là chính binary `pkm`, `args` là `VAULT mcp --db DB <cờ đọc> [--about TEXT]`; không chép file mã nào, không cần Python hay `wsl.exe`. Python ghim sẵn vault bản B và cờ đọc `e11`; Rust bắt buộc truyền `VAULT` và cờ đọc.
-- Index mặc định ở `<thư mục pkm>/kg/<tên vault>-<8 hex sha256 đường dẫn vault>.db` (Python: `workshop-b.db` cố định).
+- Index mặc định ở `<thư mục pkm>/kg/<tên vault>-<8 hex sha256 khoá vault>.db` (Python: `workshop-b.db` cố định). Khoá là đường dẫn đã giải symlink, bỏ tiền tố `\\?\`, bỏ dấu phân cách cuối, NFC, gộp hoa thường trên Windows và macOS, để `D:\Vault` và `d:\vault\` dùng chung một index. Index đặt theo cách băm cũ (đường dẫn nguyên văn) mà đã có thì dùng tiếp.
 - Có macOS (`~/Library/Application Support/Claude`) và Linux (`$XDG_CONFIG_HOME/Claude`, chỉ để test và cho bản cộng đồng).
 - Chưa có file cấu hình nào nhưng đúng một thư mục Claude có sẵn thì tạo file mới (Python dừng với "found 0 config files").
-- Ghi nguyên tử (file tạm cùng thư mục rồi đổi tên); thời điểm của bản sao lưu là UTC có hậu tố `Z`, thêm `-2`, `-3`… nếu trùng (Python dùng giờ máy và ghi đè trong file cũ).
+- Ghi nguyên tử (file tạm mới tạo bằng `create_new`, tên `<file>.tmp-<pid>-<16 hex ngẫu nhiên>`, cùng thư mục, rồi đổi tên); cấu hình là symlink thì ghi vào file đích và giữ symlink (symlink gãy thì từ chối); trên Unix file mới giữ quyền của file cũ; thời điểm của bản sao lưu là UTC có hậu tố `Z`, thêm `-2`, `-3`… nếu trùng (Python dùng giờ máy và ghi đè trong file cũ).
 - Mục `kg` không đổi thì không ghi lại; `--remove` khi không có `kg` thì không ghi (Python luôn ghi và sao lưu).
 - `--dry-run` in kế hoạch (cấu hình, gói OHS, index) và phần khác của mục `kg`; dùng được với `--remove`.
 - Bắt tay: chờ trả lời `initialize` rồi mới gửi `notifications/initialized` và `tools/list` (Python gửi cả ba một lúc), có hạn giờ (`--timeout`, mặc định 120 giây), bỏ qua dòng stdout không phải JSON.
-- Kiểm Claude Desktop đang chạy: Windows liệt kê đường dẫn mọi `claude.exe` qua PowerShell và bỏ qua Claude Code (`~\.local\bin`, npm), không được thì lùi về `tasklist` như Python; macOS `pgrep -x Claude`; Linux `pgrep -x claude-desktop`. Không hỏi được thì từ chối và gợi ý `--force`.
+- Kiểm Claude Desktop đang chạy: Windows liệt kê đường dẫn mọi `claude.exe` qua PowerShell và bỏ qua Claude Code (`~\.local\bin`, npm, winget `Anthropic.ClaudeCode` và `WinGet\Links`, scoop `apps\claude-code`, `Programs\claude-code`; danh sách `CLAUDE_CODE_DIRS` trong `install/desktop.rs`), không được thì lùi về `tasklist` như Python; macOS `pgrep -x Claude`; Linux `pgrep -x claude-desktop`. Lời từ chối in đường dẫn exe bị coi là Claude Desktop. Không hỏi được thì từ chối và gợi ý `--force`. `--force` chỉ bỏ qua kiểm này.
 - Cài gói OHS dựng sẵn vào `<thư mục pkm>/ohs` (Python trỏ tới `cli.js` của OHS cài sẵn qua `--ohs-cli` và `node` trên PATH).
-- Binary `pkm` đang chạy không ở chỗ cài ổn định (`%LOCALAPPDATA%\pkm\bin` trên Windows, `~/.local/bin` nơi khác, hằng `STANDARD_BIN_DIR`; hoặc `PKM_INSTALL_DIR`; hoặc thư mục có `.pkm-managed` của bộ cài) thì `mcp install` từ chối trừ khi `--force`, nói rõ khi file nằm trong `Downloads` hay thư mục tạm, và in lệnh bộ cài cùng lệnh chạy lại từ chỗ chuẩn. `--dry-run` chỉ in cảnh báo.
+- Binary `pkm` đang chạy không ở chỗ cài ổn định (`%LOCALAPPDATA%\pkm\bin` trên Windows, `~/.local/bin` nơi khác, hằng `STANDARD_BIN_DIR`; hoặc `PKM_INSTALL_DIR`; hoặc thư mục có `.pkm-managed` của bộ cài) thì `mcp install` từ chối trừ khi `--allow-any-location` (cờ riêng, không bỏ qua kiểm Claude Desktop), nói rõ khi file nằm trong `Downloads` hay thư mục tạm, và in lệnh bộ cài cùng lệnh chạy lại từ chỗ chuẩn. `--dry-run` chỉ in cảnh báo.
 - So rồi mới ghi: lưu sha256 của bytes cấu hình đã đọc; dựng index xong thì hỏi lại Claude Desktop có chạy không và đọc lại file. File đã đổi thì đặt lại mục `kg` trên bản mới, giữ thay đổi kia và báo cho người dùng.
 - Cài với `--no-ohs` thì mục `kg` có `"env": {"PKM_NO_OHS": "1"}`, để `doctor` bỏ qua gói OHS. Lần cài sau không có `--no-ohs` thì bỏ biến này.
 - Nguồn gói OHS đổi được mà không cần bản `pkm` mới: biến `PKM_OHS_PACKAGE` (đường dẫn như `--ohs-package`, hoặc URL `https://` của file gói, kèm `<URL>.sha256`) thay cho việc tự tải artifact ghim. `--ohs-package` cũng nhận URL. Nguồn URL tải bằng `curl` chỉ qua https, kiểm với file `.sha256` đi kèm.
@@ -250,7 +260,7 @@ Giới hạn đã biết (không gặp trong bộ so khớp; MCP client gửi đ
 | `run` (9 phép: `neighbors`, `reach`, `paths`, `cycles`, `chain`, `provenance`, `find`, `select`, `valid`) | `query::answers::run` | Phép lạ: `KeyError`. Bộ so khớp chạy từng câu qua hàm này (tầng `answers`) |
 | `check` (70 câu graph, 11 câu bảng) | `query::answers::check` | `query::tests::answer_key` |
 
-Test Rust thêm, không có bản Python: `query::tests::{reach_depth_and_direction, note_card_counts_edges_by_relation_and_layer, all_loops_start_at_smallest_id, answers_like_fixture_check}`, `query::py::tests::*` (`json.dumps`, `str`, `repr`, `int()`, cắt danh sách, `bool`), `tools::tests::{handle_like_python, short_results_have_no_handle_and_cache_is_bounded, call_reports_unknown_notes_with_suggestions, default_vault_name_like_abspath_basename, call_note_has_link_and_body, call_errors_like_server_call, call_runs_each_tool_with_mcp_arguments, definitions_match_the_golden_tools_list, definitions_add_system_only_when_vault_has_system_pages}`.
+Test Rust thêm, không có bản Python: `query::tests::{reach_depth_and_direction, note_card_counts_edges_by_relation_and_layer, all_loops_start_at_smallest_id, answers_like_fixture_check, max_len_above_cap_is_refused_before_running, walks_over_budget_stop_with_clear_error_and_graph_stays_usable, walk_budget_reads_seconds_and_zero_disables, full_rebuild_keeps_db_file_for_open_readers}`, `query::py::tests::*` (`json.dumps`, `str`, `repr`, `int()`, cắt danh sách, `bool`), `tools::tests::{handle_like_python, short_results_have_no_handle_and_cache_is_bounded, call_reports_unknown_notes_with_suggestions, default_vault_name_like_abspath_basename, call_note_has_link_and_body, call_errors_like_server_call, call_runs_each_tool_with_mcp_arguments, definitions_match_the_golden_tools_list, definitions_add_system_only_when_vault_has_system_pages}`.
 
 
 ## MCP server (`pkm VAULT mcp`) và CLI (`pkm VAULT <lệnh>`)

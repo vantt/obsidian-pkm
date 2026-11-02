@@ -65,10 +65,12 @@ pub struct InstallArgs {
     /// Xoá mục `kg` khỏi cấu hình (index và gói OHS vẫn giữ).
     #[arg(long)]
     pub remove: bool,
-    /// Ghi kể cả khi Claude Desktop đang chạy (app sẽ ghi đè khi thoát), và kể cả khi binary pkm đang chạy không nằm
-    /// ở chỗ cài chuẩn (Claude Desktop sẽ gọi đúng file đó).
+    /// Ghi kể cả khi Claude Desktop đang chạy (app sẽ ghi đè khi thoát) hoặc không kiểm được.
     #[arg(long)]
     pub force: bool,
+    /// Ghi kể cả khi binary pkm đang chạy không nằm ở chỗ cài chuẩn (Claude Desktop sẽ gọi đúng file đó).
+    #[arg(long)]
+    pub allow_any_location: bool,
     /// Cài gói OHS từ file zip artifact, file gói, thư mục gói đã giải nén, hoặc URL https của file gói (kèm
     /// `<URL>.sha256`). Không có cờ này thì tự tải từ PKM_OHS_PACKAGE nếu đặt, không thì artifact ghim qua gh.
     #[arg(long, value_name = "PATH|URL")]
@@ -140,9 +142,9 @@ pub trait Hooks {
         handshake::handshake(entry, timeout)
     }
 
-    /// Claude Desktop có đang chạy không.
-    fn desktop_running(&self) -> io::Result<bool> {
-        desktop::desktop_running()
+    /// Claude Desktop có đang chạy không: `Some(mô tả tiến trình, thường là đường dẫn exe)` khi có.
+    fn desktop_process(&self) -> io::Result<Option<String>> {
+        desktop::desktop_process()
     }
 
     /// Trạng thái OHS (D7) khi chạy gói `pkg` trên `vault`, chờ tối đa `wait`.
@@ -286,12 +288,31 @@ impl Install {
         self.pkm_dir.join(pkm_core::ohs::DEFAULT_DIR_NAME)
     }
 
-    /// Index mặc định của `vault`: `<thư mục pkm>/kg/<tên vault>-<8 hex sha256 đường dẫn>.db`.
+    /// Index mặc định của `vault`: `<thư mục pkm>/kg/<tên vault>-<8 hex sha256 của khoá vault>.db`, khoá là đường
+    /// dẫn đã chuẩn hoá ([`vault_key`]) để cùng một vault viết khác nhau (dấu phân cách cuối, hoa thường trên Windows
+    /// và macOS, NFC/NFD, symlink) dùng chung một index. Index đặt theo cách băm cũ (đường dẫn nguyên văn) mà đã có
+    /// thì dùng tiếp, để bản cài cũ không phải dựng lại.
     pub fn default_db(&self, vault: &Path) -> PathBuf {
-        let name: String = vault
-            .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_else(|| "vault".to_owned())
+        let legacy = self.legacy_default_db(vault);
+        if legacy.is_file() {
+            return legacy;
+        }
+        let canon = std::fs::canonicalize(vault).unwrap_or_else(|_| vault.to_path_buf());
+        let key = vault_key(
+            &canon.to_string_lossy(),
+            cfg!(any(windows, target_os = "macos")),
+        );
+        self.db_file(&pkm_core::vault::nfc(&file_name(&canon)), &key)
+    }
+
+    /// Tên index theo cách băm cũ: sha256 của đường dẫn nguyên văn.
+    fn legacy_default_db(&self, vault: &Path) -> PathBuf {
+        self.db_file(&file_name(vault), &vault.to_string_lossy())
+    }
+
+    /// `<thư mục pkm>/kg/<name, ký tự lạ thành -><8 hex sha256 của key>.db`.
+    fn db_file(&self, name: &str, key: &str) -> PathBuf {
+        let name: String = name
             .chars()
             .map(|c| {
                 if c.is_alphanumeric() || c == '-' || c == '_' {
@@ -301,10 +322,42 @@ impl Install {
                 }
             })
             .collect();
-        let hash = Sha256::digest(vault.to_string_lossy().as_bytes());
+        let hash = Sha256::digest(key.as_bytes());
         let short: String = hash[..4].iter().map(|b| format!("{b:02x}")).collect();
         self.pkm_dir.join("kg").join(format!("{name}-{short}.db"))
     }
+}
+
+/// Khoá của một đường dẫn vault (đã giải symlink) để băm tên index: bỏ tiền tố `\\?\` của Windows, bỏ dấu phân
+/// cách cuối (trừ gốc như `/`, `C:\`), chuẩn NFC, và gộp hoa thường khi `fold_case` (hệ thống file không phân biệt
+/// hoa thường: Windows, macOS).
+fn vault_key(path: &str, fold_case: bool) -> String {
+    let path = match path.strip_prefix(r"\\?\UNC\") {
+        Some(rest) => format!(r"\\{rest}"),
+        None => path.strip_prefix(r"\\?\").unwrap_or(path).to_owned(),
+    };
+    let mut key = pkm_core::vault::nfc(&path);
+    while key.len() > 1 && key.ends_with(['/', '\\']) && !is_drive_root(&key) {
+        key.pop();
+    }
+    if fold_case {
+        key = pkm_core::vault::nfc(&pkm_core::vault::casefold(&key));
+    }
+    key
+}
+
+/// Tên thư mục vault, `vault` khi không có.
+fn file_name(vault: &Path) -> String {
+    vault
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "vault".to_owned())
+}
+
+/// `C:\` hoặc `C:/`.
+fn is_drive_root(p: &str) -> bool {
+    let b = p.as_bytes();
+    b.len() == 3 && b[0].is_ascii_alphabetic() && b[1] == b':'
 }
 
 /// Chạy `pkm mcp install` trên máy này.
@@ -364,7 +417,7 @@ pub fn run_with(
         if let Some(w) = &location {
             p(
                 out,
-                format!("- cảnh báo (sẽ từ chối nếu không có --force): {w}"),
+                format!("- cảnh báo (sẽ từ chối nếu không có --allow-any-location): {w}"),
             )?;
         }
         p(out, format!("- {}", ohs_plan(inst, args)))?;
@@ -393,9 +446,9 @@ pub fn run_with(
     }
 
     if let Some(w) = location {
-        if !args.force {
+        if !args.allow_any_location {
             return Err(format!(
-                "{w}\nMuốn giữ chỗ này thì chạy lại với --force (cũng bỏ qua kiểm Claude Desktop đang chạy)."
+                "{w}\nMuốn giữ chỗ này thì chạy lại với --allow-any-location."
             ));
         }
         p(out, format!("cảnh báo: {w}"))?;
@@ -663,11 +716,13 @@ fn refuse_if_desktop_running(hooks: &dyn Hooks, force: bool) -> Result<(), Strin
     if force {
         return Ok(());
     }
-    match hooks.desktop_running() {
-        Ok(false) => Ok(()),
-        Ok(true) => Err("Claude Desktop đang chạy: app giữ cấu hình trong bộ nhớ và ghi đè khi thoát. Thoát hẳn \
-                         Claude Desktop (cả biểu tượng ở khay hệ thống) rồi chạy lại"
-            .to_owned()),
+    match hooks.desktop_process() {
+        Ok(None) => Ok(()),
+        Ok(Some(found)) => Err(format!(
+            "Claude Desktop đang chạy ({found}): app giữ cấu hình trong bộ nhớ và ghi đè khi thoát. Thoát hẳn \
+             Claude Desktop (cả biểu tượng ở khay hệ thống) rồi chạy lại. Nếu đó không phải Claude Desktop thì chạy \
+             lại với --force"
+        )),
         Err(e) => Err(format!(
             "không kiểm được Claude Desktop có đang chạy không ({e}). Thoát hẳn Claude Desktop rồi chạy lại với --force"
         )),

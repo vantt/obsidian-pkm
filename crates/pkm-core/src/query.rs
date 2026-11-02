@@ -23,6 +23,9 @@ mod tests;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fmt;
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, PoisonError};
+use std::time::{Duration, Instant};
 
 use indexmap::IndexMap;
 use rusqlite::types::Value as SqlValue;
@@ -57,6 +60,15 @@ pub const EDGE_FIELDS: [&str; 15] = [
 ];
 /// Dấu phân cách các bước trong đường đi của CTE (`char(31)`).
 const SEP: char = '\x1f';
+/// Trần của `max_len` ở `paths`, `loops`, `all_loops`. Số đường đơn tăng theo hàm mũ với độ dài; bản Python không
+/// có trần. Mọi lời gọi trong bộ so khớp và bộ câu đáp án dùng tối đa 10.
+pub const MAX_LEN_CAP: i64 = 12;
+/// Thời gian tối đa mặc định của một lần liệt kê đường hay vòng (`paths`, `loops`, `all_loops`).
+pub const WALK_BUDGET: Duration = Duration::from_secs(10);
+/// Biến môi trường đổi [`WALK_BUDGET`]: số giây (có thể lẻ); `0` là không giới hạn.
+pub const WALK_BUDGET_ENV: &str = "PKM_QUERY_TIMEOUT";
+/// Số lệnh máy ảo SQLite giữa hai lần kiểm hạn giờ.
+const PROGRESS_OPS: std::os::raw::c_int = 1000;
 
 /// `layer(status)`: `proposed`, `rejected`, hoặc `accepted` cho mọi status khác.
 pub fn layer(status: Option<&str>) -> &'static str {
@@ -216,6 +228,82 @@ pub struct Graph {
     db: Connection,
     rels: IndexMap<String, Rel>,
     hidden: Vec<String>,
+    /// Hạn giờ của mỗi lần liệt kê đường hay vòng; `None` là không giới hạn.
+    budget: Option<Duration>,
+    watch: Arc<Watch>,
+}
+
+/// Hạn giờ mà progress handler của SQLite đọc: đang có hạn thì quá hạn là ngắt câu đang chạy.
+#[derive(Default)]
+struct Watch {
+    deadline: Mutex<Option<Instant>>,
+    fired: AtomicBool,
+}
+
+impl Watch {
+    fn set(&self, d: Option<Instant>) {
+        *self.deadline.lock().unwrap_or_else(PoisonError::into_inner) = d;
+        self.fired.store(false, Ordering::Relaxed);
+    }
+
+    fn expired(&self) -> bool {
+        let over = self
+            .deadline
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .is_some_and(|d| Instant::now() >= d);
+        if over {
+            self.fired.store(true, Ordering::Relaxed);
+        }
+        over
+    }
+}
+
+/// Bỏ hạn giờ khi ra khỏi lần liệt kê, kể cả khi lỗi.
+struct Armed<'a>(&'a Watch);
+
+impl Drop for Armed<'_> {
+    fn drop(&mut self) {
+        self.0.set(None);
+    }
+}
+
+/// Hạn giờ đọc từ [`WALK_BUDGET_ENV`]: không đặt hay không đọc được thì [`WALK_BUDGET`].
+fn budget_from_env() -> Option<Duration> {
+    budget_from(std::env::var(WALK_BUDGET_ENV).ok().as_deref())
+}
+
+fn budget_from(v: Option<&str>) -> Option<Duration> {
+    match v.map(str::trim).map(str::parse::<f64>) {
+        Some(Ok(0.0)) => None,
+        Some(Ok(x)) if x.is_finite() && x > 0.0 => Some(Duration::from_secs_f64(x.min(86_400.0))),
+        _ => Some(WALK_BUDGET),
+    }
+}
+
+/// Lỗi khi liệt kê quá hạn giờ.
+fn too_expensive(budget: Duration) -> QueryError {
+    QueryError::new(
+        "TimeoutError",
+        format!(
+            "query too expensive: stopped after {:.1} s; lower max_len or narrow rels \
+             ({WALK_BUDGET_ENV} sets the time limit in seconds)",
+            budget.as_secs_f64()
+        ),
+    )
+}
+
+/// `max_len` vượt [`MAX_LEN_CAP`].
+fn check_max_len(max_len: i64) -> Result<()> {
+    if max_len > MAX_LEN_CAP {
+        return Err(QueryError::new(
+            "ValueError",
+            format!(
+                "max_len {max_len} is too large: at most {MAX_LEN_CAP} (the number of paths grows exponentially)"
+            ),
+        ));
+    }
+    Ok(())
 }
 
 impl Graph {
@@ -224,8 +312,11 @@ impl Graph {
         Graph::new(index::connect(db, true)?)
     }
 
-    /// Dùng một kết nối có sẵn.
-    pub fn new(db: Connection) -> Result<Graph> {
+    /// Dùng một kết nối có sẵn. Kết nối được gắn progress handler để ngắt lần liệt kê quá hạn giờ.
+    pub fn new(mut db: Connection) -> Result<Graph> {
+        let watch = Arc::new(Watch::default());
+        let w = Arc::clone(&watch);
+        db.progress_handler(PROGRESS_OPS, Some(move || w.expired()))?;
         let mut rels = IndexMap::new();
         {
             let mut st = db.prepare("SELECT key, inverse, symmetric, polarity FROM schema_edge")?;
@@ -275,7 +366,35 @@ impl Graph {
                 _ => None,
             })
             .unwrap_or_default();
-        Ok(Graph { db, rels, hidden })
+        Ok(Graph {
+            db,
+            rels,
+            hidden,
+            budget: budget_from_env(),
+            watch,
+        })
+    }
+
+    /// Đổi hạn giờ của mỗi lần liệt kê đường hay vòng (`paths`, `loops`, `all_loops`); `None` là không giới hạn.
+    /// Mặc định [`WALK_BUDGET`], hoặc theo [`WALK_BUDGET_ENV`].
+    pub fn set_walk_budget(&mut self, budget: Option<Duration>) {
+        self.budget = budget;
+    }
+
+    /// Chạy `run` trong hạn giờ: quá hạn thì câu SQL đang chạy bị ngắt (hoặc `run` tự dừng khi gọi
+    /// `deadline_passed`) và kết quả là lỗi [`too_expensive`].
+    fn timed<T>(&self, run: impl FnOnce(Option<Instant>) -> Result<T>) -> Result<T> {
+        let Some(budget) = self.budget else {
+            return run(None);
+        };
+        let deadline = Instant::now() + budget;
+        self.watch.set(Some(deadline));
+        let _armed = Armed(&self.watch);
+        match run(Some(deadline)) {
+            Err(_) if self.watch.fired.load(Ordering::Relaxed) => Err(too_expensive(budget)),
+            Err(e) if e.kind == "TimeoutError" => Err(too_expensive(budget)),
+            r => r,
+        }
     }
 
     /// Kết nối SQLite của index.
@@ -749,6 +868,7 @@ impl Graph {
         f: &Filter,
         limit: Option<i64>,
     ) -> Result<Vec<Map<String, Value>>> {
+        check_max_len(max_len)?;
         let mut p = vec![
             SqlValue::Text(frm.to_owned()),
             SqlValue::Text(frm.to_owned()),
@@ -800,6 +920,7 @@ impl Graph {
                 "loops cần node xuất phát và max_len",
             ));
         }
+        check_max_len(max_len)?;
         let n = || SqlValue::Text(node.to_owned());
         let mut p = vec![n(), n()];
         let mut sels = Vec::new();
@@ -845,7 +966,7 @@ impl Graph {
                 .collect()
         };
         Ok(self
-            .rows(sql, p)?
+            .timed(|_| self.rows(sql, p))?
             .into_iter()
             .map(|r| Walk {
                 nodes: split(text(&r, 0)),
@@ -859,6 +980,16 @@ impl Graph {
     /// Mọi vòng của cả vault (không là tool; cho câu đáp án): SQL lấy cạnh còn sống, tìm vòng trong code (Tarjan
     /// tách thành phần liên thông mạnh, rồi DFS). Mỗi vòng bắt đầu ở id nhỏ nhất.
     pub fn all_loops(&self, max_len: i64, f: &Filter) -> Result<Vec<Map<String, Value>>> {
+        check_max_len(max_len)?;
+        self.timed(|deadline| self.all_loops_until(max_len, f, deadline))
+    }
+
+    fn all_loops_until(
+        &self,
+        max_len: i64,
+        f: &Filter,
+        deadline: Option<Instant>,
+    ) -> Result<Vec<Map<String, Value>>> {
         let mut adj: IndexMap<String, Vec<Step>> = IndexMap::new();
         for part in self.parts(f, Dir::Out) {
             let mut p = Vec::new();
@@ -889,10 +1020,11 @@ impl Graph {
                 start,
                 cs: comp.get(start.as_str()).copied(),
                 max_len,
+                deadline,
                 out: &mut out,
             };
             let mut nodes = vec![start.clone()];
-            cx.walk(start, &mut nodes, &[], &[], &[]);
+            cx.walk(start, &mut nodes, &[], &[], &[])?;
         }
         Ok(out)
     }
@@ -1161,6 +1293,7 @@ struct Cycles<'a> {
     start: &'a str,
     cs: Option<usize>,
     max_len: i64,
+    deadline: Option<Instant>,
     out: &'a mut Vec<Map<String, Value>>,
 }
 
@@ -1172,9 +1305,12 @@ impl Cycles<'_> {
         rs: &[String],
         ps: &[Option<String>],
         sts: &[String],
-    ) {
+    ) -> Result<()> {
+        if self.deadline.is_some_and(|d| Instant::now() >= d) {
+            return Err(QueryError::new("TimeoutError", "all_loops"));
+        }
         let Some(steps) = self.adj.get(a) else {
-            return;
+            return Ok(());
         };
         for s in steps {
             if self.comp.get(s.to.as_str()).copied() != self.cs {
@@ -1207,10 +1343,11 @@ impl Cycles<'_> {
                 && i64::try_from(rs.len()).unwrap_or(i64::MAX) + 1 < self.max_len
             {
                 nodes.push(s.to.clone());
-                self.walk(&s.to, nodes, &rs2, &ps2, &sts2);
+                self.walk(&s.to, nodes, &rs2, &ps2, &sts2)?;
                 nodes.pop();
             }
         }
+        Ok(())
     }
 }
 

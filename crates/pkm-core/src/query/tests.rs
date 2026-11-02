@@ -352,3 +352,113 @@ fn answer_key() {
     assert_eq!(r.graph, [70, 70]);
     assert_eq!(r.table, [11, 11]);
 }
+
+/// Vault mà mọi cặp yếu tố tăng nhau: số đường đơn tăng theo giai thừa của độ dài.
+fn dense(n: usize) -> TestVault {
+    let names: Vec<String> = (0..n).map(|i| format!("N{i}")).collect();
+    let notes: Vec<(String, String)> = names
+        .iter()
+        .map(|me| {
+            let others: Vec<String> = names
+                .iter()
+                .filter(|o| *o != me)
+                .map(|o| format!("\"[[{o}]]\""))
+                .collect();
+            (
+                format!("Yếu tố/{me}.md"),
+                format!("type: factor\nincreases: [{}]", others.join(", ")),
+            )
+        })
+        .collect();
+    let refs: Vec<(&str, &str)> = notes
+        .iter()
+        .map(|(p, f)| (p.as_str(), f.as_str()))
+        .collect();
+    let v = TestVault::new(&refs);
+    v.build(&["business"]);
+    v
+}
+
+#[test]
+fn max_len_above_cap_is_refused_before_running() {
+    let (_v, g) = api();
+    let f = Filter::default();
+    let too_long = MAX_LEN_CAP + 1;
+    for e in [
+        g.paths(
+            "Yếu tố/Số lead.md",
+            "Yếu tố/Doanh thu.md",
+            too_long,
+            &f,
+            None,
+        )
+        .unwrap_err(),
+        g.loops("Yếu tố/Số lead.md", too_long, &f).unwrap_err(),
+        g.all_loops(too_long, &f).unwrap_err(),
+    ] {
+        assert_eq!(e.kind, "ValueError");
+        assert!(e.message.contains(&MAX_LEN_CAP.to_string()), "{e}");
+    }
+    // Đúng trần thì vẫn chạy.
+    let ok = g.paths(
+        "Yếu tố/Số lead.md",
+        "Yếu tố/Doanh thu.md",
+        MAX_LEN_CAP,
+        &rels(&["increases"]),
+        None,
+    );
+    assert!(!ok.unwrap().is_empty());
+}
+
+#[test]
+fn walks_over_budget_stop_with_clear_error_and_graph_stays_usable() {
+    let v = dense(9);
+    let mut g = Graph::open(&v.db()).expect("mở index");
+    g.set_walk_budget(Some(Duration::ZERO));
+    let f = rels(&["increases"]);
+    for e in [
+        g.paths("Yếu tố/N0.md", "Yếu tố/N1.md", 9, &f, None)
+            .unwrap_err(),
+        g.loops("Yếu tố/N0.md", 9, &f).unwrap_err(),
+        g.all_loops(9, &f).unwrap_err(),
+    ] {
+        assert_eq!(e.kind, "TimeoutError");
+        assert!(e.message.contains("lower max_len"), "{e}");
+    }
+    // Hạn giờ chỉ áp cho lần liệt kê: câu khác chạy bình thường, và bỏ hạn thì liệt kê lại được.
+    assert_eq!(g.neighbors("Yếu tố/N0.md", Dir::Out, &f).unwrap().len(), 8);
+    g.set_walk_budget(None);
+    let p = g
+        .paths("Yếu tố/N0.md", "Yếu tố/N1.md", 2, &f, None)
+        .unwrap();
+    assert_eq!(p.len(), 8);
+}
+
+#[test]
+fn walk_budget_reads_seconds_and_zero_disables() {
+    assert_eq!(budget_from(None), Some(WALK_BUDGET));
+    assert_eq!(budget_from(Some("2.5")), Some(Duration::from_millis(2500)));
+    assert_eq!(budget_from(Some(" 0 ")), None);
+    assert_eq!(budget_from(Some("abc")), Some(WALK_BUDGET));
+    assert_eq!(budget_from(Some("-1")), Some(WALK_BUDGET));
+}
+
+/// Dựng lại toàn bộ index ghi đè bảng ngay trong file DB (không xoá, không đổi tên file), nên một tiến trình khác
+/// đang mở DB để đọc vẫn đọc tiếp được và thấy dữ liệu mới.
+#[test]
+fn full_rebuild_keeps_db_file_for_open_readers() {
+    let v = TestVault::new(&clean_notes());
+    v.build(&["business"]);
+    let g = Graph::open(&v.db()).expect("mở index");
+    assert!(!g.has_node("Yếu tố/Mới.md").unwrap());
+    #[cfg(unix)]
+    let ino = std::os::unix::fs::MetadataExt::ino(&std::fs::metadata(v.db()).unwrap());
+    crate::index::testutil::write(v.path(), "Yếu tố/Mới.md", "---\ntype: factor\n---\n");
+    v.build_with(&["business"], crate::index::Options::default(), true);
+    #[cfg(unix)]
+    assert_eq!(
+        ino,
+        std::os::unix::fs::MetadataExt::ino(&std::fs::metadata(v.db()).unwrap())
+    );
+    assert!(g.has_node("Yếu tố/Mới.md").unwrap());
+}
