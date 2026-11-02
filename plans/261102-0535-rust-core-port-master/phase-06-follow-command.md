@@ -1,6 +1,6 @@
 ---
 title: "Phase 6: Lệnh follow"
-status: completed
+status: done
 priority: P2
 effort: "0,25 ngày"
 prd: "R05 (follow)"
