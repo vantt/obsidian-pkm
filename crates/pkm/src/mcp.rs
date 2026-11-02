@@ -27,6 +27,7 @@ use std::time::{Duration, Instant};
 use clap::Parser;
 use pkm_core::adapter::{self, Adapter};
 use pkm_core::index::{self, Build, EdgeKeys, Options};
+use pkm_core::ohs::{Ohs, OhsConfig, OhsPackage};
 use serde_json::{Map, Value, json};
 
 use tool_layer::{ToolContext, ToolLayer, ToolSession};
@@ -78,10 +79,15 @@ pub struct McpArgs {
     /// Ngày "hôm nay" cho instructions (mặc định ngày máy).
     #[arg(long)]
     pub today: Option<String>,
-    /// Gói OHS, để `related` tự tìm khi không có hits.
+    /// Thư mục gói OHS (có `node/` và `app/dist/`) cho `related` chỉ có `query`; mặc định biến PKM_OHS_DIR, rồi
+    /// thư mục gói mà `pkm mcp install` cài.
+    #[arg(long)]
+    pub ohs: Option<PathBuf>,
+    /// Cờ cũ của bản Python (đường dẫn `cli.js` của OHS): nhận để tương thích. Trỏ vào một gói OHS (thư mục gói, hoặc
+    /// `<gói>/app/dist/src/cli.js`) thì dùng gói đó khi không có --ohs; không thì bỏ qua.
     #[arg(long, env = "KG_OHS_CLI")]
     pub ohs_cli: Option<String>,
-    /// Lệnh node cho OHS.
+    /// Cờ cũ của bản Python (lệnh node cho OHS): nhận để tương thích, bỏ qua (gói OHS có Node đi kèm).
     #[arg(long, env = "KG_OHS_NODE")]
     pub ohs_node: Option<String>,
     /// Tên vault trong Obsidian cho link obsidian://open (mặc định tên thư mục vault; "" để tắt).
@@ -97,8 +103,12 @@ pub struct McpArgs {
 /// Chạy `pkm VAULT mcp ...` (`argv` không gồm tên chương trình).
 pub fn main(argv: Vec<OsString>) -> ExitCode {
     let a = McpArgs::parse_from(std::iter::once(OsString::from("pkm")).chain(argv));
-    let server = Server::start(a, tool_layer::installed());
-    match server.serve(io::stdin().lock(), io::stdout().lock()) {
+    let ohs = launch_ohs(&a.vault, a.ohs.as_deref(), a.ohs_cli.as_deref());
+    let server = Server::start_with(a, tool_layer::installed(), ohs);
+    let served = server.serve(io::stdin().lock(), io::stdout().lock());
+    // Hết stdin (hoặc lỗi ghi): tắt OHS trước khi thoát, không để lại tiến trình `node`.
+    server.shutdown();
+    match served {
         Ok(()) => ExitCode::SUCCESS,
         // Client đóng ống đọc trước: thoát lặng, không phải lỗi của server.
         Err(e) if e.kind() == io::ErrorKind::BrokenPipe => ExitCode::SUCCESS,
@@ -107,6 +117,46 @@ pub fn main(argv: Vec<OsString>) -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+/// Biến môi trường mà `pkm mcp install --no-ohs` ghi vào mục `kg`: `1` là không chạy OHS.
+pub const NO_OHS_ENV: &str = "PKM_NO_OHS";
+
+/// Khởi động OHS ở nền (không chặn) cho `related` chỉ có `query`: gói theo `--ohs`, rồi gói mà cờ cũ `--ohs-cli` trỏ
+/// tới (nếu là gói OHS), rồi `PKM_OHS_DIR`, rồi thư mục mặc định ([`OhsPackage::locate`]). `PKM_NO_OHS=1`: không chạy
+/// (`None`; `related` chỉ có `query` trả `ohs_not_ready`). Không thấy gói thì OHS ở trạng thái `broken` kèm cách cài.
+pub fn launch_ohs(vault: &Path, flag: Option<&Path>, legacy_cli: Option<&str>) -> Option<Arc<Ohs>> {
+    if std::env::var_os(NO_OHS_ENV).is_some_and(|v| v == "1") {
+        return None;
+    }
+    let legacy = match (flag, legacy_cli) {
+        (None, Some(cli)) => {
+            let pkg = legacy_package(Path::new(cli));
+            if pkg.is_none() {
+                eprintln!(
+                    "[kg-mcp] bỏ qua --ohs-cli {cli}: không phải gói OHS (dùng --ohs <thư mục gói>)"
+                );
+            }
+            pkg
+        }
+        _ => None,
+    };
+    Some(Arc::new(Ohs::launch(
+        flag.or(legacy.as_deref()),
+        OhsConfig::new(abspath(vault)),
+    )))
+}
+
+/// Thư mục gói OHS mà giá trị cũ của `--ohs-cli` trỏ tới: chính thư mục gói, hoặc `<gói>/app/dist/src/cli.js`.
+fn legacy_package(cli: &Path) -> Option<PathBuf> {
+    let root = if cli.is_dir() {
+        cli.to_path_buf()
+    } else if cli.ends_with(Path::new("app").join("dist").join("src").join("cli.js")) {
+        cli.ancestors().nth(4)?.to_path_buf()
+    } else {
+        return None;
+    };
+    OhsPackage::from_dir(&root).ok().map(|_| root)
 }
 
 /// Phiên bản giao thức trả lời: đúng bản client xin nếu nằm trong [`PROTOCOLS`], không thì bản mới nhất.
@@ -172,9 +222,10 @@ pub fn compact(v: Value) -> Value {
 }
 
 /// Kết quả là lỗi khi là object có `error` và nhiều nhất hai khoá (lỗi kèm `did_you_mean`, `detail`).
+/// `ohs_not_ready` (D7, không có trong Python) cũng là lỗi dù có năm khoá (`state`, `progress`, `eta_s`, `action`).
 fn is_error(v: &Value) -> bool {
     v.as_object()
-        .is_some_and(|o| o.contains_key("error") && o.len() <= 2)
+        .is_some_and(|o| o.contains_key("error") && (o.len() <= 2 || o["error"] == "ohs_not_ready"))
 }
 
 /// `round(x, 1)` cho số mili giây của log.
@@ -214,6 +265,8 @@ struct Shared {
     ready: Mutex<bool>,
     ready_cv: Condvar,
     adapter: Mutex<AdapterSlot>,
+    /// OHS của server (một tiến trình cho cả phiên), gắn vào phiên tool; [`Server::shutdown`] lấy ra để tắt.
+    ohs: Mutex<Option<Arc<Ohs>>>,
 }
 
 /// Một MCP server đang chạy. Lần dựng đầu chạy ở luồng nền từ [`Server::start`].
@@ -227,7 +280,17 @@ fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 
 impl Server {
     /// Khởi động: tính đường dẫn và cách đọc, rồi dựng index ở nền. `layer`: tầng tool ([`tool_layer::installed`]).
+    #[cfg(test)]
     pub fn start(a: McpArgs, layer: Option<Arc<dyn ToolLayer>>) -> Self {
+        Self::start_with(a, layer, None)
+    }
+
+    /// [`Server::start`] với OHS đã khởi động ([`launch_ohs`]) cho `related` chỉ có `query`.
+    pub fn start_with(
+        a: McpArgs,
+        layer: Option<Arc<dyn ToolLayer>>,
+        ohs: Option<Arc<Ohs>>,
+    ) -> Self {
         let vault = abspath(&a.vault);
         let db =
             a.db.clone()
@@ -258,11 +321,27 @@ impl Server {
             ready: Mutex::new(false),
             ready_cv: Condvar::new(),
             adapter: Mutex::new(AdapterSlot::default()),
+            ohs: Mutex::new(ohs),
         });
         // Lời gọi tool đến sớm chờ cờ `ready` của lần dựng này (`wait_ready`).
         let first = Arc::clone(&s);
         thread::spawn(move || first.first_build());
         Server { s }
+    }
+
+    /// Tắt khi hết phiên: bỏ phiên tool (chờ lần dựng đang chạy xong), rồi tắt OHS (đóng stdin của OHS, chờ có giới
+    /// hạn rồi kill). Gọi sau [`Server::serve`].
+    pub fn shutdown(&self) {
+        // Lấy OHS ra trước: phiên mở sau lúc này không gắn OHS nữa.
+        let ohs = lock(&self.s.ohs).take();
+        lock(&self.s.state).tools = None;
+        if let Some(ohs) = ohs {
+            match Arc::try_unwrap(ohs) {
+                Ok(ohs) => ohs.shutdown(),
+                // Còn chỗ khác giữ (không xảy ra sau khi đã bỏ phiên): OHS tắt khi chỗ đó bỏ.
+                Err(_) => self.s.log("OHS còn được giữ, tắt khi bỏ"),
+            }
+        }
     }
 
     /// Đọc bản tin tới hết stdin, trả lời từng dòng.
@@ -422,8 +501,7 @@ impl Shared {
             vault: self.vault.clone(),
             vault_name: self.vault_name.clone(),
             limit: None,
-            ohs_cli: self.a.ohs_cli.clone(),
-            ohs_node: self.a.ohs_node.clone(),
+            ohs: lock(&self.ohs).clone(),
         }
     }
 

@@ -31,6 +31,8 @@ fn stdio_session_handshakes_and_exits_on_eof() {
     write_vault(&vault);
     let db = tmp.path().join("idx").join("graph.db");
     let mut child = Command::new(env!("CARGO_BIN_EXE_pkm"))
+        // Không chạy gói OHS thật của máy chạy test.
+        .env("PKM_NO_OHS", "1")
         .arg(&vault)
         .arg("mcp")
         .arg("--db")

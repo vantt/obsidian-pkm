@@ -39,7 +39,7 @@ const VERSION: &str = concat!(
 
 const USAGE: &str = "Cách gọi:
   pkm VAULT build [--packs business] [--full] [--json]   dựng hoặc cập nhật tăng dần (mặc định VAULT/.kg/graph.db)
-  pkm VAULT stats | validate | find | note | neighbors | reach | paths | loops | provenance | select | valid ...
+  pkm VAULT stats | validate | find | note | neighbors | reach | paths | loops | provenance | select | valid | related ...
   pkm VAULT mcp [--packs business] [--db PATH] ...       MCP server stdio (pkm VAULT mcp --help)
   pkm mcp install VAULT [--dry-run] | --check | --remove  cài MCP `kg` cho Claude Desktop (pkm mcp install --help)
   pkm doctor [--json] [--deep]                            chẩn đoán (chỉ đọc) cấu hình, index, gói OHS
@@ -71,13 +71,15 @@ không --json.
   pkm VAULT provenance CLAIM
   pkm VAULT select status=proposed proposed_by=llm
   pkm VAULT valid decision --as-of 2026-10-15
+  pkm VAULT related \"câu hỏi\" [--k 15] [--types person,project] [--ohs THƯ_MỤC_GÓI]   hạt giống từ OHS
+  pkm VAULT related --hit \"Claim/X.md\" --hit \"Người/An.md\" ...                     hạt giống cho sẵn, không cần OHS
   pkm VAULT mcp [--packs business] [--db PATH] ...  MCP server stdio (pkm VAULT mcp --help)
 Tuỳ chọn chung: --db PATH, --refresh (build tăng dần trước khi hỏi), --limit N (độ dài trước khi rút gọn), --adapter,
 --system (tính cả note hệ thống adapter ẩn). Gói, adapter và cách đọc (--no-aliases, --edge-keys, --body-edges) nhớ
 trong index sau lần build đầu.
 Đầu ra nêu tên note thật của vault: chỉ in ra terminal, không dán vào repo nếu là vault thật.";
 
-const OPS: [&str; 12] = [
+const OPS: [&str; 13] = [
     "build",
     "stats",
     "validate",
@@ -90,7 +92,12 @@ const OPS: [&str; 12] = [
     "provenance",
     "select",
     "valid",
+    "related",
 ];
+
+/// `related` chỉ có câu hỏi trên CLI: chờ OHS sẵn sàng tối đa chừng này giây (mặc định), như hạn 60 giây của lần gọi
+/// OHS một lần trong bản Python.
+const OHS_WAIT_SECS: u64 = 60;
 
 /// Cờ của `pkm VAULT <lệnh>`, như `argparse` của `cli.py` (cờ viết tắt được, như `argparse`).
 #[derive(Parser, Debug)]
@@ -146,6 +153,21 @@ struct VaultArgs {
     max_depth: Option<i64>,
     #[arg(long, allow_negative_numbers = true)]
     max_len: Option<i64>,
+    /// `related`: một hit cho sẵn (đường dẫn note), lặp lại được; có hit thì không cần OHS.
+    #[arg(long = "hit")]
+    hits: Vec<String>,
+    /// `related`: số note chỉ graph tìm thấy (mặc định 15).
+    #[arg(long, allow_negative_numbers = true)]
+    k: Option<i64>,
+    /// `related`: chỉ trả note thuộc các type này, cách nhau bằng dấu phẩy.
+    #[arg(long)]
+    types: Option<String>,
+    /// `related`: thư mục gói OHS (mặc định biến PKM_OHS_DIR, rồi gói mà `pkm mcp install` cài).
+    #[arg(long)]
+    ohs: Option<PathBuf>,
+    /// `related`: chờ OHS sẵn sàng tối đa chừng này giây.
+    #[arg(long, default_value_t = OHS_WAIT_SECS)]
+    ohs_wait: u64,
 }
 
 #[derive(Parser)]
@@ -479,6 +501,17 @@ fn tool_kwargs(a: &VaultArgs) -> Result<(&'static str, Map<String, Value>), Fail
             }
             ("select", json_map(json!({"where": wh, "system": a.system})))
         }
+        "related" => {
+            let query = a.args.join(" ");
+            let mut m = json_map(json!({
+                "hits": if a.hits.is_empty() { Value::Null } else { json!(a.hits) },
+                "query": if query.is_empty() { Value::Null } else { json!(query) },
+                "k": a.k,
+                "types": split(a.types.as_deref()),
+            }));
+            m.extend(filters());
+            ("related", m)
+        }
         "valid" => (
             "valid",
             json_map(json!({"type": positional(a, 0)?, "as_of": a.as_of, "system": a.system})),
@@ -503,17 +536,35 @@ fn tool_command(a: &VaultArgs, db: &Path) -> Result<(), Failure> {
             format!("pkm: lệnh `{}` cần tầng tool, bản pkm này chưa có", a.cmd),
         ));
     };
+    // `related` chỉ có câu hỏi: chạy OHS cho lần gọi này, chờ có hạn; chưa sẵn sàng thì tool trả `ohs_not_ready`.
+    let ohs = (method == "related" && kwargs["hits"].is_null() && !kwargs["query"].is_null())
+        .then(|| mcp::launch_ohs(&a.vault, a.ohs.as_deref(), None))
+        .flatten();
+    if let Some(o) = &ohs {
+        o.wait_ready(std::time::Duration::from_secs(a.ohs_wait));
+    }
     let ctx = tool_layer::ToolContext {
         db: db.to_path_buf(),
         vault: mcp::abspath(&a.vault),
         vault_name: None,
         limit: Some(a.limit.filter(|n| *n != 0).unwrap_or(20)),
-        ohs_cli: None,
-        ohs_node: None,
+        ohs,
     };
-    let mut session = layer.open(&ctx).map_err(Failure::Message)?;
-    let result = session.query(method, kwargs).map_err(Failure::Message)?;
-    print_json(&result)
+    let result = {
+        let mut session = layer.open(&ctx).map_err(Failure::Message)?;
+        session.query(method, kwargs).map_err(Failure::Message)?
+    };
+    // Tắt OHS (nếu có) trước khi in: phiên đã bỏ, đây là chỗ giữ cuối.
+    drop(ctx);
+    print_json(&result)?;
+    // `related` báo lỗi (gồm `ohs_not_ready`): JSON ra stdout cho agent đọc, thoát 1 như lỗi của `cli.py`.
+    match result.get("error") {
+        Some(e) if method == "related" => Err(Failure::Exit(
+            1,
+            format!("related: {}", mcp::py_str(Some(e))),
+        )),
+        _ => Ok(()),
+    }
 }
 
 #[cfg(test)]
