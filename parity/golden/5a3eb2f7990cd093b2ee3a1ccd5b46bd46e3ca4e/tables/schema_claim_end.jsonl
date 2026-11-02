@@ -1,0 +1,7 @@
+{"relation": "conditions", "from_field": "cause", "to_field": "effect"}
+{"relation": "contact_for", "from_field": "subject", "to_field": "object"}
+{"relation": "correlates_with", "from_field": "cause", "to_field": "effect"}
+{"relation": "decreases", "from_field": "cause", "to_field": "effect"}
+{"relation": "increases", "from_field": "cause", "to_field": "effect"}
+{"relation": "prevents", "from_field": "cause", "to_field": "effect"}
+{"relation": "works_at", "from_field": "subject", "to_field": "object"}

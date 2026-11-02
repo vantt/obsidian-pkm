@@ -1,0 +1,38 @@
+{
+ "claim": "Claim/Bài đăng LinkedIn đi cùng lead.md",
+ "sources": [
+  {
+   "note": "Họp/Họp nội bộ 2026-01-05.md",
+   "target": "Họp nội bộ 2026-01-05",
+   "block": null
+  }
+ ],
+ "evidence": [],
+ "record": {
+  "status": "accepted",
+  "proposed_by": null,
+  "extracted_by": null,
+  "asserted_at": null,
+  "valid_from": null,
+  "valid_to": null
+ },
+ "edge": {
+  "id": 594,
+  "src": "Yếu tố/Số bài đăng LinkedIn.md",
+  "rel": "correlates_with",
+  "dst": "Yếu tố/Số lead mới.md",
+  "claim": "Claim/Bài đăng LinkedIn đi cùng lead.md",
+  "status": "accepted",
+  "valid_from": null,
+  "valid_to": null,
+  "asserted_at": null,
+  "source": "Họp/Họp nội bộ 2026-01-05.md",
+  "origin": "claim",
+  "proposed_by": "human",
+  "extracted_by": null,
+  "confidence": "plausible",
+  "score": null,
+  "layer": "accepted"
+ },
+ "superseded_by": []
+}

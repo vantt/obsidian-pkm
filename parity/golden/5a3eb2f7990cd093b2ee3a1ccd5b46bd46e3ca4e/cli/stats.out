@@ -1,0 +1,294 @@
+{
+ "meta": {
+  "vault": "<VAULT>",
+  "packs": "business",
+  "options": "aliases=1,edge_keys=schema,body_edges=0",
+  "schema_version": "3",
+  "schema_digest": "bbaa9f0197ef",
+  "built_at": "<volatile>",
+  "mode": "incremental",
+  "notes": "746",
+  "notes_read": "0",
+  "notes_removed": "0",
+  "adapter": "",
+  "adapter_spec": "",
+  "hidden": "[]",
+  "ms": "<volatile>",
+  "edges": "{\"accepted\": 708, \"proposed\": 8, \"superseded\": 10}",
+  "schema_problems": ""
+ },
+ "nodes": 746,
+ "nodes_by_type": {
+  "note": 221,
+  "claim": 133,
+  "factor": 81,
+  "project": 66,
+  "meeting": 64,
+  "person": 61,
+  "contract": 40,
+  "organization": 34,
+  "tool": 15,
+  "decision": 15,
+  "concept": 7,
+  "moc": 4,
+  "source": 3,
+  "document": 2
+ },
+ "edges_by_status": {
+  "accepted": 708,
+  "proposed": 8,
+  "superseded": 10
+ },
+ "edges_by_origin": [
+  [
+   "accepted",
+   "frontmatter",
+   "human",
+   588
+  ],
+  [
+   "accepted",
+   "claim",
+   "human",
+   118
+  ],
+  [
+   "accepted",
+   "claim",
+   "llm",
+   1
+  ],
+  [
+   "accepted",
+   "frontmatter",
+   "llm",
+   1
+  ],
+  [
+   "proposed",
+   "claim",
+   "human",
+   2
+  ],
+  [
+   "proposed",
+   "claim",
+   "llm",
+   2
+  ],
+  [
+   "proposed",
+   "frontmatter",
+   "human",
+   2
+  ],
+  [
+   "proposed",
+   "frontmatter",
+   "llm",
+   2
+  ],
+  [
+   "superseded",
+   "claim",
+   "human",
+   10
+  ]
+ ],
+ "edges_by_rel": [
+  [
+   "accepted",
+   "source",
+   129,
+   0
+  ],
+  [
+   "accepted",
+   "uses",
+   127,
+   1
+  ],
+  [
+   "accepted",
+   "increases",
+   101,
+   0
+  ],
+  [
+   "accepted",
+   "client",
+   66,
+   0
+  ],
+  [
+   "accepted",
+   "works_at",
+   60,
+   0
+  ],
+  [
+   "accepted",
+   "covers",
+   41,
+   0
+  ],
+  [
+   "accepted",
+   "party",
+   40,
+   0
+  ],
+  [
+   "accepted",
+   "decreases",
+   35,
+   0
+  ],
+  [
+   "accepted",
+   "contact_for",
+   33,
+   0
+  ],
+  [
+   "accepted",
+   "superseded_by",
+   26,
+   0
+  ],
+  [
+   "accepted",
+   "decided_in",
+   15,
+   0
+  ],
+  [
+   "accepted",
+   "affects",
+   15,
+   0
+  ],
+  [
+   "accepted",
+   "conditions",
+   5,
+   0
+  ],
+  [
+   "accepted",
+   "related",
+   4,
+   0
+  ],
+  [
+   "accepted",
+   "up",
+   3,
+   0
+  ],
+  [
+   "accepted",
+   "parent_moc",
+   3,
+   0
+  ],
+  [
+   "accepted",
+   "supports",
+   1,
+   0
+  ],
+  [
+   "accepted",
+   "prevents",
+   1,
+   0
+  ],
+  [
+   "accepted",
+   "part_of",
+   1,
+   0
+  ],
+  [
+   "accepted",
+   "disputes",
+   1,
+   0
+  ],
+  [
+   "accepted",
+   "correlates_with",
+   1,
+   0
+  ],
+  [
+   "proposed",
+   "source",
+   4,
+   0
+  ],
+  [
+   "proposed",
+   "increases",
+   2,
+   0
+  ],
+  [
+   "proposed",
+   "conditions",
+   2,
+   0
+  ],
+  [
+   "superseded",
+   "contact_for",
+   9,
+   0
+  ],
+  [
+   "superseded",
+   "works_at",
+   1,
+   0
+  ]
+ ],
+ "validator": {
+  "R2": {
+   "deviations": 1,
+   "notes": 1
+  },
+  "R3": {
+   "deviations": 1,
+   "notes": 1
+  },
+  "R4": {
+   "deviations": 2,
+   "notes": 2
+  },
+  "R5": {
+   "deviations": 1,
+   "notes": 1
+  },
+  "R6": {
+   "deviations": 1,
+   "notes": 1
+  },
+  "R7": {
+   "deviations": 1,
+   "notes": 1
+  },
+  "R8": {
+   "deviations": 4,
+   "notes": 4
+  },
+  "R9": {
+   "deviations": 2,
+   "notes": 2
+  },
+  "R10": {
+   "deviations": 1,
+   "notes": 1
+  }
+ }
+}

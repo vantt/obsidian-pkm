@@ -1,0 +1,48 @@
+{
+ "id": "Claim/Chất lượng bàn giao tăng hài lòng của Đông Á.md",
+ "title": "Chất lượng bàn giao tăng hài lòng của Đông Á",
+ "type": "claim",
+ "folder": "Claim",
+ "status": "accepted",
+ "valid_from": null,
+ "valid_to": null,
+ "proposed_by": null,
+ "extracted_by": null,
+ "asserted_at": null,
+ "yaml_error": null,
+ "props": {
+  "cause": "[[Chất lượng bàn giao]]",
+  "confidence": "plausible",
+  "effect": "[[Mức hài lòng của Đông Á]]",
+  "relation": "increases",
+  "source": "[[Họp Đông Á 2025-03-18#^b1]]",
+  "status": "accepted",
+  "type": "claim"
+ },
+ "blocks": [],
+ "edges": {
+  "out": {
+   "source": {
+    "accepted": 1
+   }
+  }
+ },
+ "claim_edge": {
+  "id": 611,
+  "src": "Yếu tố/Chất lượng bàn giao.md",
+  "rel": "increases",
+  "dst": "Yếu tố/Mức hài lòng của Đông Á.md",
+  "claim": "Claim/Chất lượng bàn giao tăng hài lòng của Đông Á.md",
+  "status": "accepted",
+  "valid_from": null,
+  "valid_to": null,
+  "asserted_at": null,
+  "source": "Họp/Họp Đông Á 2025-03-18.md#^b1",
+  "origin": "claim",
+  "proposed_by": "human",
+  "extracted_by": null,
+  "confidence": "plausible",
+  "score": null,
+  "layer": "accepted"
+ }
+}

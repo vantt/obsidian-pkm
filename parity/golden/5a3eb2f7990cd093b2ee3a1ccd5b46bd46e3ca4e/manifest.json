@@ -1,0 +1,301 @@
+{
+  "answers": {
+    "fixture_check": {
+      "fails": 0,
+      "graph": [
+        70,
+        70
+      ],
+      "table": [
+        11,
+        11
+      ]
+    },
+    "queries": 81
+  },
+  "calls": 727,
+  "cli": 21,
+  "format": 1,
+  "implementation": "python",
+  "not_available": [],
+  "run": {
+    "about": null,
+    "adapter": null,
+    "body_edges": false,
+    "edge_keys": "schema",
+    "listing": "sorted",
+    "no_aliases": false,
+    "packs": "business",
+    "today": "2026-10-15"
+  },
+  "spec_sha": "5a3eb2f7990cd093b2ee3a1ccd5b46bd46e3ca4e",
+  "tables": {
+    "blocks": {
+      "columns": [
+        "node",
+        "block"
+      ],
+      "key": [
+        "node",
+        "block"
+      ],
+      "kind": "table",
+      "rows": 128
+    },
+    "edges": {
+      "columns": [
+        "id",
+        "src",
+        "rel",
+        "dst",
+        "dst_text",
+        "claim",
+        "status",
+        "valid_from",
+        "valid_to",
+        "asserted_at",
+        "source",
+        "origin",
+        "proposed_by",
+        "extracted_by",
+        "confidence",
+        "score"
+      ],
+      "key": [
+        "id"
+      ],
+      "kind": "table",
+      "rows": 726
+    },
+    "links": {
+      "columns": [
+        "src",
+        "key",
+        "target",
+        "frag",
+        "origin",
+        "embed",
+        "dst",
+        "via"
+      ],
+      "key": [],
+      "kind": "table",
+      "rows": 1354
+    },
+    "meta": {
+      "columns": [
+        "key",
+        "value"
+      ],
+      "key": [
+        "key"
+      ],
+      "kind": "table",
+      "rows": 16
+    },
+    "names": {
+      "columns": [
+        "node",
+        "name",
+        "kind",
+        "norm"
+      ],
+      "key": [],
+      "kind": "table",
+      "rows": 780
+    },
+    "nodes": {
+      "columns": [
+        "id",
+        "title",
+        "type",
+        "ntypes",
+        "folder",
+        "status",
+        "valid_from",
+        "valid_to",
+        "proposed_by",
+        "extracted_by",
+        "asserted_at",
+        "mtime",
+        "size",
+        "yaml_error"
+      ],
+      "key": [
+        "id"
+      ],
+      "kind": "table",
+      "rows": 746
+    },
+    "props": {
+      "columns": [
+        "node",
+        "key",
+        "value"
+      ],
+      "key": [],
+      "kind": "table",
+      "rows": 2566
+    },
+    "raw_links": {
+      "columns": [
+        "src",
+        "key",
+        "target",
+        "frag",
+        "origin",
+        "embed"
+      ],
+      "key": [],
+      "kind": "table",
+      "rows": 1354
+    },
+    "schema_claim_end": {
+      "columns": [
+        "relation",
+        "from_field",
+        "to_field"
+      ],
+      "key": [
+        "relation"
+      ],
+      "kind": "table",
+      "rows": 7
+    },
+    "schema_claim_rel": {
+      "columns": [
+        "rel",
+        "src",
+        "dst"
+      ],
+      "key": [],
+      "kind": "table",
+      "rows": 39
+    },
+    "schema_edge": {
+      "columns": [
+        "key",
+        "pack",
+        "kind",
+        "grp",
+        "inverse",
+        "cardinality",
+        "symmetric",
+        "polarity",
+        "human_only",
+        "block_ref"
+      ],
+      "key": [
+        "key"
+      ],
+      "kind": "table",
+      "rows": 22
+    },
+    "schema_enum": {
+      "columns": [
+        "name",
+        "value"
+      ],
+      "key": [],
+      "kind": "table",
+      "rows": 42
+    },
+    "schema_excludes": {
+      "columns": [
+        "rel",
+        "other"
+      ],
+      "key": [],
+      "kind": "table",
+      "rows": 1
+    },
+    "schema_field": {
+      "columns": [
+        "owner",
+        "field",
+        "enum_name",
+        "value_type",
+        "pattern",
+        "required",
+        "cardinality"
+      ],
+      "key": [],
+      "kind": "table",
+      "rows": 42
+    },
+    "schema_link": {
+      "columns": [
+        "key",
+        "owner",
+        "src",
+        "dst"
+      ],
+      "key": [],
+      "kind": "table",
+      "rows": 50
+    },
+    "schema_node_type": {
+      "columns": [
+        "name",
+        "pack",
+        "extends"
+      ],
+      "key": [
+        "name"
+      ],
+      "kind": "table",
+      "rows": 14
+    },
+    "schema_problems": {
+      "columns": [
+        "detail"
+      ],
+      "key": [],
+      "kind": "table",
+      "rows": 0
+    },
+    "schema_required_if": {
+      "columns": [
+        "owner",
+        "cond_key",
+        "cond_value",
+        "field"
+      ],
+      "key": [],
+      "kind": "table",
+      "rows": 17
+    },
+    "schema_type_ancestor": {
+      "columns": [
+        "type",
+        "ancestor"
+      ],
+      "key": [
+        "type",
+        "ancestor"
+      ],
+      "kind": "table",
+      "rows": 15
+    },
+    "v3_deviations": {
+      "columns": [
+        "rule",
+        "node",
+        "detail"
+      ],
+      "key": [],
+      "kind": "view",
+      "rows": 14
+    }
+  },
+  "vault": {
+    "fixture": {
+      "files": 747,
+      "preset": "kg-solo",
+      "seed": 11,
+      "tree_hash": "df4656920cc0c991b90cb8f3e8ad6a6b68a8c20d44af4867bd90524c004f3f6e",
+      "version": "0.7.0"
+    },
+    "name": "kg-solo"
+  }
+}
