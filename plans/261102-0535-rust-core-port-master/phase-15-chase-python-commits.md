@@ -1,6 +1,6 @@
 ---
 title: "Phase 15: Đuổi theo commit Python"
-status: todo
+status: in-progress
 priority: P1
 effort: "10–20% tổng công, chia theo các điểm C0–C3"
 prd: R12
@@ -37,6 +37,10 @@ Một agent con cho mỗi lượt (không chia commit cho nhiều agent song son
 - [ ] Commit chỉ đổi `kg_adapter.py` chuyển riêng, chỉ đụng `adapter::e11`.
 - [ ] Khi mọi commit tới sha X đã xử lý và so khớp ở X sạch: dựng golden ở X vào `parity/golden/<X>/`, đặt `spec.lock` = X, cùng một PR.
 - [ ] Cập nhật số đo khoảng cách vào báo cáo.
+
+## Các lượt đã chạy
+- [x] Lượt C (2026-11-02, user bảo chạy): chuyển `223c9c3` (OHS chạy từ gói dựng sẵn của fork với gói tiếng Việt) sang `pkm_core::ohs` (commit Rust `ae2ffa1`); nâng `spec.lock` từ `5a3eb2f` lên `223c9c3`, golden dựng lại ở `parity/golden/223c9c3…/` (chỉ đổi `spec_sha`). Python với chính nó và Rust với golden mới (chạy như CI): 64 mục, 0 lệch chưa có tên, 0 mục chưa có. `follow`: 0 commit chưa chuyển. Khoảng cách trước lượt: 1 commit, dưới 1 ngày. Báo cáo: `plans/reports/fullstack-developer-261102-1615-chase-223c9c3.md`.
+- [ ] Lượt C2/C3: khi `follow` lại báo commit mới chạm đường dẫn theo dõi.
 
 ## Nghiệm thu (mỗi lượt)
 - `follow` báo 0 commit chưa xử lý tới sha X.

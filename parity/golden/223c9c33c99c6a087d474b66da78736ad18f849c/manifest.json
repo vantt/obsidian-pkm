@@ -28,7 +28,7 @@
     "packs": "business",
     "today": "2026-10-15"
   },
-  "spec_sha": "5a3eb2f7990cd093b2ee3a1ccd5b46bd46e3ca4e",
+  "spec_sha": "223c9c33c99c6a087d474b66da78736ad18f849c",
   "tables": {
     "blocks": {
       "columns": [

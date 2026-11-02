@@ -11,6 +11,7 @@ Trạng thái là một trong:
 
 | Sha Python | Ngày | Tiêu đề | Commit Rust | Trạng thái | Ghi chú |
 |---|---|---|---|---|---|
+| `223c9c3` | 2026-11-02 | feat(e12): run OHS from the fork's prebuilt bundle with the Vietnamese pack | `ae2ffa1` | đã chuyển | `platform_paths.ohs_env` và gói ngôn ngữ của `ohs_install`: `OhsPackage::pack` cùng biến `OHS_LANGUAGE_PACK` cho mọi tiến trình OHS mà `pkm` chạy (mục `ohs`). Không áp dụng: nhánh bản cài npm của `ohs_install` và `WSLENV` (Rust chỉ chạy gói của fork có Node đi kèm, PRD mục 9, không qua WSL); node của gói cho `related.ohs_seeds` và `desktop_config` (Rust đã chạy node của gói, mục `kg` không mang `--ohs-node`); hằng `OHS_CLI` mới của `graph_index.py` và `desktop_config.py` (Rust tìm gói qua `--ohs`, `PKM_OHS_DIR`, thư mục cài; `--ohs-cli` trỏ vào `app/dist/src/cli.js` vẫn nhận). Golden dựng lại ở sha này không đổi gì ngoài `spec_sha` |
 
 ## Lệch có chủ ý
 
@@ -113,7 +114,7 @@ Chỗ bản Python sai rõ ràng và Rust không làm theo (PRD mục 4). Mỗi 
 
 ## Test `platform` chuyển từ Python
 
-Nguồn: `scripts/tests/test_platform_paths.py` ở sha ghim, 19 test. Test Rust nằm trong `crates/pkm-core/src/platform.rs` (`platform::tests::…`), chạy bằng `cargo test -p pkm-core platform` trên cả ba nền. Test có `#[cfg(...)]` chỉ chạy trên nền tương ứng (Python giả nền bằng mock; Rust kiểm nền thật trong CI).
+Nguồn: `scripts/tests/test_platform_paths.py` ở sha ghim, 23 test (19 ở `5a3eb2f`, 4 test `OhsInstall` thêm ở `223c9c3`). Test Rust nằm trong `crates/pkm-core/src/platform.rs` (`platform::tests::…`), chạy bằng `cargo test -p pkm-core platform` trên cả ba nền. Test có `#[cfg(...)]` chỉ chạy trên nền tương ứng (Python giả nền bằng mock; Rust kiểm nền thật trong CI).
 
 | # | Test Python | Test Rust | Trạng thái | Ghi chú |
 |---|---|---|---|---|
@@ -136,6 +137,10 @@ Nguồn: `scripts/tests/test_platform_paths.py` ở sha ghim, 19 test. Test Rust
 | 17 | `ListNotes.test_same_set_as_walk` | `vault::tests::list_notes_same_set_as_walk` | đã chuyển | Test của `kg.vault.list_notes`, chuyển cùng module `vault` |
 | 18 | `WindowsText.test_block_id_in_crlf_note` | `vault::tests::block_id_in_crlf_note` | đã chuyển | Test regex `BLOCK` của `kg.vault` trên note CRLF, chuyển cùng module `vault` |
 | 19 | `WindowsText.test_utf8_stdio_on_an_ansi_pipe` | — | không áp dụng | `utf8_stdio` là phần Python thuần (PRD mục 5.4): Rust luôn ghi UTF-8, không phụ thuộc code page |
+| 20 | `OhsInstall.test_fork_bundle_brings_node_and_pack` | `ohs::package::tests::{package_requires_node_and_cli, vietnamese_pack_is_found_only_as_a_folder}` | đã chuyển | `ohs_install` thay bằng `OhsPackage::from_dir` (thư mục gói); nhận `cli.js` của gói qua `--ohs-cli` cũ (`mcp::legacy_package`). Node là `node/bin/node` hoặc `node/node` (Python: `node/node`) |
+| 21 | `OhsInstall.test_npm_install_uses_node_on_path` | — | không áp dụng | Rust chỉ chạy gói dựng sẵn của fork có Node đi kèm (PRD mục 9), không đọc bản cài npm |
+| 22 | `OhsInstall.test_windows_bundle_seen_from_wsl` | — | không áp dụng | Đường dẫn Windows nhìn từ WSL và `WSLENV` (PRD mục 2.2) |
+| 23 | `OhsInstall.test_no_pack_leaves_environment_alone` | `tests/ohs_fake.rs::ohs_is_started_with_vault_db_and_clean_environment`; thêm `ohs_runs_with_the_vietnamese_pack_of_its_package` | đã chuyển | Kiểm ở môi trường tiến trình OHS nhận được (server giả ghi lại) |
 
 Test Rust thêm, không có bản Python: `move_with_zero_tries_still_tries_once` (lệch có chủ ý ở trên), `move_renames_into_vietnamese_name`, `name_taken_in_missing_folder_is_none`, `name_taken_resolves_dot_segments_of_src`, `verbatim_prefixes_drive_and_unc_paths` (Windows: tiền tố `\\?\` cho đường dẫn dài).
 
@@ -143,7 +148,7 @@ Trên Windows, Rust đổi tên bằng `MoveFileExW` không cờ (như `os.renam
 
 ## Module `ohs`
 
-Bản Python không có module tương ứng: `scripts/kg/related.py` (`ohs_seeds`) chạy `node cli.js --db VAULT/.obsidian-hybrid-search.db search --json` mỗi lần một tiến trình. Rust thay bằng `pkm_core::ohs` theo PRD mục 9 và D6, D7: một tiến trình `serve --stdio` sống lâu, request có `id` đồng thời, khởi động lại có giới hạn rồi `broken`, trạng thái và lỗi `ohs_not_ready`. `OhsConfig::db` mặc định `None`: OHS tự chọn DB như MCP `ohs` của người dùng, nên hai bên dùng chung một index như bản Python. Thư mục gói mặc định là `<thư mục pkm>/ohs` (`platform::pkm_dir`); bộ cài đặt gói vào đây. Test: `crates/pkm-core/tests/ohs_fake.rs` (server giả, chạy trong CI) và `tests/ohs_real.rs` (`#[ignore]`, cần gói thật).
+Bản Python không có module tương ứng: `scripts/kg/related.py` (`ohs_seeds`) chạy `node cli.js --db VAULT/.obsidian-hybrid-search.db search --json` mỗi lần một tiến trình. Rust thay bằng `pkm_core::ohs` theo PRD mục 9 và D6, D7: một tiến trình `serve --stdio` sống lâu, request có `id` đồng thời, khởi động lại có giới hạn rồi `broken`, trạng thái và lỗi `ohs_not_ready`. `OhsConfig::db` mặc định `None`: OHS tự chọn DB như MCP `ohs` của người dùng, nên hai bên dùng chung một index như bản Python. Thư mục gói mặc định là `<thư mục pkm>/ohs` (`platform::pkm_dir`); bộ cài đặt gói vào đây. Gói có `lang/ohs-lang-vi` (gói ghim `0.17.2-vantt.1` có, `vi 0.2.0`) thì mọi lần chạy OHS có `OHS_LANGUAGE_PACK` trỏ tới đó (`ohs::LANGUAGE_PACK_ENV`), như `platform_paths.ohs_env` của Python từ `223c9c3`: mọi bên dùng chung một index phải cùng gói, nếu không OHS dựng lại bảng view qua lại. MCP `ohs` của người dùng cũng phải đặt biến này (`bin/ohs` của gói không tự đặt). Gói không có thư mục đó thì môi trường để nguyên, kể cả `OHS_LANGUAGE_PACK` người dùng tự đặt. Test: `crates/pkm-core/tests/ohs_fake.rs` (server giả, chạy trong CI) và `tests/ohs_real.rs` (`#[ignore]`, cần gói thật).
 
 ### Không lùi về đọc thẳng DB của OHS
 
@@ -172,7 +177,7 @@ Nguồn ở sha ghim: `scripts/kg/tests/test_kg.py` không có test riêng cho `
 
 ## Bộ cài `pkm mcp install` và `pkm doctor`
 
-Thay `scripts/kg/desktop_config.py` (`5a3eb2f`). Mã: `crates/pkm/src/install.rs` (và `install/`), `crates/pkm/src/doctor.rs`. Bản Python không có test cho file này; test Rust nằm trong hai module (`cargo test -p pkm`). Đây là công cụ cài đặt, không thuộc tầng nào của bộ so khớp, nên các chỗ khác dưới đây không cần ngoại lệ có tên.
+Thay `scripts/kg/desktop_config.py` (`5a3eb2f`, đối chiếu lại ở `223c9c3`). Mã: `crates/pkm/src/install.rs` (và `install/`), `crates/pkm/src/doctor.rs`. Bản Python không có test cho file này; test Rust nằm trong hai module (`cargo test -p pkm`). Đây là công cụ cài đặt, không thuộc tầng nào của bộ so khớp, nên các chỗ khác dưới đây không cần ngoại lệ có tên.
 
 Giống Python: tìm cấu hình ở `%APPDATA%\Claude` và bản Microsoft Store (`%LOCALAPPDATA%\Packages\Claude_*\LocalCache\Roaming\Claude`), thấy nhiều file thì bắt chọn `--config`; chỉ thay mục `kg`, giữ mọi khoá và mục khác theo thứ tự; `mcpServers` không phải object thì thay bằng object mới; thụt lề 2, không thoát ký tự ngoài ASCII, giữ CRLF, bỏ BOM; sao lưu `<file>.bak-<thời điểm>` trước khi ghi; từ chối ghi khi Claude Desktop đang chạy trừ khi `--force`; dựng index trước, lỗi thì không đổi cấu hình; `--check` bắt tay `initialize` rồi `tools/list` với `protocolVersion` `2025-06-18`.
 
@@ -186,7 +191,7 @@ Khác Python (cố ý, vì binary thay cho bản chép mã Python):
 - `--dry-run` in kế hoạch (cấu hình, gói OHS, index) và phần khác của mục `kg`; dùng được với `--remove`.
 - Bắt tay: chờ trả lời `initialize` rồi mới gửi `notifications/initialized` và `tools/list` (Python gửi cả ba một lúc), có hạn giờ (`--timeout`, mặc định 120 giây), bỏ qua dòng stdout không phải JSON.
 - Kiểm Claude Desktop đang chạy: Windows liệt kê đường dẫn mọi `claude.exe` qua PowerShell và bỏ qua Claude Code (`~\.local\bin`, npm, winget `Anthropic.ClaudeCode` và `WinGet\Links`, scoop `apps\claude-code`, `Programs\claude-code`; danh sách `CLAUDE_CODE_DIRS` trong `install/desktop.rs`), không được thì lùi về `tasklist` như Python; macOS `pgrep -x Claude`; Linux `pgrep -x claude-desktop`. Lời từ chối in đường dẫn exe bị coi là Claude Desktop. Không hỏi được thì từ chối và gợi ý `--force`. `--force` chỉ bỏ qua kiểm này.
-- Cài gói OHS dựng sẵn vào `<thư mục pkm>/ohs` (Python trỏ tới `cli.js` của OHS cài sẵn qua `--ohs-cli` và `node` trên PATH).
+- Cài gói OHS dựng sẵn vào `<thư mục pkm>/ohs` (Python trỏ tới `cli.js` của OHS cài sẵn qua `--ohs-cli`; từ `223c9c3` là gói của fork ở `C:\tools\ohs` và `--ohs-node` là node của gói, trước đó node trên PATH).
 - Binary `pkm` đang chạy không ở chỗ cài ổn định (`%LOCALAPPDATA%\pkm\bin` trên Windows, `~/.local/bin` nơi khác, hằng `STANDARD_BIN_DIR`; hoặc `PKM_INSTALL_DIR`; hoặc thư mục có `.pkm-managed` của bộ cài) thì `mcp install` từ chối trừ khi `--allow-any-location` (cờ riêng, không bỏ qua kiểm Claude Desktop), nói rõ khi file nằm trong `Downloads` hay thư mục tạm, và in lệnh bộ cài cùng lệnh chạy lại từ chỗ chuẩn. `--dry-run` chỉ in cảnh báo.
 - So rồi mới ghi: lưu sha256 của bytes cấu hình đã đọc; dựng index xong thì hỏi lại Claude Desktop có chạy không và đọc lại file. File đã đổi thì đặt lại mục `kg` trên bản mới, giữ thay đổi kia và báo cho người dùng.
 - Cài với `--no-ohs` thì mục `kg` có `"env": {"PKM_NO_OHS": "1"}`, để `doctor` bỏ qua gói OHS. Lần cài sau không có `--no-ohs` thì bỏ biến này.

@@ -1,7 +1,7 @@
 # Bản Python đang ghim làm đặc tả (docs/PRD.md mục 4). Chỉ nâng sha khi mọi commit tới đó đã chuyển và bộ so khớp sạch.
 [spec]
 repo = "https://github.com/vantt/obsidian-pkm-automation"
-sha = "5a3eb2f7990cd093b2ee3a1ccd5b46bd46e3ca4e"
+sha = "223c9c33c99c6a087d474b66da78736ad18f849c"
 date = "2026-11-02"
 
 [fixture]
