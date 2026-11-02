@@ -233,7 +233,7 @@ public static extern System.IntPtr SendMessageTimeout(System.IntPtr hWnd, uint m
         Write-Step "will remove: $exePath and its PATH entry"
         Write-Step "will keep:   index and data in $(Join-Path $env:LOCALAPPDATA 'pkm') (delete that folder yourself to remove them)"
         if (Test-Path -LiteralPath $exePath -PathType Leaf) {
-            Write-Step "will keep:   the 'kg' entry in Claude Desktop. To remove it first, run:"
+            Write-Step "will keep:   the 'pkm' entry (and an old 'kg' entry written by pkm) in Claude Desktop. To remove them first, run:"
             Write-Step "               & `"$exePath`" mcp install --remove"
         }
         if ($DryRun) { Write-Step 'dry-run: nothing removed'; return }

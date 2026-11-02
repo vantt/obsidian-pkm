@@ -26,7 +26,7 @@ BLOCK_END="# <<< ${APP} <<<"
 
 usage() {
   cat <<EOF
-Install, update or remove ${APP} (knowledge-graph tools and the 'kg' MCP server for an Obsidian vault).
+Install, update or remove ${APP} (knowledge-graph tools and the 'pkm' MCP server for an Obsidian vault).
 
 Usage:
   curl -fsSL https://github.com/${DEFAULT_REPO}/releases/latest/download/install.sh | sh -s -- [options]
@@ -332,7 +332,7 @@ uninstall() {
   say "will remove: $INSTALL_DIR/$APP and the PATH lines this script added"
   say "will keep:   index and data in $(data_dir)  (delete that folder yourself to remove them)"
   if [ -x "$INSTALL_DIR/$APP" ]; then
-    say "will keep:   the 'kg' entry in Claude Desktop. To remove it first, run:"
+    say "will keep:   the 'pkm' entry (and an old 'kg' entry written by pkm) in Claude Desktop. To remove them first, run:"
     say "               \"$INSTALL_DIR/$APP\" mcp install --remove"
   fi
   if [ "$DRY_RUN" = 1 ]; then say "dry-run: nothing removed"; return 0; fi
