@@ -1,0 +1,23 @@
+[package]
+name = "pkm-parity"
+description = "Bộ so khớp: so dump của bản Rust với dump của bản Python (golden), từng tầng index, tool, MCP, CLI."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "parity"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+# Phần cắm Rust (src/rust_side.rs) gọi thẳng lõi; mỗi phase lõi nối tầng của mình vào đó.
+pkm-core = { path = "../crates/pkm-core" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "1"
+
+[dev-dependencies]
+tempfile = "3"
