@@ -49,3 +49,9 @@ Mỗi quyết định một mục, theo khung:
 - **Lựa chọn:** `spec.lock` ghi `[fixture].seed = 11`.
 - **Lý do:** Test của repo đặc tả sinh vault mà không truyền `--seed`, nên dùng giá trị mặc định của preset. Cỡ vault cũng là mặc định (`--clients 30 --days 365`, 746 note).
 - **Bằng chứng:** repo đặc tả ở `5a3eb2f`: `scripts/kg/tests/test_kg.py` (lớp `Fixture`, `setUpClass`) chạy `otf.mjs generate --preset kg-solo --out …`, không có `--seed`. Fixture `v0.7.0` (`2a514a8`): `presets/kg-solo.mjs` dòng 14 `seed: { default: 11 }` và dòng 97 `build({ seed = 11, … })`. `docs/knowledge-graph/bench/r2/README.md` mục 1 của repo đặc tả cũng ghi "hạt giống 11".
+
+## Lệnh `follow`: `parity/follow.py`
+- **Ngày:** 2026-11-02
+- **Lựa chọn:** `python3 parity/follow.py` (Python chuẩn, không phụ thuộc ngoài), không dùng `cargo xtask`. Bản clone repo đặc tả nằm ngoài repo này: `$PKM_FOLLOW_CLONE`, `--clone-dir`, hoặc `~/.cache/pkm-follow/spec-repo`. Quyền đọc lấy từ `gh auth git-credential` chỉ cho lệnh git đó, không đổi cấu hình máy.
+- **Lý do:** Bộ so khớp cũng cần Python để chạy bản đặc tả, nên không thêm crate hay thành viên workspace chỉ để chạy một lệnh làm tay. Không đụng `Cargo.lock`, không làm CI build thêm.
+- **Bằng chứng:** `parity/follow.py`; chạy hai lần liên tiếp, tập sha khớp `git log <sha ghim>..origin/main -- <đường dẫn theo dõi>`.
