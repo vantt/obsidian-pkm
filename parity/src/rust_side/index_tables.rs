@@ -16,10 +16,14 @@ use serde_json::{Map, Value, json};
 const VOLATILE_META: [&str; 2] = ["built_at", "ms"];
 const VOLATILE: &str = "<volatile>";
 
-/// Bảng đã dump và số đo thời gian build.
+/// Bảng đã dump và số đo thời gian build. Index giữ lại trong thư mục tạm (`db`) cho tầng câu đáp án và tool, như
+/// `dump-python.py` chạy các tầng đó trên cùng DB; xoá khi `Built` bị bỏ.
 pub struct Built {
     pub tables: HashMap<String, Vec<Map<String, Value>>>,
     pub perf: Value,
+    pub db: PathBuf,
+    pub scrub: Scrub,
+    _tmp: TempDir,
 }
 
 /// Thư mục tạm, xoá khi ra khỏi phạm vi.
@@ -65,7 +69,7 @@ pub(super) fn read_run(run: &Value) -> Result<(Vec<String>, String, Options)> {
 }
 
 /// Thay đường dẫn tuyệt đối (cả bản đã giải symlink) bằng dấu; đường dài trước.
-pub(super) struct Scrub(Vec<(String, &'static str)>);
+pub struct Scrub(Vec<(String, &'static str)>);
 
 impl Scrub {
     pub(super) fn new(vault: &Path, db: &Path) -> Self {
@@ -85,10 +89,24 @@ impl Scrub {
         Scrub(pairs)
     }
 
-    pub(super) fn text(&self, s: &str) -> String {
+    pub fn text(&self, s: &str) -> String {
         self.0
             .iter()
             .fold(s.to_owned(), |acc, (p, mark)| acc.replace(p.as_str(), mark))
+    }
+
+    /// Mọi chuỗi (khoá và giá trị) trong một giá trị JSON.
+    pub fn value(&self, v: Value) -> Value {
+        match v {
+            Value::String(s) => Value::String(self.text(&s)),
+            Value::Array(a) => Value::Array(a.into_iter().map(|x| self.value(x)).collect()),
+            Value::Object(m) => Value::Object(
+                m.into_iter()
+                    .map(|(k, x)| (self.text(&k), self.value(x)))
+                    .collect(),
+            ),
+            v => v,
+        }
     }
 }
 
@@ -158,5 +176,8 @@ pub fn build(vault_dir: &Path, run: &Value) -> Result<Built> {
     Ok(Built {
         tables,
         perf: json!({"build_full_ms": r1(full_ms), "build_noop_ms": r1(noop_ms)}),
+        db: db_path,
+        scrub,
+        _tmp: tmp,
     })
 }
