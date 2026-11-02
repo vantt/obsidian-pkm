@@ -40,6 +40,22 @@ pub const SERVER_VERSION: &str = "0.1.0";
 /// `initialize` và `tools/list` chờ lần dựng đầu tối đa chừng này (vault lớn trên ổ chậm: không giữ client quá lâu).
 const READY_WAIT: Duration = Duration::from_secs(20);
 
+/// `tools/call` chờ lần dựng đầu tối đa chừng này, rồi trả `index unavailable` thay vì treo client (Python chờ không
+/// hạn). Test dùng hạn ngắn.
+const CALL_WAIT: Duration = if cfg!(test) {
+    Duration::from_secs(5)
+} else {
+    Duration::from_secs(120)
+};
+
+/// Câu của một panic (`panic!("...")` mang `&str` hoặc `String`).
+fn panic_message(p: &(dyn std::any::Any + Send)) -> String {
+    p.downcast_ref::<&str>()
+        .map(|s| (*s).to_owned())
+        .or_else(|| p.downcast_ref::<String>().cloned())
+        .unwrap_or_else(|| "panic".to_owned())
+}
+
 const ABOUT: &str = "MCP server (stdio) của index graph: bọc tầng tool theo bộ tool của bản Python.
 
 Index: VAULT/.kg/graph.db (hoặc --db). Dựng ở nền ngay khi server chạy; trước mỗi lời gọi tool, nếu lần kiểm trước \
@@ -553,8 +569,10 @@ impl Shared {
         Ok(())
     }
 
+    /// Lần dựng đầu. Luôn đặt cờ `ready`, kể cả khi dựng panic (lỗi ghi vào `build_error`): lời gọi tool không chờ
+    /// một luồng đã chết.
     fn first_build(&self) {
-        {
+        let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let mut st = lock(&self.state);
             if let Err(e) = self.build(&mut st) {
                 self.log(&format!("build lỗi: {e}"));
@@ -564,6 +582,11 @@ impl Shared {
                     let _ = self.open_tools(&mut st);
                 }
             }
+        }));
+        if let Err(p) = built {
+            let e = format!("panic: {}", panic_message(p.as_ref()));
+            self.log(&format!("build lỗi: {e}"));
+            lock(&self.state).build_error = Some(e);
         }
         self.set_ready();
     }
@@ -626,21 +649,42 @@ impl Shared {
             .cloned()
             .unwrap_or_default();
         let t0 = Instant::now();
-        self.wait_ready(None);
+        let ready = self.wait_ready(Some(CALL_WAIT));
         let (text, err, t1) = {
-            let mut st = lock(&self.state);
-            self.refresh(&mut st);
-            let t1 = Instant::now();
-            let res = match st.tools.as_mut() {
-                Some(t) => t.call(&name, args),
-                None => {
-                    let why = st
-                        .build_error
-                        .clone()
-                        .or_else(|| st.open_error.clone())
-                        .unwrap_or_else(|| "None".to_owned());
-                    Ok(json!({"error": format!("index unavailable: {why}")}))
-                }
+            let (res, t1) = if !ready {
+                let why = format!(
+                    "the index is still being built (waited {} s); try again shortly",
+                    CALL_WAIT.as_secs()
+                );
+                (
+                    Ok(json!({"error": format!("index unavailable: {why}")})),
+                    Instant::now(),
+                )
+            } else {
+                let mut st = lock(&self.state);
+                // Panic trong refresh hay trong tool thành kết quả lỗi; server chạy tiếp.
+                let caught = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    self.refresh(&mut st);
+                    let t1 = Instant::now();
+                    let res = match st.tools.as_mut() {
+                        Some(t) => t.call(&name, args),
+                        None => {
+                            let why = st
+                                .build_error
+                                .clone()
+                                .or_else(|| st.open_error.clone())
+                                .unwrap_or_else(|| "None".to_owned());
+                            Ok(json!({"error": format!("index unavailable: {why}")}))
+                        }
+                    };
+                    (res, t1)
+                }));
+                caught.unwrap_or_else(|p| {
+                    (
+                        Err(format!("internal error: {}", panic_message(p.as_ref()))),
+                        Instant::now(),
+                    )
+                })
             };
             match res {
                 Ok(v) => {

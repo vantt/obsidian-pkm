@@ -67,6 +67,10 @@ struct Fake {
     opened: Mutex<Vec<ToolContext>>,
     reopened: Arc<AtomicUsize>,
     calls: Calls,
+    /// `open` panic (như một lỗi ngoài dự kiến trong lần dựng đầu).
+    open_panics: bool,
+    /// `open` chờ tới khi đầu gửi của kênh này gửi hay bị bỏ (lần dựng đầu chạy rất lâu).
+    open_waits: Mutex<Option<std::sync::mpsc::Receiver<()>>>,
 }
 
 struct FakeSession {
@@ -84,6 +88,10 @@ impl ToolLayer for Fake {
     }
 
     fn open(&self, ctx: &ToolContext) -> Result<Box<dyn ToolSession>, String> {
+        assert!(!self.open_panics, "tầng tool hỏng khi mở index");
+        if let Some(rx) = self.open_waits.lock().unwrap().take() {
+            let _ = rx.recv();
+        }
         self.opened.lock().unwrap().push(ctx.clone());
         Ok(Box::new(FakeSession {
             reopened: Arc::clone(&self.reopened),
@@ -101,6 +109,7 @@ impl ToolSession for FakeSession {
             ),
             "big" => Ok(json!({"text": "đ".repeat(100)})),
             "boom" => Err("ValueError('hỏng')".to_owned()),
+            "panic" => panic!("tool hỏng giữa chừng"),
             "neighbors" => Ok(
                 json!({"error": "no note with id 'Doanh thu'; ids are exact vault paths", "did_you_mean": ["Yếu tố/Doanh thu.md"]}),
             ),
@@ -126,6 +135,10 @@ struct Session {
 }
 
 fn start(extra: &[&str], layer: bool) -> Session {
+    start_fake(extra, layer, Fake::default())
+}
+
+fn start_fake(extra: &[&str], layer: bool, fake: Fake) -> Session {
     let dir = tempfile::tempdir().unwrap();
     let vault = dir.path().join("Vault thử");
     write_vault(&vault);
@@ -139,7 +152,7 @@ fn start(extra: &[&str], layer: bool) -> Session {
     ];
     argv.extend(extra.iter().map(|s| (*s).to_owned()));
     let a = McpArgs::try_parse_from(argv).unwrap();
-    let fake = Arc::new(Fake::default());
+    let fake = Arc::new(fake);
     let server = Server::start(a, layer.then(|| Arc::clone(&fake) as Arc<dyn ToolLayer>));
     Session {
         _dir: dir,
@@ -384,6 +397,56 @@ fn without_tool_layer_calls_report_index_unavailable() {
         text,
         r#"{"error":"index unavailable: this pkm build has no tool layer"}"#
     );
+}
+
+#[test]
+fn panic_in_first_build_still_answers_tool_calls() {
+    let fake = Fake {
+        open_panics: true,
+        ..Fake::default()
+    };
+    let s = start_fake(&["--refresh-every", "-1"], true, fake);
+    let (text, err) = call(&s.server, "find", json!({"name": "x"}));
+    assert!(err);
+    assert!(
+        text.starts_with(r#"{"error":"index unavailable: panic: tầng tool hỏng khi mở index"#),
+        "{text}"
+    );
+    // Server còn trả lời.
+    let r = one(&s.server, r#"{"jsonrpc":"2.0","id":2,"method":"ping"}"#);
+    assert_eq!(r["result"], json!({}));
+}
+
+#[test]
+fn tool_call_waits_a_bounded_time_for_the_first_build() {
+    let (tx, rx) = std::sync::mpsc::channel::<()>();
+    let fake = Fake {
+        open_waits: Mutex::new(Some(rx)),
+        ..Fake::default()
+    };
+    let s = start_fake(&["--refresh-every", "-1"], true, fake);
+    let t0 = std::time::Instant::now();
+    let (text, err) = call(&s.server, "find", json!({"name": "x"}));
+    assert!(err);
+    assert!(
+        text.starts_with(r#"{"error":"index unavailable: the index is still being built"#),
+        "{text}"
+    );
+    assert!(t0.elapsed() < CALL_WAIT + std::time::Duration::from_secs(5));
+    // Dựng xong thì lời gọi sau chạy bình thường.
+    drop(tx);
+    let (text, err) = call(&s.server, "find", json!({"name": "x"}));
+    assert!(!err, "{text}");
+}
+
+#[test]
+fn panic_in_a_tool_is_an_error_result_and_the_server_keeps_running() {
+    let s = start(&["--refresh-every", "-1"], true);
+    let (text, err) = call(&s.server, "panic", json!({}));
+    assert!(err);
+    assert_eq!(text, "error: internal error: tool hỏng giữa chừng");
+    let (text, err) = call(&s.server, "find", json!({"name": "x"}));
+    assert!(!err, "{text}");
 }
 
 #[test]
