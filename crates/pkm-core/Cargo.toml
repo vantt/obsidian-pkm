@@ -1,0 +1,9 @@
+[package]
+name = "pkm-core"
+description = "Lõi graph của PKM: đọc vault, schema, index SQLite, validator, truy vấn, tool."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]

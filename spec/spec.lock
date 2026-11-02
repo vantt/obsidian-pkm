@@ -8,4 +8,4 @@ date = "2026-11-02"
 repo = "https://github.com/vantt/obsidian-test-fixture"
 tag = "v0.7.0"
 preset = "kg-solo"
-seed = ""  # điền seed mà scripts/kg/tests của repo đặc tả dùng (R00)
+seed = 11  # scripts/kg/tests/test_kg.py sinh kg-solo không truyền --seed, nên dùng mặc định của preset (presets/kg-solo.mjs ở v0.7.0)
