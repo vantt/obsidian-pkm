@@ -123,7 +123,7 @@ Mã của phase 01–14 đã xong tới bộ cài. Đã phát hành thử `v0.1.
 | Xong | 01, 02, 03, 04, 05, 06, 07, 08, 09, 11, 12, 14 | — |
 | Chờ chạy lại trên Windows | 10 | tầng CLI trên bản B: 2 lệch đường dẫn vault do bộ so khớp, đã sửa `Scrub` của `dump-python.py`; chạy lại `parity.py run --private` |
 | Chờ máy Windows không có Python | 13 | mọi phép kiểm đã qua trên Windows thật, nhưng máy có Python nên "Windows sạch" chỉ đạt một phần |
-| Đang làm, theo lượt | 15 | lượt đuổi theo 2026-11-02: chuyển `223c9c3`, nâng ghim, dựng lại golden; `follow` báo 0. Lượt sau khi user bảo |
+| Đang làm, theo lượt | 15 | hai lượt đuổi theo 2026-11-02: lượt 1 chuyển `223c9c3`; lượt 2 xử lý `24f193a`, `58010ad`, `8f89403`, `6af65b1`, `9f0700b`, ghim `da62ecb`, dựng lại golden; `follow` báo 0. Lượt sau khi user bảo |
 | Chưa bắt đầu, chờ user | | |
 | | 16 | cần 15, kết quả Windows và bản B, user đồng ý gắn tag và chạy song song một tuần |
 | | 17 | cần 16, user quyết Q2 và cho sửa repo đặc tả |

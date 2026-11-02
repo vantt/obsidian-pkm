@@ -1,0 +1,42 @@
+Lệch schema v3 (luật | số chỗ | số note):
+  R2        1      1
+  R3        1      1
+  R4        2      2
+  R5        1      1
+  R6        1      1
+  R7        1      1
+  R8        4      4
+  R9        2      2
+  R10       1      1
+
+R2:
+  Yếu tố/Số bài đăng LinkedIn.md: khoá "dẫn_đến" có wikilink nhưng không là cạnh hay trường liên kết của schema
+
+R3:
+  Dự án/Chiến dịch Tết Mộc.md: uses: [[Figma]] không có note
+
+R4:
+  Khái niệm/Chân dung khách hàng.md: up: concept → moc (MOC/MOC Kinh doanh.md) ngoài domain/range
+  Khái niệm/Cà phê.md: increases: concept → factor (Yếu tố/Mức kiệt sức.md) ngoài domain/range
+
+R5:
+  Công cụ/Metabase.md: khoá nghịch đảo viết tay: used_by
+
+R6:
+  Khái niệm/Dashboard.md: vừa related vừa up với Khái niệm/Phân tích dữ liệu.md
+
+R7:
+  Khái niệm/Marketing số.md: related trỏ về chính note
+
+R8:
+  Khách hàng/Cua hang Moc.md: title trùng (không phân biệt hoa thường, dấu): Cua hang Moc
+  Khách hàng/Cửa hàng Mộc.md: title trùng (không phân biệt hoa thường, dấu): Cửa hàng Mộc
+  Người/Nguyễn Văn An.md: title trùng (không phân biệt hoa thường, dấu): Nguyễn Văn An
+  Người/Nguyễn Văn Ân.md: title trùng (không phân biệt hoa thường, dấu): Nguyễn Văn Ân
+
+R9:
+  Claim/Ngân sách là điều kiện có lead.md: thiếu counterfactual (bắt buộc khi relation = conditions)
+  Claim/Nhiều việc làm chậm phản hồi.md: thiếu trường bắt buộc của claim: confidence
+
+R10:
+  Claim/Phản hồi nhanh là điều kiện gia hạn.md: conditions do máy (llm) ghi phải để proposed, đang accepted
