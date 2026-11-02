@@ -127,6 +127,7 @@ Mã của phase 01–14 đã xong tới bộ cài. Chưa có tag hay Release nà
 | | 08, 09, 10 | bộ so khớp `--private` trên bản B |
 | | 11 | `related` chỉ có câu hỏi so với Python khi có gói OHS; OHS trên Windows thật |
 | | 13 | `pkm mcp install` trên Windows sạch, Claude Desktop gọi được `kg`, `doctor` không lỗi |
-| Chưa bắt đầu, chờ user | 15 | user bảo khi nào chạy `follow` và chuyển commit |
+| Đang làm, theo lượt | 15 | lượt đuổi theo 2026-11-02: chuyển `223c9c3`, nâng ghim, dựng lại golden; `follow` báo 0. Lượt sau khi user bảo |
+| Chưa bắt đầu, chờ user | | |
 | | 16 | cần 15, kết quả Windows và bản B, user đồng ý gắn tag và chạy song song một tuần |
 | | 17 | cần 16, user quyết Q2 và cho sửa repo đặc tả |
