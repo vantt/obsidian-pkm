@@ -33,3 +33,16 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo test --workspace --locked
+      # Bộ so khớp (docs/PRD.md mục 6, 12): dựng kg-solo theo tag, preset, seed của spec/spec.lock,
+      # rồi so bản Rust với golden của sha ghim (parity/golden/<sha>/). Không cần Python, không cần token.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Dựng vault kg-solo
+        shell: bash
+        run: |
+          args=$(cargo run -q --locked -p pkm-parity -- fixture-args)
+          npx --yes $args --out "$RUNNER_TEMP/kg-solo"
+      - name: So bản Rust với golden
+        shell: bash
+        run: cargo run -q --locked -p pkm-parity -- check --vault "$RUNNER_TEMP/kg-solo" --report "$RUNNER_TEMP/parity-report.json"
