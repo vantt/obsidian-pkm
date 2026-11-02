@@ -167,6 +167,9 @@ def cmd_run(a, cfg):
 
 
 def main(argv=None):
+    # Trên Windows, stdout/stderr ra pipe dùng bảng mã cũ (cp1252): in tiếng Việt làm script sập. Trên Linux không đổi byte nào.
+    for s in (sys.stdout, sys.stderr):
+        s.reconfigure(encoding='utf-8')
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest='cmd', required=True)
     for name in ('golden', 'run'):

@@ -61,8 +61,7 @@ def kg_cli(argv):
     import kg.index as index_mod
     from kg.cli import main as cli_main
     pin_listing(index_mod, mode)
-    for s in (sys.stdout, sys.stderr):           # như platform_paths.utf8_stdio (sha cũ chưa có module đó)
-        s.reconfigure(encoding='utf-8')
+    utf8_stdio()                                 # như platform_paths.utf8_stdio (sha cũ chưa có module đó)
     cli_main(rest)
 
 
@@ -75,7 +74,10 @@ class Scrub:
         pairs = []
         for path, mark in [(db, '<DB>') for db in dbs] + [(vault, '<VAULT>')]:
             for p in {os.path.abspath(path), os.path.realpath(path)}:
-                pairs.append((p, mark))
+                # Trong JSON (đầu ra `--json` của CLI), `\` của đường dẫn Windows được thoát thành `\\`.
+                for form in {p, json.dumps(p, ensure_ascii=False)[1:-1]}:
+                    if form and form not in (x for x, _ in pairs):
+                        pairs.append((form, mark))
         self.pairs = sorted(pairs, key=lambda x: -len(x[0]))       # đường dài trước: DB có thể nằm trong vault
 
     def text(self, s):
@@ -396,7 +398,14 @@ def run_cli(spec, listing, vault, cli_db, commands, out, scrub):
 
 
 # ------------------------------------------------------------------------------------------------ chính
+def utf8_stdio():
+    """stdout, stderr luôn UTF-8: trên Windows, pipe dùng bảng mã cũ (cp1252) và thông báo tiếng Việt làm script sập."""
+    for s in (sys.stdout, sys.stderr):
+        s.reconfigure(encoding='utf-8')
+
+
 def main(argv=None):
+    utf8_stdio()
     a = parse_args(argv)
     spec = os.path.abspath(a.spec)
     vault = os.path.abspath(a.vault)

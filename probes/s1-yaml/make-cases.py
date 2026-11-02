@@ -3,7 +3,7 @@
 Usage: python3 -I make-cases.py
 Generated, not hand-edited, because several cases need exact bytes (CRLF, BOM, NFD, control characters, bad UTF-8).
 After regenerating, refresh the reference dump:
-  python3 -I pyyaml-dump.py --spec <spec repo> cases > cases.pyyaml.jsonl
+  python3 -E -P pyyaml-dump.py --spec <spec repo> cases > cases.pyyaml.jsonl
 """
 import os
 import shutil
