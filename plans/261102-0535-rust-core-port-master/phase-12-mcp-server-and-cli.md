@@ -1,6 +1,6 @@
 ---
 title: "Phase 12: MCP server và CLI"
-status: in-progress
+status: done
 priority: P1
 effort: "2 ngày"
 prd: R10
@@ -25,7 +25,7 @@ MCP stdio thay được MCP `kg` Python: bắt tay khớp từng chữ, refresh 
 
 ## Việc cần làm
 - [x] MCP theo Q4: tên server, tên tool, mô tả, schema tham số, dạng kết quả giống Python từng chữ (11 tool, gồm `related` qua điểm vào chung của `tools`).
-- [ ] Cờ khởi động đủ như mục 8 PRD; cờ OHS đổi nghĩa thành đường dẫn gói OHS.
+- [x] Cờ khởi động như `parser()` của MCP server Python (lead chốt 2026-11-02: không thêm `--limit`, `--system` mà mục 8 PRD liệt kê, vì Python không có; đặc tả là Python). Cờ OHS: `--ohs` là thư mục gói; `--ohs-cli`, `--ohs-node` vẫn nhận để tương thích.
 - [x] `instructions` ghép như Python: mô tả vault (`--about`), mô tả từng loại trong schema, số note và quan hệ, đoạn của adapter, khối cố định.
 - [x] Refresh nền mặc định 5 s bằng `std::thread`; log JSONL (`--log`); giới hạn ký tự (`--max-chars`).
 - [x] CLI bằng `clap`: `build [--full]`, `stats`, `validate`, `find`, `note`, `neighbors`, `reach`, `paths`, `loops`, `provenance`, `select`, `valid`, `mcp`, cùng tuỳ chọn chung của mục 10.
