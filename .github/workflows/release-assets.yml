@@ -1,0 +1,91 @@
+name: Release assets
+
+# Dựng bốn binary phát hành, đóng gói bằng scripts/release-assets.sh (tên asset, chạy thử `--version`, kiểm CRT tĩnh
+# trên Windows), chạy thử bộ cài trên runner của chính nền đó, rồi lưu artifact `pkm-<target>`. Không đăng gì.
+# Gọi từ ci.yml (mọi PR và push lên main) và qua ci.yml từ release.yml (tag), để lỗi đóng gói lộ ra trước khi gắn tag.
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  assets:
+    name: asset ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-24.04 # glibc 2.39 là trần của binary Linux
+            installer: sh
+          - target: x86_64-apple-darwin
+            os: macos-15 # runner arm64, biên dịch chéo; chạy thử qua Rosetta nếu có
+            installer: none # install.sh trên máy arm64 chọn bản arm64
+          - target: aarch64-apple-darwin
+            os: macos-15
+            installer: sh
+          - target: x86_64-pc-windows-msvc
+            os: windows-2025
+            installer: ps1
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Cài đúng toolchain ghi trong rust-toolchain.toml, rồi thêm đích.
+      - run: rustup toolchain install
+      - run: rustup target add ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: release-${{ matrix.target }}
+      # Không đặt RUSTFLAGS: biến này ghi đè rustflags của .cargo/config.toml (CRT tĩnh cho Windows).
+      - run: cargo build --release --locked --package pkm --target ${{ matrix.target }}
+      - name: Đóng gói và chạy thử
+        id: pack
+        run: |
+          sh scripts/release-assets.sh package "${{ matrix.target }}" out
+          echo "version=v$(sh scripts/release-assets.sh version)" >> "$GITHUB_OUTPUT"
+
+      - name: shellcheck các script
+        if: runner.os == 'Linux'
+        run: shellcheck scripts/*.sh
+      - name: Thử vòng đời install.sh
+        if: matrix.installer == 'sh'
+        run: sh scripts/test-installer.sh out "${{ steps.pack.outputs.version }}" </dev/null
+
+      - name: Kiểm cú pháp và PSScriptAnalyzer cho install.ps1
+        if: matrix.installer == 'ps1'
+        shell: powershell # Windows PowerShell 5.1, đúng bản có sẵn trên máy khách
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $bad = $false
+          foreach ($f in Get-ChildItem scripts -Filter *.ps1) {
+            $tokens = $null; $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$tokens, [ref]$errors)
+            foreach ($e in $errors) { Write-Host "::error file=$($f.Name)::$($e.Message) (line $($e.Extent.StartLineNumber))"; $bad = $true }
+          }
+          if (-not (Get-Module -ListAvailable PSScriptAnalyzer)) {
+            Install-Module PSScriptAnalyzer -Scope CurrentUser -Force -SkipPublisherCheck
+          }
+          $found = @(Invoke-ScriptAnalyzer -Path scripts -Recurse -Severity Error, Warning)
+          $found | Format-Table -AutoSize RuleName, Severity, ScriptName, Line, Message | Out-String -Width 200 | Write-Host
+          if (@($found | Where-Object Severity -eq 'Error').Count -gt 0) { $bad = $true }
+          if ($bad) { exit 1 }
+      - name: Thử vòng đời install.ps1
+        if: matrix.installer == 'ps1'
+        shell: powershell
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-installer.ps1 -Fixture out -Version '${{ steps.pack.outputs.version }}'
+          exit $LASTEXITCODE
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: pkm-${{ matrix.target }}
+          path: out/pkm-${{ matrix.target }}*
+          if-no-files-found: error
+          retention-days: 14

@@ -5,12 +5,15 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  # release.yml gọi lại toàn bộ CI trước khi đăng.
+  workflow_call:
 
 permissions:
   contents: read
 
+# Khi release.yml gọi, github.workflow là "Release": nhóm riêng, không huỷ CI của main và không bị nó huỷ.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -46,3 +49,7 @@ jobs:
       - name: So bản Rust với golden
         shell: bash
         run: cargo run -q --locked -p pkm-parity -- check --vault "$RUNNER_TEMP/kg-solo" --report "$RUNNER_TEMP/parity-report.json"
+
+  # Dựng, đóng gói, chạy thử bốn binary phát hành và thử bộ cài trên mọi PR, không đăng gì.
+  assets:
+    uses: ./.github/workflows/release-assets.yml
