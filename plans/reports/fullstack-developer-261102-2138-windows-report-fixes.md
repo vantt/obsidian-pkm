@@ -28,3 +28,4 @@ Ngày 2026-11-02, giờ Asia/Saigon. Đầu vào: [báo cáo Windows](./windows-
 2. Phase 13: thử bộ cài trên một máy Windows không có Python để đóng nghiệm thu "Windows sạch".
 3. Mục 4.7: dòng `ohs_node` của `pkm doctor` in lẫn `\` và `/` (`…\pkm\ohs\node/node.exe`). Lỗi hiển thị trong crate Rust, ngoài phạm vi lượt này (agent khác đang đưa thay đổi crate vào `main`).
 4. Nhận diện Claude Code cài bằng winget vẫn chưa thử được (máy thử cài Claude Code kiểu khác).
+5. Trong lúc làm, `main` nâng ghim OHS lên `v0.17.2-vantt.4`; mục A5 và B3 của handoff vẫn ghi `vantt.3` cùng sha256 cũ. Người đưa bản ghim mới vào nên sửa hai mục đó trước lần thử Windows sau.
