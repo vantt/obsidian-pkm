@@ -37,10 +37,17 @@ pub fn pending(build_error: Option<&str>) -> String {
     )
 }
 
-/// `os.path.basename(path.rstrip("/"))`.
+/// `os.path.basename(path.rstrip("/"))`. Trên Windows Python dùng `ntpath`: tách ở cả `\\` lẫn `/` và bỏ ổ đĩa
+/// (`C:`), nên lấy `file_name` của nền thay vì chỉ cắt ở `/`.
 pub fn basename(p: &Path) -> String {
     let s = p.to_string_lossy();
     let s = s.trim_end_matches('/');
+    if cfg!(windows) {
+        return Path::new(s)
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+    }
     s.rsplit('/').next().unwrap_or_default().to_owned()
 }
 
@@ -258,5 +265,14 @@ mod tests {
         assert_eq!(basename(Path::new("/x/kg-solo/")), "kg-solo");
         assert_eq!(basename(Path::new("/x/kg-solo")), "kg-solo");
         assert_eq!(basename(Path::new("/")), "");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn basename_splits_windows_paths_like_ntpath() {
+        assert_eq!(basename(Path::new(r"C:\Users\a\Vault thử")), "Vault thử");
+        assert_eq!(basename(Path::new("C:/x/kg-solo/")), "kg-solo");
+        assert_eq!(basename(Path::new("C:Vault")), "Vault");
+        assert_eq!(basename(Path::new("C:\\")), "");
     }
 }
