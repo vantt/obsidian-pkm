@@ -12,6 +12,11 @@ Trạng thái là một trong:
 | Sha Python | Ngày | Tiêu đề | Commit Rust | Trạng thái | Ghi chú |
 |---|---|---|---|---|---|
 | `223c9c3` | 2026-11-02 | feat(e12): run OHS from the fork's prebuilt bundle with the Vietnamese pack | `ae2ffa1` | đã chuyển | `platform_paths.ohs_env` và gói ngôn ngữ của `ohs_install`: `OhsPackage::pack` cùng biến `OHS_LANGUAGE_PACK` cho mọi tiến trình OHS mà `pkm` chạy (mục `ohs`). Không áp dụng: nhánh bản cài npm của `ohs_install` và `WSLENV` (Rust chỉ chạy gói của fork có Node đi kèm, PRD mục 9, không qua WSL); node của gói cho `related.ohs_seeds` và `desktop_config` (Rust đã chạy node của gói, mục `kg` không mang `--ohs-node`); hằng `OHS_CLI` mới của `graph_index.py` và `desktop_config.py` (Rust tìm gói qua `--ohs`, `PKM_OHS_DIR`, thư mục cài; `--ohs-cli` trỏ vào `app/dist/src/cli.js` vẫn nhận). Golden dựng lại ở sha này không đổi gì ngoài `spec_sha` |
+| `24f193a` | 2026-11-02 | feat(e11): keep the vi pack's _ohs folder out of search and the graph | `2fd131b`, `3211180` | đã chuyển | `platform_paths.ohs_settings`: có gói tiếng Việt thì mọi tiến trình OHS mà `pkm` chạy nhận thêm `OBSIDIAN_IGNORE_PATTERNS` = `ohs::PACK_IGNORE_PATTERNS` (giống từng byte `OHS_IGNORE`; `2fd131b`). `kg_adapter.SYSTEM` thêm `_ohs/`: `adapter::e11::SYSTEM` (`3211180`), meta `hidden` có `_ohs/`. Không áp dụng: `WSLENV` (PRD mục 2.2); `setup_vault.py`, `.mjs`, `propose.py`, `zones.py` (việc E11, ngoài đường dẫn theo dõi). kg-solo không dùng adapter nên golden không đổi |
+| `58010ad` | 2026-11-02 | fix(e11): hold the _ohs/** ignore pattern until vault B is reindexed | `328716f` | đã chuyển | Công tắc `OHS_IGNORE_ON` = `ohs::PACK_IGNORE_ON` (hằng lúc biên dịch). Test Python `test_ignore_patterns_wait_for_the_reindex` đổi thành `test_ignore_patterns_follow_the_switch` ở `8f89403` |
+| `8f89403` | 2026-11-02 | feat(e11): turn on the _ohs/** ignore pattern, vault B reindexed (E12.9.0) | `328716f` (bật sẵn trên `main`) | đã chuyển | `PACK_IGNORE_ON = true`, mẫu `.obsidian/**,templates/**,*.canvas,_ohs/**`, giống `OHS_IGNORE_ON = True` và `OHS_IGNORE` ở sha này; đối chiếu lại ở lượt này, không sửa gì |
+| `6af65b1` | 2026-11-02 | refactor(ohs): support only the fork's prebuilt OHS bundle | — | đã chuyển | Rust đã chỉ chạy gói dựng sẵn của fork từ trước (PRD mục 9): `OhsPackage::from_dir` đòi `node` và `app/dist/src/cli.js`, thiếu thì báo không có gói; node luôn là node của gói; bộ cài tải gói của fork (Release `v0.17.2-vantt.4`). Không còn nhánh npm để bỏ. Test `test_folder_without_bundle_points_at_missing_files` ứng với `ohs::package::tests::package_requires_node_and_cli`. Không áp dụng: cờ `--node` của `desktop_config.py` (Rust không có cờ này), `setup_vault.py`, `.mjs` |
+| `9f0700b` | 2026-11-02 | chore(kg): retire desktop_config.py, Claude Desktop runs pkm | — | không áp dụng | Xoá `scripts/kg/desktop_config.py` vì `pkm mcp install` đã thay nó (mục "Bộ cài `pkm mcp install` và `pkm doctor`"); Rust không có gì để bỏ. Đổi ở `install-guide-kg-mcp.md` chỉ là ghi chú trỏ sang `pkm` |
 
 ## Lệch có chủ ý
 
@@ -114,7 +119,7 @@ Chỗ bản Python sai rõ ràng và Rust không làm theo (PRD mục 4). Mỗi 
 
 ### `mot-cua-ten-server`: MCP server tên `pkm`
 
-- **Python** (`223c9c3`, `scripts/kg/mcp_server.py`): `serverInfo.name` là `kg`; mục trong cấu hình Claude Desktop cũng tên `kg`.
+- **Python** (`da62ecb`, `scripts/kg/mcp_server.py`): `serverInfo.name` là `kg`; mục trong cấu hình Claude Desktop cũng tên `kg`.
 - **Rust** (`crates/pkm/src/mcp.rs`, `SERVER_NAME`): `pkm`. `pkm mcp install` ghi mục `pkm` (mục `kg` cũ do pkm ghi được đổi tên tại chỗ; mục `kg` của Python giữ nguyên để chạy song song).
 - **Lý do:** Q2 (docs/DECISIONS.md): đổi tên ở đợt một cửa, cho khớp tên binary. Ghi ở `docs/MCP-CHANGELOG.md`.
 - **Ngoại lệ trong bộ so khớp:** `mot-cua-ten-server` (tầng `mcp`, `initialize`, trường `/serverInfo/name`).
@@ -122,7 +127,7 @@ Chỗ bản Python sai rõ ràng và Rust không làm theo (PRD mục 4). Mỗi 
 
 ### `mot-cua-instructions`: `instructions` của một cửa
 
-- **Python** (`223c9c3`, `Server.instructions`): dòng đầu "Typed knowledge graph (kg) …"; dòng cuối dạy phối hợp hai server: tìm bằng `search` của MCP `ohs`, rồi đưa kết quả vào `related` của `kg` dạng `hits`.
+- **Python** (`da62ecb`, `Server.instructions`): dòng đầu "Typed knowledge graph (kg) …"; dòng cuối dạy phối hợp hai server: tìm bằng `search` của MCP `ohs`, rồi đưa kết quả vào `related` của `kg` dạng `hits`.
 - **Rust** (`crates/pkm/src/mcp/instructions.rs`, hằng `ONE_DOOR`): dòng đầu "(pkm)"; dòng cuối dặn chỉ dùng `pkm` và cách chọn tool (gọi tên thì `find`, mô tả thì `search`, cả một loại thì `select`, "liên quan gì" thì `related` với `query`, trích dẫn thì `read`; `find` rỗng thì thử `search`; gặp `ohs_not_ready` thì báo người dùng và tiếp tục bằng tool graph; có MCP `ohs` riêng thì không dùng). Các dòng khác giữ nguyên chữ.
 - **Lý do:** R14 (một cửa) và Q2. Ghi ở `docs/MCP-CHANGELOG.md`.
 - **Ngoại lệ trong bộ so khớp:** `mot-cua-instructions` (tầng `mcp`, `instructions`; trên kg-solo lệch dòng 1 và dòng 10).
@@ -130,7 +135,7 @@ Chỗ bản Python sai rõ ràng và Rust không làm theo (PRD mục 4). Mỗi 
 
 ### `mot-cua-tools-list`: thêm `search`, `read`, viết lại `related`
 
-- **Python** (`223c9c3`, `tool_defs`): 11 tool `find`, `note`, `neighbors`, `reach`, `paths`, `loops`, `provenance`, `select`, `valid`, `related`, `more`; `related` mô tả việc nối sau `search` của OHS.
+- **Python** (`da62ecb`, `tool_defs`): 11 tool `find`, `note`, `neighbors`, `reach`, `paths`, `loops`, `provenance`, `select`, `valid`, `related`, `more`; `related` mô tả việc nối sau `search` của OHS.
 - **Rust** (`pkm_core::tools::defs`): 13 tool theo thứ tự `find`, `search`, `note`, `read`, `neighbors`, `reach`, `paths`, `loops`, `provenance`, `select`, `valid`, `related`, `more`. `search` chuyển tiếp sang OHS; `read` đọc thân note thẳng từ vault; `related` nhận `query`, `queries`, `node`, `hits`. Mười tool còn lại giữ nguyên từng chữ.
 - **Lý do:** R14 và thiết kế chữ ký đã chốt với user (`docs/MCP-CHANGELOG.md`, docs/DECISIONS.md "`read` đọc thẳng từ vault"). `search` đặt cạnh `find`, `read` cạnh `note` để hai cặp dễ nhầm nằm sát nhau.
 - **Ngoại lệ trong bộ so khớp:** `mot-cua-tools-list` (tầng `mcp`, cả `tools_list`: chèn tool làm đổi chỉ số của mọi mục sau). Bù lại, test `tools::tests::definitions_match_the_golden_tools_list_except_one_door_tools` so mười tool giữ nguyên với golden từng chữ và kiểm thứ tự 13 tool; `tools_list_stays_within_its_size_budget` ghim cỡ danh sách.
@@ -138,7 +143,7 @@ Chỗ bản Python sai rõ ràng và Rust không làm theo (PRD mục 4). Mỗi 
 
 ### `mot-cua-related`: `related` nhận câu hỏi và note làm đường chính
 
-- **Python** (`223c9c3`, `Server.call`, nhánh `related`): `query` chỉ dùng khi `hits` rỗng, hạt giống lấy từ CLI OHS (`seed_source: "ohs-cli"`); thiếu cả hai thì lỗi `related needs hits (results of OHS search) or query`.
+- **Python** (`da62ecb`, `Server.call`, nhánh `related`): `query` chỉ dùng khi `hits` rỗng, hạt giống lấy từ CLI OHS (`seed_source: "ohs-cli"`); thiếu cả hai thì lỗi `related needs hits (results of OHS search) or query`.
 - **Rust** (`pkm_core::tools`, hàm `related`): nguồn hạt giống theo thứ tự `hits`, `node` (OHS tìm note giống nghĩa với note đó, `notePath`), `query`/`queries`; `seed_source` là `hits`, `node` hoặc `query`; hạt giống lấy từ OHS có `snippet` (160 ký tự); thiếu cả bốn thì lỗi `related needs query, queries, node or hits`; OHS báo lỗi thì `{"error": "ohs_error", "detail"}`. Gọi với `hits` cho kết quả như Python.
 - **Lý do:** R14: một lời gọi gộp tìm và đi graph. Ghi ở `docs/MCP-CHANGELOG.md`.
 - **Ngoại lệ trong bộ so khớp:** `mot-cua-related` (tầng `tools`, `related`, trường `/result/error`: chỉ lời gọi rỗng của golden lệch, các lời gọi có `hits` khớp chặt).
@@ -146,7 +151,7 @@ Chỗ bản Python sai rõ ràng và Rust không làm theo (PRD mục 4). Mỗi 
 
 ## Test `platform` chuyển từ Python
 
-Nguồn: `scripts/tests/test_platform_paths.py` ở sha ghim, 23 test (19 ở `5a3eb2f`, 4 test `OhsInstall` thêm ở `223c9c3`). Test Rust nằm trong `crates/pkm-core/src/platform.rs` (`platform::tests::…`), chạy bằng `cargo test -p pkm-core platform` trên cả ba nền. Test có `#[cfg(...)]` chỉ chạy trên nền tương ứng (Python giả nền bằng mock; Rust kiểm nền thật trong CI).
+Nguồn: `scripts/tests/test_platform_paths.py` ở sha ghim, 24 test (19 ở `5a3eb2f`, 4 test `OhsInstall` thêm ở `223c9c3`, 1 ở `58010ad`; `6af65b1` thay test bản cài npm). Test Rust nằm trong `crates/pkm-core/src/platform.rs` (`platform::tests::…`), chạy bằng `cargo test -p pkm-core platform` trên cả ba nền. Test có `#[cfg(...)]` chỉ chạy trên nền tương ứng (Python giả nền bằng mock; Rust kiểm nền thật trong CI).
 
 | # | Test Python | Test Rust | Trạng thái | Ghi chú |
 |---|---|---|---|---|
@@ -170,9 +175,10 @@ Nguồn: `scripts/tests/test_platform_paths.py` ở sha ghim, 23 test (19 ở `5
 | 18 | `WindowsText.test_block_id_in_crlf_note` | `vault::tests::block_id_in_crlf_note` | đã chuyển | Test regex `BLOCK` của `kg.vault` trên note CRLF, chuyển cùng module `vault` |
 | 19 | `WindowsText.test_utf8_stdio_on_an_ansi_pipe` | — | không áp dụng | `utf8_stdio` là phần Python thuần (PRD mục 5.4): Rust luôn ghi UTF-8, không phụ thuộc code page |
 | 20 | `OhsInstall.test_fork_bundle_brings_node_and_pack` | `ohs::package::tests::{package_requires_node_and_cli, vietnamese_pack_is_found_only_as_a_folder}` | đã chuyển | `ohs_install` thay bằng `OhsPackage::from_dir` (thư mục gói); nhận `cli.js` của gói qua `--ohs-cli` cũ (`mcp::legacy_package`). Node là `node/bin/node` hoặc `node/node` (Python: `node/node`) |
-| 21 | `OhsInstall.test_npm_install_uses_node_on_path` | — | không áp dụng | Rust chỉ chạy gói dựng sẵn của fork có Node đi kèm (PRD mục 9), không đọc bản cài npm |
+| 21 | `OhsInstall.test_folder_without_bundle_points_at_missing_files` (trước `6af65b1`: `test_npm_install_uses_node_on_path`) | `ohs::package::tests::package_requires_node_and_cli` | đã chuyển | Thư mục không phải gói: Python trả đường dẫn gói không tồn tại, Rust báo lỗi `PackageError` ngay; cả hai coi là không có OHS. Bản cài npm không còn ở cả hai bên |
 | 22 | `OhsInstall.test_windows_bundle_seen_from_wsl` | — | không áp dụng | Đường dẫn Windows nhìn từ WSL và `WSLENV` (PRD mục 2.2) |
 | 23 | `OhsInstall.test_no_pack_leaves_environment_alone` | `tests/ohs_fake.rs::ohs_is_started_with_vault_db_and_clean_environment`; thêm `ohs_runs_with_the_vietnamese_pack_of_its_package` | đã chuyển | Kiểm ở môi trường tiến trình OHS nhận được (server giả ghi lại) |
+| 24 | `OhsInstall.test_ignore_patterns_follow_the_switch` | `tests/ohs_fake.rs::ohs_runs_with_the_vietnamese_pack_of_its_package` (mẫu bỏ qua theo `PACK_IGNORE_ON`), `ohs_is_started_with_vault_db_and_clean_environment` (không gói tiếng Việt thì không có biến nào) | đã chuyển | Công tắc của Rust là hằng lúc biên dịch nên test chỉ kiểm nhánh đang bật; Python giả cả nhánh tắt bằng mock |
 
 Test Rust thêm, không có bản Python: `move_with_zero_tries_still_tries_once` (lệch có chủ ý ở trên), `move_renames_into_vietnamese_name`, `name_taken_in_missing_folder_is_none`, `name_taken_resolves_dot_segments_of_src`, `verbatim_prefixes_drive_and_unc_paths` (Windows: tiền tố `\\?\` cho đường dẫn dài).
 
@@ -211,7 +217,7 @@ Nguồn ở sha ghim: `scripts/kg/tests/test_kg.py` không có test riêng cho `
 
 ## Bộ cài `pkm mcp install` và `pkm doctor`
 
-Thay `scripts/kg/desktop_config.py` (`5a3eb2f`, đối chiếu lại ở `223c9c3`). Mã: `crates/pkm/src/install.rs` (và `install/`), `crates/pkm/src/doctor.rs`. Bản Python không có test cho file này; test Rust nằm trong hai module (`cargo test -p pkm`). Đây là công cụ cài đặt, không thuộc tầng nào của bộ so khớp, nên các chỗ khác dưới đây không cần ngoại lệ có tên.
+Thay `scripts/kg/desktop_config.py` (`5a3eb2f`, đối chiếu lại ở `223c9c3`; repo đặc tả bỏ file này ở `9f0700b` vì `pkm mcp install` đã thay nó). Mã: `crates/pkm/src/install.rs` (và `install/`), `crates/pkm/src/doctor.rs`. Bản Python không có test cho file này; test Rust nằm trong hai module (`cargo test -p pkm`). Đây là công cụ cài đặt, không thuộc tầng nào của bộ so khớp, nên các chỗ khác dưới đây không cần ngoại lệ có tên.
 
 Giống Python: tìm cấu hình ở `%APPDATA%\Claude` và bản Microsoft Store (`%LOCALAPPDATA%\Packages\Claude_*\LocalCache\Roaming\Claude`), thấy nhiều file thì bắt chọn `--config`; chỉ thay mục của mình (nay tên `pkm`), giữ mọi khoá và mục khác theo thứ tự; `mcpServers` không phải object thì thay bằng object mới; thụt lề 2, không thoát ký tự ngoài ASCII, giữ CRLF, bỏ BOM; sao lưu `<file>.bak-<thời điểm>` trước khi ghi; từ chối ghi khi Claude Desktop đang chạy trừ khi `--force`; dựng index trước, lỗi thì không đổi cấu hình; `--check` bắt tay `initialize` rồi `tools/list` với `protocolVersion` `2025-06-18`.
 
@@ -233,7 +239,7 @@ Khác Python (cố ý, vì binary thay cho bản chép mã Python):
 - Cài với `--no-ohs` thì mục `pkm` có `"env": {"PKM_NO_OHS": "1"}`, để `doctor` bỏ qua gói OHS. Lần cài sau không có `--no-ohs` thì bỏ biến này.
 - `--ohs DIR` (không có bản Python): dùng gói OHS có sẵn ở `DIR`, ghi `--ohs DIR` vào `args` của mục `pkm`, không cài gói vào thư mục của `pkm`. `doctor` đọc `--ohs` từ mục `pkm`; lệnh dựng lại index bỏ cờ này.
 - Gói đã cài cũ hơn bản ghim (`version` trong `MANIFEST.json`) thì `mcp install` nâng, không bao giờ hạ cấp; Python không có bước này.
-- OHS báo `language_pack.loaded: false` thì trạng thái `broken`. Có gói tiếng Việt thì OHS có thể chạy thêm `OBSIDIAN_IGNORE_PATTERNS` như `ohs_settings` ở `24f193a`; công tắc `PACK_IGNORE_ON` bật như `OHS_IGNORE_ON` ở `8f89403` (chuyển trước một phần; `kg_adapter` coi `_ohs/` là thư mục hệ thống chưa chuyển).
+- OHS báo `language_pack.loaded: false` thì trạng thái `broken`. Có gói tiếng Việt thì OHS có thể chạy thêm `OBSIDIAN_IGNORE_PATTERNS` như `ohs_settings` ở `24f193a`; công tắc `PACK_IGNORE_ON` bật như `OHS_IGNORE_ON` ở `8f89403`; adapter `e11` coi `_ohs/` là thư mục hệ thống như `kg_adapter` ở `24f193a`.
 - Nguồn gói OHS đổi được mà không cần bản `pkm` mới: biến `PKM_OHS_PACKAGE` (đường dẫn như `--ohs-package`, hoặc URL `https://` của file gói, kèm `<URL>.sha256`) thay cho việc tự tải gói ghim. `--ohs-package` cũng nhận URL. Nguồn URL tải bằng `curl` chỉ qua https, kiểm với file `.sha256` đi kèm.
 - `pkm doctor` (không có bản Python) chỉ đọc: kiểm gói OHS có đủ file và `node --version` (`ohs_node`), chỉ chạy thử OHS khi có `--deep`. OHS là tuỳ chọn ở giai đoạn so khớp, nên mục OHS không ổn chỉ là `warn`, không bao giờ `fail`. Không có OHS thì chỉ `search` và `related` không có `hits` bị ảnh hưởng.
 - `pkm doctor --json` theo envelope chung, khoá ổn định qua các bản: `{"schema": 1, "ok", "data": {"checks": [{"id", "status", "detail", "action", "fix"}]}, "error": null | {"code": "checks_failed", "why", "fix"}, "next": [lệnh]}`. Mã mục: `claude_config`, `kg_entry` (giữ mã cũ dù mục nay tên `pkm`; mục `kg` cũ do pkm ghi là `warn` kèm lệnh cài lại), `ohs_mcp` (thêm ở đợt một cửa: MCP `ohs` riêng còn đăng ký là `warn`, không có `fix`), `db`, `ohs_package`, `ohs_node`, `ohs_state`, `long_paths`. `status` thuộc `ok`, `warn`, `fail`, `skip`. `fix` là lệnh không hỏi gì và chạy lại được, dựng từ `args` của mục `pkm` (`mcp install` lại, hoặc `VAULT build --db DB <cờ đọc>`), cho PowerShell trên Windows và `sh` nơi khác. `next` là `fix` của các mục `fail`. Mã thoát 0 khi `ok`, 1 khi không.

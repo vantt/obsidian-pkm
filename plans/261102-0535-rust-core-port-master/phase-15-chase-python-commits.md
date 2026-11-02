@@ -40,7 +40,8 @@ Một agent con cho mỗi lượt (không chia commit cho nhiều agent song son
 
 ## Các lượt đã chạy
 - [x] Lượt C (2026-11-02, user bảo chạy): chuyển `223c9c3` (OHS chạy từ gói dựng sẵn của fork với gói tiếng Việt) sang `pkm_core::ohs` (commit Rust `ae2ffa1`); nâng `spec.lock` từ `5a3eb2f` lên `223c9c3`, golden dựng lại ở `parity/golden/223c9c3…/` (chỉ đổi `spec_sha`). Python với chính nó và Rust với golden mới (chạy như CI): 64 mục, 0 lệch chưa có tên, 0 mục chưa có. `follow`: 0 commit chưa chuyển. Khoảng cách trước lượt: 1 commit, dưới 1 ngày. Báo cáo: `plans/reports/fullstack-developer-261102-1615-chase-223c9c3.md`.
-- [ ] Lượt C2/C3: khi `follow` lại báo commit mới chạm đường dẫn theo dõi.
+- [x] Lượt 2 (2026-11-02, user bảo chạy): `follow` báo 5 commit, khoảng cách dưới 1 ngày. `24f193a` (mẫu bỏ qua `_ohs/**` và `kg_adapter` coi `_ohs/` là thư mục hệ thống; phần adapter chuyển ở commit Rust `3211180`, phần mẫu bỏ qua đã có từ `2fd131b`), `58010ad` và `8f89403` (công tắc `PACK_IGNORE_ON`, đã có từ `328716f`, đối chiếu lại), `6af65b1` (chỉ gói của fork: Rust đã vậy), `9f0700b` (bỏ `desktop_config.py`: không áp dụng, `pkm mcp install` đã thay). Nâng `spec.lock` từ `223c9c3` lên `da62ecb` (đầu `main` của repo đặc tả; các commit còn lại ngoài đường dẫn theo dõi), golden dựng lại ở `parity/golden/da62ecb…/` (chỉ đổi `spec_sha`). Python với chính nó và Rust với golden mới (chạy như CI): 64 mục, 0 lệch chưa có tên, 0 mục chưa có. `follow`: 0 commit chưa chuyển. Báo cáo: `plans/reports/fullstack-developer-261102-2217-phase-15-round-2.md`.
+- [ ] Lượt sau: khi `follow` lại báo commit mới chạm đường dẫn theo dõi.
 
 ## Nghiệm thu (mỗi lượt)
 - `follow` báo 0 commit chưa xử lý tới sha X.

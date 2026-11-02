@@ -466,7 +466,9 @@ fn counts() {
     assert_eq!(f.info.get("adapter_spec"), Some("e11"));
     assert_eq!(
         f.info.get("hidden"),
-        Some("[\"_E11/\", \"_Xưởng/\", \"_Templates/\", \"_Đề xuất/\", \"Trang chủ.md\"]")
+        Some(
+            "[\"_E11/\", \"_Xưởng/\", \"_Templates/\", \"_Đề xuất/\", \"_ohs/\", \"Trang chủ.md\"]"
+        )
     );
     let dig = f.info.get("schema_digest").unwrap();
     assert!(dig.starts_with("bbaa9f0197ef+e11:"), "{dig}");
@@ -589,7 +591,7 @@ fn load_and_system_pages() {
     let a = load("e11").unwrap().unwrap();
     assert_eq!((a.name(), a.spec()), (Some("e11"), "e11"));
     assert!(a.instructions().unwrap().contains("`_Đề xuất/`"));
-    assert_eq!(a.hidden().len(), 5);
+    assert_eq!(a.hidden().len(), 6);
     let e = load("vault/kg_adapter.py").err().unwrap();
     assert!(
         e.to_string()
@@ -597,7 +599,8 @@ fn load_and_system_pages() {
         "{e}"
     );
     assert!(is_system("_E11/x.md") && is_system("Trang chủ.md") && is_system("_Đề xuất/P1.md"));
-    assert!(!is_system("Trang chủ 2.md") && !is_system("Dự án/_E11/x.md"));
+    assert!(is_system("_ohs/lexicon.md"));
+    assert!(!is_system("Trang chủ 2.md") && !is_system("Dự án/_E11/x.md") && !is_system("_ohs.md"));
 }
 
 /// Tên file dạng NFD (macOS, đồng bộ từ máy khác) có id NFC trong index; `data.to` viết NFD vẫn trỏ đúng note.
