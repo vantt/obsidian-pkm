@@ -19,7 +19,7 @@ Agent chỉ cần nói với `pkm`: thêm tool `search`, `read` chuyển tiếp 
 - Fork OHS: tên tham số của `search`, `read` ở giao thức stdio; `read` cần bản vá P04 của fork (kiểm fork đã có chưa, chưa có thì báo `BLOCKED`).
 
 ## Quyết định cần user trước khi làm
-- Q2: giữ tên MCP `kg` hay đổi thành `pkm` cùng đợt này.
+- Q2: đã chốt (2026-11-02): đổi thành `pkm` ở đợt này, xem `docs/DECISIONS.md`.
 - Cho phép sửa `CLAUDE.md` mẫu của vault và hướng dẫn cài ở repo đặc tả.
 
 ## File được sửa

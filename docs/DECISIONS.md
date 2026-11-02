@@ -164,3 +164,9 @@ Mỗi quyết định một mục, theo khung:
 - **Lựa chọn:** mọi tiến trình OHS mà `pkm` chạy có `OHS_LANGUAGE_PACK=<gói>/lang/ohs-lang-vi` khi thư mục đó có; không thêm cờ tắt. Không nâng gói ghim của bộ cài lên `0.17.2-vantt.2` mà bản Python dùng từ `223c9c3`.
 - **Lý do:** theo bản Python (`platform_paths.ohs_env` ở `223c9c3`): mọi bên dùng chung một index phải cùng gói, nếu không OHS dựng lại bảng view qua lại. Bộ cài của Python cũng không có núm tắt. Artifact ghim của `0.17.2-vantt.1` đã có `lang/ohs-lang-vi` (`vi 0.2.0`, cùng Node 22.23.3 và chín bản vá như `vantt.2`), nên nâng gói không cần cho việc này. Release `v0.17.2-vantt.1`…`vantt.3` của fork nay đã có file gói; chuyển bộ cài từ artifact sang Release (mục "Gói OHS: ghim artifact của một run CI của fork") là việc riêng, chưa làm.
 - **Bằng chứng:** artifact `bundle-linux-x64` của run `41398112909` (sha256 gói `9160d45e…`, khớp bản ghim) có `lang/ohs-lang-vi/package.json`; `bin/ohs` của gói không đặt biến này. Chạy gói đó trên kg-solo với biến: `status` báo `language_pack.loaded: true`, `id: vi`, `version: 0.2.0`; `tests/ohs_real.rs` qua. Test: `ohs::package::tests::vietnamese_pack_is_found_only_as_a_folder`, `tests/ohs_fake.rs::ohs_runs_with_the_vietnamese_pack_of_its_package`.
+
+## Q2: đổi tên MCP thành `pkm` ở đợt một cửa
+- **Ngày:** 2026-11-02
+- **Lựa chọn:** khi làm phase một cửa (R14), tên MCP server trong cấu hình Claude Desktop đổi từ `kg` thành `pkm`. Tới lúc đó vẫn giữ `kg` để chạy song song và so khớp với bản Python.
+- **Lý do:** user chọn (2026-11-02), cho khớp tên binary.
+- **Việc kèm theo:** `pkm mcp install` chuyển mục `kg` cũ sang `pkm` (xoá `kg` do chính nó tạo, giữ mục người dùng tự thêm); cập nhật `CLAUDE.md` mẫu và hướng dẫn ở repo đặc tả khi user cho phép; ghi vào `docs/MCP-CHANGELOG.md`.
