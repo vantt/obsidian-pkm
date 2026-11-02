@@ -157,11 +157,8 @@ impl RustSide {
 
     /// Một lời gọi tool qua điểm vào chung của tool (`pkm_core::tools::call`, như `Server.call` của Python, trước
     /// khi MCP thu gọn JSON). Các lời gọi chạy theo thứ tự của dump mẫu trên cùng một phiên (`more`). Tên vault cho
-    /// link `obsidian://` là tên thư mục vault, như MCP server mặc định. `related` chưa có.
+    /// link `obsidian://` là tên thư mục vault, như MCP server mặc định.
     pub fn tool(&mut self, name: &str, args: &Value) -> Result<Option<Outcome>> {
-        if name == "related" {
-            return Ok(None);
-        }
         let db = self.index_tables()?.db.clone();
         if self.tools.is_none() {
             let t = pkm_core::tools::Tools::open(&db).context("mở index cho tool")?;

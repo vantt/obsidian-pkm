@@ -1,5 +1,6 @@
 //! Bộ tool hỏi graph, dạng hàm trả JSON để MCP server và CLI bọc thẳng: `find`, `note`, `neighbors`, `reach`,
-//! `paths`, `loops`, `provenance`, `select`, `valid`, `more` (lấy tiếp kết quả dài), và chỗ cho `related`.
+//! `paths`, `loops`, `provenance`, `select`, `valid`, `more` (lấy tiếp kết quả dài), `related` (PageRank cá nhân
+//! hoá từ hit tìm kiếm, [`crate::related`]).
 //!
 //! Đặc tả: `scripts/kg/tools.py` ([`Tools`]) và `Server.call` của `scripts/kg/mcp_server.py` ([`call`]: điểm vào
 //! chung theo tên tool và tham số MCP, trước khi MCP thu gọn JSON) ở sha ghim.
@@ -20,12 +21,13 @@ mod tests;
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 
 use indexmap::IndexMap;
 use regex::Regex;
 use serde_json::{Map, Value, json};
 
+use crate::ohs::{Ohs, OhsError, OhsState};
 use crate::query::{Dir, Filter, Graph, QueryError, py};
 use crate::vault::{fold, nfc};
 
@@ -482,6 +484,8 @@ pub struct Context {
     tools: Tools,
     vault: PathBuf,
     vault_name: Option<String>,
+    /// OHS cho `related` chỉ có câu hỏi; `None`: phiên không chạy OHS (tool đó trả `ohs_not_ready`).
+    ohs: Option<Arc<Ohs>>,
 }
 
 /// Tên vault mặc định cho link `obsidian://open`: tên thư mục vault sau `os.path.abspath` (bỏ `.`, `..` theo chữ),
@@ -513,7 +517,23 @@ impl Context {
             tools,
             vault: vault.to_path_buf(),
             vault_name: vault_name.filter(|n| !n.is_empty()),
+            ohs: None,
         }
+    }
+
+    /// Gắn OHS (thường là [`Ohs::launch`] lúc `pkm` khởi động) cho tool cần tìm kiếm; `None` để bỏ.
+    pub fn set_ohs(&mut self, ohs: Option<Arc<Ohs>>) {
+        self.ohs = ohs;
+    }
+
+    /// [`Context::set_ohs`] dạng builder.
+    pub fn with_ohs(mut self, ohs: Arc<Ohs>) -> Context {
+        self.ohs = Some(ohs);
+        self
+    }
+
+    pub fn ohs(&self) -> Option<&Arc<Ohs>> {
+        self.ohs.as_ref()
     }
 
     pub fn tools(&self) -> &Tools {
@@ -946,10 +966,78 @@ pub fn call(ctx: &mut Context, name: &str, args: Value) -> Result<Value> {
     Ok(Value::Object(out))
 }
 
-/// Chỗ của tool `related` (PageRank cá nhân hoá từ hit OHS): chưa có trong bản Rust.
-fn related(_ctx: &mut Context, _a: &Args) -> Result<Value> {
-    Err(ToolError::new(
-        "NotImplementedError",
-        "tool related chưa có trong bản Rust",
-    ))
+/// Số hit lấy từ OHS khi `related` chỉ có câu hỏi (như `ohs_seeds(vault, query, 10, ...)` của Python).
+const OHS_SEEDS: usize = 10;
+
+/// Nguồn hạt giống khi lấy từ OHS: giữ giá trị `seed_source` của Python để hợp đồng MCP không đổi.
+const OHS_SEED_SOURCE: &str = "ohs-cli";
+
+const NO_OHS_INDEX: &str = "no OHS index reachable from this server; call the OHS search tool first and pass its results as hits";
+
+/// Trạng thái báo khi phiên không gắn OHS.
+fn no_ohs_state() -> OhsState {
+    OhsState::Broken {
+        action: "Phiên pkm này không chạy OHS. Khởi động pkm với gói OHS (cờ --ohs <thư mục> hoặc biến PKM_OHS_DIR), \
+                 hoặc gọi search của MCP ohs rồi đưa kết quả vào hits."
+            .to_owned(),
+    }
+}
+
+/// Tool `related` (`Server.call` của Python): hạt giống từ `hits`, hoặc khi không có `hits` thì tìm `query` bằng
+/// OHS của phiên. OHS thiếu hay chưa sẵn sàng thì trả `ohs_not_ready` (D7); không lùi về đọc thẳng DB của OHS như
+/// Python (spec/PORTING.md, mục `ohs`).
+fn related(ctx: &mut Context, a: &Args) -> Result<Value> {
+    let (filter, _) = a.edge()?;
+    let mut src = "hits";
+    let hits = match crate::related::hits_from(a.get("hits"))? {
+        hits if py::truthy(a.get("hits")) => hits,
+        _ => {
+            let q = a.get("query");
+            if !py::truthy(q) {
+                return Ok(json!({"error": "related needs hits (results of OHS search) or query"}));
+            }
+            let Value::String(q) = q else {
+                return Err(type_error(format!(
+                    "expected string or bytes-like object, got '{}'",
+                    py::type_name(q)
+                )));
+            };
+            let found = match ctx.ohs.as_deref() {
+                None => Err(OhsError::NotReady(no_ohs_state())),
+                Some(ohs) => ohs.search(q, json!({"limit": OHS_SEEDS, "snippetLength": 0})),
+            };
+            let results = match found {
+                Ok(r) => r,
+                Err(e) => {
+                    return Ok(match e.not_ready_error() {
+                        Some(v) => v,
+                        None => json!({"error": NO_OHS_INDEX, "detail": format!("OHS lỗi: {e}")}),
+                    });
+                }
+            };
+            let hits: Vec<(Value, Value)> = results
+                .iter()
+                .filter_map(|h| {
+                    let path = h.get("path")?.as_str()?;
+                    let score = h.get("score").and_then(Value::as_f64).unwrap_or(0.0);
+                    Some((Value::String(path.to_owned()), json!(score)))
+                })
+                .take(OHS_SEEDS)
+                .collect();
+            if hits.is_empty() {
+                return Ok(json!({"error": NO_OHS_INDEX, "detail": OHS_SEED_SOURCE}));
+            }
+            src = OHS_SEED_SOURCE;
+            hits
+        }
+    };
+    let opts = crate::related::Options {
+        k: index_int(&a.or("k", crate::related::K.into()), "k")?.unwrap_or(crate::related::K),
+        filter,
+        types: a.get("types").clone(),
+        ..crate::related::Options::default()
+    };
+    let mut r = crate::related::related(ctx.tools.graph(), &hits, &opts)?;
+    r.insert("seed_source".into(), src.into());
+    Ok(Value::Object(r))
 }
