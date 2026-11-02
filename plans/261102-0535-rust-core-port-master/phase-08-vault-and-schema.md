@@ -1,6 +1,6 @@
 ---
 title: "Phase 8: vault và schema"
-status: done
+status: in-progress
 priority: P1
 effort: "2,5 ngày"
 prd: R06
@@ -52,3 +52,5 @@ Cổng G0; chạy bản B.
 
 ## Rủi ro
 YAML lệch dạng mà phase 02 chưa gặp: thêm vào lớp chuẩn hoá, ghi vào báo cáo; lệch không giải thích được thì gọi `kongming` với dòng lệch và giá trị Python tương ứng.
+
+Cổng còn chờ: mã đã xong; còn bộ so khớp `--private` trên bản B cho các bảng vault và schema, do agent Windows và bản B làm theo [handoff](./handoff-windows-test.md).

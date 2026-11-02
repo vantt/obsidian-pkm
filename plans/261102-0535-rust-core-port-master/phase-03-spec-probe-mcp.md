@@ -38,3 +38,5 @@ Chạy thử trên Claude Desktop Windows.
 
 ## Tình trạng (2026-11-02)
 Xong phần máy: hai server thử ở `probes/s2-mcp/`, Claude Code 2.1.316 gọi được tool của cả hai, Q4 đã chốt (JSON-RPC tự viết). Còn chờ user chạy thử Claude Desktop trên Windows theo hướng dẫn ở [báo cáo](../reports/probe-s2-mcp-261102-1317.md#6-việc-của-user-claude-desktop-trên-windows).
+
+Cổng còn chờ: Claude Desktop trên Windows gọi được tool (thử bằng chính `pkm`), do agent Windows và bản B làm theo [handoff](./handoff-windows-test.md).

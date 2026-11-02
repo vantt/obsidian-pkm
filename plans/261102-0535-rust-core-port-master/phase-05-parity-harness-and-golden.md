@@ -54,3 +54,5 @@ Còn lại (user hoãn bản B):
 
 ## Cần user
 Đường dẫn bản B, cho phép chạy trên máy user.
+
+Cổng còn chờ: Python so với chính nó trên bản B và `git grep` tên note bản B, do agent Windows và bản B làm theo [handoff](./handoff-windows-test.md).

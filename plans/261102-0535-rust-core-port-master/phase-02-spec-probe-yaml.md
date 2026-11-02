@@ -42,3 +42,5 @@ Bản B có dạng YAML mà kg-solo không có, nên phải chạy cả hai. Kh�
 
 ## Trạng thái (2026-11-02)
 Xong mọi việc trừ bản B. Q3 đã chốt theo kg-solo, 58 ca biên và 25.000 note ngẫu nhiên: `unsafe-libyaml` + lớp tương thích, 0 lệch ([báo cáo](../reports/probe-s1-yaml-261102-1317.md)). **Còn chờ user** chạy lệnh ở mục 6 của báo cáo trên bản B; user tạm hoãn việc này. Phase 08 có thể bắt đầu theo thiết kế ở mục 5 của báo cáo; nếu bản B ra lệch khác 0 thì bổ sung lớp tương thích.
+
+Cổng còn chờ: bài thử S1 trên bản B, do agent Windows và bản B làm theo [handoff](./handoff-windows-test.md).

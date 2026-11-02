@@ -2,7 +2,7 @@
 
 Hỏi Claude Desktop về graph của vault Obsidian: note nào nối với note nào, đi từ ý này tới ý kia qua đâu, note nào lạc khỏi mạng. Một file `pkm`, không cần Python.
 
-Trạng thái (2026-11-02): **chưa phát hành bản nào.** Đã xong lõi đọc vault, schema, index SQLite, adapter e11 và validator (khớp bản Python), cùng thư viện bộ cài Claude Desktop và `doctor`. Đang nối CLI, MCP `kg` và lệnh `mcp install`, `doctor`. Các bước dưới đây chạy được từ bản `v0.1.0`.
+Trạng thái (2026-11-02): **chưa phát hành bản nào.** Mã đã xong tới bộ cài: lõi, CLI, MCP `kg`, `related` với OHS, `pkm mcp install` và `pkm doctor`, khớp bản Python trên vault thử kg-solo. Đang chờ thử trên Windows thật và trên vault thật. Các bước dưới đây chạy được từ bản `v0.1.0`.
 
 ## Bắt đầu nhanh (Windows)
 

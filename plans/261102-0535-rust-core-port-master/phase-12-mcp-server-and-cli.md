@@ -1,6 +1,6 @@
 ---
 title: "Phase 12: MCP server và CLI"
-status: done
+status: in-progress
 priority: P1
 effort: "2 ngày"
 prd: R10
@@ -45,3 +45,5 @@ Xong phần không cần tầng tool: giao thức MCP, `instructions`, dựng n�
 - 13 test MCP đã chuyển qua; `spec/PORTING.md` có bảng 13 dòng.
 - Claude Code dùng `pkm` thay MCP `kg` gọi được mọi tool trên kg-solo (bản ghi phiên trong báo cáo).
 - Tool `related` qua MCP chỉ nghiệm thu sau khi phase 11 đã merge; trước đó lead nghiệm thu 10 tool còn lại.
+
+Cổng còn chờ: lead quyết có thêm cờ khởi động `--limit`, `--system` cho MCP hay không (PRD mục 8 có, `parser()` của Python ở sha ghim không có). Mọi việc khác đã xong, kể cả `related` qua MCP.

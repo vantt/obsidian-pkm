@@ -116,10 +116,18 @@ Xem mục 16 PRD. Với lead, ba rủi ro cần theo dõi: YAML đọc khác PyY
 
 ## Trạng thái thực hiện (2026-11-02)
 
-| Phase | Trạng thái | Còn lại |
+Mã của phase 01–14 đã xong tới bộ cài, trừ một quyết định của lead ở phase 12. Chưa có tag hay Release nào. Việc còn lại của 02–13 chỉ kiểm được trên Windows thật và trên bản B; agent Windows làm theo [handoff-windows-test.md](./handoff-windows-test.md).
+
+| Nhóm | Phase | Còn lại |
 |---|---|---|
-| 01, 04, 06, 07, 14 | done | — |
-| 02 | in-progress | chạy probe trên bản B (user) |
-| 03 | in-progress | thử Claude Desktop trên Windows (user) |
-| 05 | in-progress | so khớp Python với Python trên bản B (user) |
-| 08–13, 15–17 | todo | chờ cổng G0 và C0 (user) |
+| Xong | 01, 04, 06, 07, 14 | — |
+| Chờ agent Windows và bản B | 02 | bài thử S1 trên bản B |
+| | 03 | Claude Desktop trên Windows gọi được tool |
+| | 05 | Python so với chính nó trên bản B; `git grep` tên note bản B |
+| | 08, 09, 10 | bộ so khớp `--private` trên bản B |
+| | 11 | `related` chỉ có câu hỏi so với Python khi có gói OHS; OHS trên Windows thật |
+| | 13 | `pkm mcp install` trên Windows sạch, Claude Desktop gọi được `kg`, `doctor` không lỗi |
+| Chờ lead quyết | 12 | thêm hay không cờ khởi động `--limit`, `--system` cho MCP |
+| Chưa bắt đầu, chờ user | 15 | user bảo khi nào chạy `follow` và chuyển commit |
+| | 16 | cần 15, kết quả Windows và bản B, user đồng ý gắn tag và chạy song song một tuần |
+| | 17 | cần 16, user quyết Q2 và cho sửa repo đặc tả |

@@ -1,6 +1,6 @@
 ---
 title: "Phase 10: query, tools, more"
-status: done
+status: in-progress
 priority: P1
 effort: "2,5 ngày"
 prd: R08
@@ -37,3 +37,5 @@ JSON của mọi tool trừ `related` khớp Python: `find`, `note`, `neighbors`
 
 ## Cần user
 Chạy bản B.
+
+Cổng còn chờ: mã đã xong; còn bộ câu tool tự sinh trên bản B, do agent Windows và bản B làm theo [handoff](./handoff-windows-test.md).

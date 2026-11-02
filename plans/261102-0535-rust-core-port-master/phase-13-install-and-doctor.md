@@ -23,13 +23,13 @@ Thay `desktop_config.py`: cài MCP `kg` trỏ vào binary `pkm` cho Claude Deskt
 
 ## Việc cần làm
 - [x] Tìm file cấu hình Claude Desktop: `%APPDATA%\Claude\claude_desktop_config.json`, bản Microsoft Store, macOS `~/Library/Application Support/Claude/`.
-- [ ] Dựng index lần đầu vào thư mục dữ liệu của `pkm` (ngoài vault, dùng `platform`). Bộ cài đã gọi `Hooks::build_index` (mặc định chạy `pkm VAULT build --db <thư mục pkm>/kg/<vault>-<hash>.db <cờ đọc>`); còn chờ lệnh `build` của CLI.
+- [x] Dựng index lần đầu vào thư mục dữ liệu của `pkm` (ngoài vault, dùng `platform`). Bộ cài gọi `Hooks::build_index`, mặc định chạy `pkm VAULT build --db <thư mục pkm>/kg/<vault>-<hash>.db <cờ đọc>`; CLI đã có lệnh `build`.
 - [x] Ghi mục `kg`: `command` là đường dẫn đủ của `pkm`, `args` là vault và cờ đọc của vault đó. Giữ nguyên các mục khác trong file cấu hình (gồm MCP `ohs`).
 - [x] `--check` (bắt tay lại như Claude Desktop), `--dry-run`, `--remove`. Từ chối ghi khi Claude Desktop đang chạy, báo rõ.
 - [x] `pkm doctor`: kiểm DB, gói OHS, cấu hình Claude Desktop, đường dẫn dài trên Windows; mỗi lỗi có việc cần làm.
 
 ## Trạng thái (2026-11-02)
-Thư viện `install` và `doctor` xong, có test (`cargo test -p pkm`); gói OHS cài từ artifact ghim (qua `gh`) hoặc `--ohs-package`. Còn lại: `cli` đăng ký `pkm mcp install` và `pkm doctor` (gọi `install::run`, `doctor::run`), lệnh `build` cho lần dựng index đầu, rồi user thử trên Windows sạch. Báo cáo: `plans/reports/fullstack-developer-261102-1440-phase-13-install-doctor.md`.
+Thư viện `install` và `doctor` xong, có test (`cargo test -p pkm`); gói OHS cài từ artifact ghim (qua `gh`) hoặc `--ohs-package`. Sau đó `cli` đã đăng ký `pkm mcp install`, `pkm doctor` và có lệnh `build`; chỉ còn thử trên Windows sạch. Báo cáo: `plans/reports/fullstack-developer-261102-1440-phase-13-install-doctor.md`.
 
 ## Nghiệm thu
 - Test đơn vị: ghi cấu hình vào file tạm giữ nguyên mục khác; `--dry-run` không ghi; `--remove` chỉ xoá mục `kg`.
@@ -38,3 +38,5 @@ Thư viện `install` và `doctor` xong, có test (`cargo test -p pkm`); gói OH
 
 ## Cần user
 Thử trên Windows sạch.
+
+Cổng còn chờ: mã đã xong (`cli` đã đăng ký `pkm mcp install`, `pkm doctor` và có lệnh `build`); còn thử trên Windows sạch, do agent Windows làm theo [handoff](./handoff-windows-test.md).

@@ -1,6 +1,6 @@
 ---
 title: "Phase 9: index, adapter e11, validate"
-status: done
+status: in-progress
 priority: P1
 effort: "3 ngày"
 prd: R07
@@ -43,3 +43,5 @@ Báo cáo: [fullstack-developer-261102-1440-phase-09-index.md](../reports/fullst
 
 ## Cần user
 Chạy bản B.
+
+Cổng còn chờ: mã đã xong; còn bộ so khớp `--private` trên bản B cho mọi bảng và `v3_deviations`, do agent Windows và bản B làm theo [handoff](./handoff-windows-test.md).

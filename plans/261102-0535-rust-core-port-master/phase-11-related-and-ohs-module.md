@@ -1,6 +1,6 @@
 ---
 title: "Phase 11: related và module OHS"
-status: done
+status: in-progress
 priority: P1
 effort: "1,5 ngày"
 prd: R09
@@ -42,3 +42,5 @@ needs_user: false
 - **Module `ohs`: xong.** `crates/pkm-core/src/ohs.rs` và `ohs/{package,process,state}.rs`. Test với server giả `fake-ohs` (`crates/pkm-core/tests/ohs_fake.rs`, không cần Node) chạy được trên cả ba nền; test với OHS thật (`tests/ohs_real.rs`, `#[ignore]`) qua trên Linux. Báo cáo: `plans/reports/fullstack-developer-261102-1400-phase-11-ohs-module.md`.
 - **`related`: xong.** `crates/pkm-core/src/related.rs` (PageRank cá nhân hoá, `via`, dạng hit), nhánh `related` của `tools::call`, OHS gắn vào phiên bằng `tools::Context::with_ohs` / `set_ohs`. Bộ so khớp kg-solo: `tools/related` 15/15 khớp, so chặt lệch số thực 0; thêm 400 lời gọi ngẫu nhiên qua `dump-python.py --replay` khớp hết. Chỉ có câu hỏi: hạt giống từ `Ohs::search`; OHS thiếu hay chưa sẵn sàng thì `ohs_not_ready` (D7). Test với OHS giả (`tests/related_ohs_fake.rs`) chạy trong CI; với OHS thật (`tests/related_ohs_real.rs`, `#[ignore]`) qua trên Linux. Báo cáo: `plans/reports/fullstack-developer-261102-1530-phase-11-related.md`.
 - **Còn lại (ngoài phase này):** so `related` chỉ có câu hỏi với Python trên máy có gói OHS, và thử OHS trên Windows thật (agent khác làm sau, theo quyết định của user). MCP server và CLI gắn `Ohs::launch` vào `Context` thuộc phase 12.
+
+Cổng còn chờ: mã đã xong; còn `related` chỉ có câu hỏi so với Python trên máy có gói OHS, và OHS chạy trên Windows thật, do agent Windows và bản B làm theo [handoff](./handoff-windows-test.md).
