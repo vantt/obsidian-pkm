@@ -94,3 +94,39 @@ Mỗi quyết định một mục, theo khung:
 - **Lựa chọn:** với `!!bool maybe`, `!!timestamp soon`, `!!int ""` và alias vòng trong list, Rust không dừng build mà ghi lỗi YAML cho note đó; ghi "Lệch có chủ ý" trong `spec/PORTING.md` và ngoại lệ có tên trong `parity/exceptions.toml`. Chưa mở issue ở repo đặc tả.
 - **Lý do:** user chọn (2026-11-02).
 - **Bằng chứng:** `plans/reports/probe-s1-yaml-261102-1317.md`.
+
+## Binary Windows dùng CRT tĩnh
+- **Ngày:** 2026-11-02
+- **Lựa chọn:** `.cargo/config.toml` bật `target-feature=+crt-static` cho `x86_64-pc-windows-msvc`. Mỗi lần đóng gói, `scripts/release-assets.sh` chạy `dumpbin -dependents` và dừng nếu binary còn nhập `vcruntime*`, `msvcp*`, `ucrtbase*` hay `api-ms-win-crt-*`. CI và release không đặt `RUSTFLAGS`, vì biến này ghi đè cờ trong file cấu hình.
+- **Lý do:** mặc định target MSVC liên kết động với `VCRUNTIME140.dll`, file không có sẵn trên Windows mới cài hay Windows Sandbox. Claude Desktop khởi chạy `pkm.exe` sẽ lỗi mà không báo gì. SQLite (bundled, qua `cc`) đọc cùng cờ và biên dịch bằng `/MT`. Binary lớn hơn một chút, đổi lại không phải cài thêm gì.
+- **Bằng chứng:** audit `plans/reports/packaging-audit-261102-1505-cs-packaging-distribution.md` (B1); bước "Đóng gói và chạy thử" của `.github/workflows/release-assets.yml` trên `windows-2025`.
+
+## Repo private: cài qua gh, nguồn phát hành công khai tính sau
+- **Ngày:** 2026-11-02
+- **Lựa chọn:** `vantt/obsidian-pkm` giữ private. Bộ cài thử tải công khai (`<base>/download/<tag>/<asset>`) trước; gặp HTTP 401/403/404 thì chuyển sang `gh release download`, và báo rõ phải cài `gh` và `gh auth login` nếu thiếu. Nguồn đổi được không cần sửa script: `PKM_RELEASE_REPO` / `--repo` / `-Repo`, `PKM_RELEASE_BASE_URL` / `--release-base-url` / `-ReleaseBaseUrl`. README hướng dẫn tải bộ cài bằng `gh release download … --output - | Out-String | iex` (Windows) và `… | sh` (macOS, Linux).
+- **Lý do:** user chọn (2026-11-02). Phát hành công khai (có thể là một repo công khai chỉ chứa release) quyết định sau. Khi đó chỉ cần đổi repo mặc định hoặc đặt biến môi trường, và lệnh `irm …/releases/latest/download/install.ps1 | iex` chạy được không cần `gh`.
+- **Bằng chứng:** `gh api repos/vantt/obsidian-pkm` trả `private=true`. Chạy thử `install.sh` với `--version v0.1.0`: tải công khai bị 404 rồi chuyển sang `gh`; khi bỏ `gh` khỏi PATH thì dừng với câu hướng dẫn cài và đăng nhập.
+
+## Bộ cài: `scripts/install.sh`, `scripts/install.ps1`
+- **Ngày:** 2026-11-02
+- **Lựa chọn:**
+  - Asset là binary trần `pkm-<target>[.exe]` (giữ cách đặt tên cũ), cộng một `checksums.txt` gộp; bỏ các file `.sha256` riêng. Tên asset chỉ định nghĩa ở `scripts/release-assets.sh asset_name`.
+  - Cài vào `%LOCALAPPDATA%\pkm\bin` (cùng gốc với `platform::pkm_dir()`) và `~/.local/bin`. Không cần quyền admin, từ chối chạy với quyền admin/root trừ khi `PKM_ALLOW_ROOT=1`.
+  - PATH theo chính sách B của skill `cs-packaging-distribution`: Windows sửa `HKCU\Environment\Path` (giữ kiểu `REG_EXPAND_SZ`, phát `WM_SETTINGCHANGE`); macOS/Linux ghi khối `# >>> pkm >>>` vào `~/.profile`, `~/.bashrc`, `~/.zshrc` và `conf.d` của fish. Gỡ cài xoá đúng phần đã thêm. `--no-modify-path` chỉ in hướng dẫn.
+  - Kiểm sha256 theo đúng một dòng có tên file trùng hẳn, chạy thử `--version` trước khi thay, đổi tên rồi mới thay. Trên Windows, `pkm.exe` đang chạy (Claude Desktop) được đổi tên thành `pkm.exe.old-*` và xoá ở lần chạy sau. Marker `.pkm-managed` ghi phiên bản: cùng phiên bản thì không làm gì, không đè binary không do bộ cài đặt.
+  - `--uninstall` hỏi qua terminal, không có terminal thì cần `--yes`; giữ index và dữ liệu, in đường dẫn và lệnh gỡ mục `kg`.
+  - `--mcp-install <vault>` chạy `pkm mcp install <vault>` sau khi cài, chỉ khi người dùng truyền cờ.
+  - Bộ cài chỉ dùng ký tự ASCII, câu báo bằng tiếng Anh. `release-assets.sh stamp` từ chối file có ký tự ngoài ASCII.
+  - Phiên bản đóng dấu vào bộ cài lúc phát hành (`@PKM_VERSION@`); bản trong repo đòi `--version`.
+- **Lý do:** theo `INS-*`, `SEC-01/04` của skill, phỏng theo `templates/install.sh` của skill, `forgent/scripts/install.ps1` và phần PATH của `skillstation/scripts/install.ps1`. Binary trần đơn giản hơn tar/zip trên Windows (không cần `tar.exe`). ASCII vì Windows PowerShell 5.1 đọc kết quả `irm` (GitHub trả `application/octet-stream`) và file `.ps1` không BOM theo bảng mã cũ, chữ có dấu sẽ vỡ.
+- **Bằng chứng:** `scripts/test-installer.sh` (chạy được trên máy, đã qua trên Linux), `scripts/test-installer.ps1` (Windows PowerShell 5.1 trên CI), shellcheck 0.11.0 sạch.
+
+## Pipeline phát hành
+- **Ngày:** 2026-11-02
+- **Lựa chọn:**
+  - `.github/workflows/release-assets.yml` (`workflow_call`): dựng bốn đích ở chế độ release, đóng gói bằng `scripts/release-assets.sh`, chạy thử `pkm --version` trên runner chạy được đích đó (x86_64-apple-darwin chạy qua Rosetta nếu có, không thì cảnh báo), kiểm CRT tĩnh, thử vòng đời bộ cài, lưu artifact. `ci.yml` gọi nó ở mọi PR.
+  - `release.yml`: `verify` (tag phải bằng `v` + phiên bản crate) → gọi lại cả `ci.yml` → `package` (đóng dấu bộ cài, gộp `checksums.txt`, kiểm đủ 6 file) → `publish` chỉ khi có tag. Tag có dấu `-` thành pre-release. `workflow_dispatch` dừng ở artifact `release-assets`.
+  - Action ghim theo SHA của bản mới nhất (đã kiểm bằng `gh api`): `actions/checkout` v7.0.1, `upload-artifact` v7.0.2, `download-artifact` v8.0.2, `Swatinem/rust-cache` v2.9.3. Runner ghim: `ubuntu-24.04` (trần glibc 2.39 cho binary Linux), `macos-15`, `windows-2025`. Không động vào các bước có sẵn của `ci.yml`; chỉ thêm `workflow_call`, đổi nhóm `concurrency` thành `${{ github.workflow }}-${{ github.ref }}` (lần gọi từ release không huỷ CI của main), và thêm job `assets`.
+  - Chưa làm: release nháp rồi chạy thử bộ cài trên release thật trước khi công khai (REL-07), ký mã và provenance (SEC-02, PRD mục 12).
+- **Lý do:** REL-03/04/05/06/10, VER-02/07, TST-02 của skill. Gọi lại `ci.yml` thay vì chép bước để release luôn chạy đúng bộ kiểm của CI (gồm so khớp).
+- **Bằng chứng:** audit (I6, I7); `gh api repos/<action>/commits/<tag>`.
