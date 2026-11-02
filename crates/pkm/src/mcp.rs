@@ -223,9 +223,13 @@ pub fn py_str(v: Option<&Value>) -> String {
     }
 }
 
-/// Bỏ trường `null` và chuỗi rỗng trong object (ít token hơn cho model); danh sách rỗng giữ lại.
+/// Bỏ trường `null` và chuỗi rỗng trong object (ít token hơn cho model); danh sách rỗng giữ lại. Lỗi
+/// `ohs_not_ready` giữ nguyên cả năm khoá (D7), kể cả `progress`, `eta_s` là `null`.
 pub fn compact(v: Value) -> Value {
     match v {
+        Value::Object(m) if m.get("error").and_then(Value::as_str) == Some("ohs_not_ready") => {
+            Value::Object(m)
+        }
         Value::Object(m) => Value::Object(
             m.into_iter()
                 .filter(|(_, x)| !x.is_null() && x.as_str() != Some(""))
