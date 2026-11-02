@@ -29,6 +29,7 @@ needs_user: true
 - [ ] Tách frontmatter (crate và lớp chuẩn hoá theo Q3), link, block; giải link kiểu Obsidian, alias khi bật (`--no-aliases` tắt).
 - [ ] Giữ CRLF hay LF như Python; đường dẫn trong DB ở dạng NFC (dùng `platform` nếu phase 07 đã merge, không thì viết hàm cục bộ và ghi việc gộp lại).
 - [ ] Bỏ trang theo luật adapter (giao diện trait `Adapter` tối thiểu; phần e11 ở phase 09).
+- [ ] Chuyển hai test Python mà phase platform để lại cho `vault`: `list_notes` và block ID trong file CRLF (xem bảng platform trong `spec/PORTING.md`).
 - [ ] Regex có lookaround: viết lại hoặc dùng `fancy-regex` ở đúng chỗ đó.
 - [ ] Schema nhúng bằng `include_str!` và vẫn nhận file ngoài; nạp gói (`--packs`), `extends`; ghi bảng `schema_*`.
 - [ ] Chuyển các test Python của `vault` và `schema`.

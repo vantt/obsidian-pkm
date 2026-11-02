@@ -55,3 +55,9 @@ Mỗi quyết định một mục, theo khung:
 - **Lựa chọn:** `python3 parity/follow.py` (Python chuẩn, không phụ thuộc ngoài), không dùng `cargo xtask`. Bản clone repo đặc tả nằm ngoài repo này: `$PKM_FOLLOW_CLONE`, `--clone-dir`, hoặc `~/.cache/pkm-follow/spec-repo`. Quyền đọc lấy từ `gh auth git-credential` chỉ cho lệnh git đó, không đổi cấu hình máy.
 - **Lý do:** Bộ so khớp cũng cần Python để chạy bản đặc tả, nên không thêm crate hay thành viên workspace chỉ để chạy một lệnh làm tay. Không đụng `Cargo.lock`, không làm CI build thêm.
 - **Bằng chứng:** `parity/follow.py`; chạy hai lần liên tiếp, tập sha khớp `git log <sha ghim>..origin/main -- <đường dẫn theo dõi>`.
+
+## Module `platform`: `caseless`, `std::env::home_dir`
+- **Ngày:** 2026-11-02
+- **Lựa chọn:** so tên không phân biệt hoa thường bằng `caseless` (khớp `str.casefold` của Python), chuẩn hoá NFC/NFD bằng `unicode-normalization`; thư mục nhà lấy từ `std::env::home_dir` thay vì crate `dirs`; Windows dùng `MoveFileExW` không cờ thay thế (`windows-sys`).
+- **Lý do:** `to_lowercase` không giống `casefold` với một số ký tự; `home_dir` đã đúng trên ba nền từ Rust 1.86 nên không cần thêm crate; `std::fs::rename` trên Windows đè đích, khác `os.rename`.
+- **Bằng chứng:** `crates/pkm-core/src/platform.rs`, bảng test platform trong `spec/PORTING.md`.
