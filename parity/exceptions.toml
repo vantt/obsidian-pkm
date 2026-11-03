@@ -27,8 +27,8 @@ reason = "Alias lồng nhau vượt ngân sách của note (1 triệu props ho�
 name = "mot-cua-ten-server"
 layer = "mcp"
 item = "initialize"
-fields = ["/serverInfo/name"]
-reason = "Một cửa (Q2): MCP server tên `pkm` thay cho `kg`"
+fields = ["/serverInfo/name", "/serverInfo/version"]
+reason = "Một cửa (Q2): MCP server tên `pkm` thay cho `kg`, báo phiên bản của binary `pkm`"
 
 [[exception]]
 name = "mot-cua-instructions"

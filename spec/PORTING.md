@@ -120,9 +120,9 @@ Chỗ bản Python sai rõ ràng và Rust không làm theo (PRD mục 4). Mỗi 
 ### `mot-cua-ten-server`: MCP server tên `pkm`
 
 - **Python** (`da62ecb`, `scripts/kg/mcp_server.py`): `serverInfo.name` là `kg`; mục trong cấu hình Claude Desktop cũng tên `kg`.
-- **Rust** (`crates/pkm/src/mcp.rs`, `SERVER_NAME`): `pkm`. `pkm mcp install` ghi mục `pkm` (mục `kg` cũ do pkm ghi được đổi tên tại chỗ; mục `kg` của Python giữ nguyên để chạy song song).
+- **Rust** (`crates/pkm/src/mcp.rs`, `SERVER_NAME`, `SERVER_VERSION`): `pkm`, `serverInfo.version` là phiên bản của binary (như `pkm --version`; Python ghi cứng `0.1.0`). `pkm mcp install` ghi mục `pkm` (mục `kg` cũ do pkm ghi được đổi tên tại chỗ; mục `kg` của Python giữ nguyên để chạy song song).
 - **Lý do:** Q2 (docs/DECISIONS.md): đổi tên ở đợt một cửa, cho khớp tên binary. Ghi ở `docs/MCP-CHANGELOG.md`.
-- **Ngoại lệ trong bộ so khớp:** `mot-cua-ten-server` (tầng `mcp`, `initialize`, trường `/serverInfo/name`).
+- **Ngoại lệ trong bộ so khớp:** `mot-cua-ten-server` (tầng `mcp`, `initialize`, trường `/serverInfo/name` và `/serverInfo/version`).
 - **Issue ở repo đặc tả:** không cần; hướng dẫn cài và `CLAUDE.md` mẫu ở repo đặc tả sẽ đổi theo khi user cho phép.
 
 ### `mot-cua-instructions`: `instructions` của một cửa

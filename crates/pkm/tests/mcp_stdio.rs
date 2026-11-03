@@ -74,7 +74,9 @@ fn stdio_session_handshakes_and_exits_on_eof() {
     assert_eq!(lines.len(), 5, "{lines:#?}");
 
     // Bản tin in như `json.dumps(..., ensure_ascii=False)` của Python.
-    assert!(lines[0].starts_with(r#"{"jsonrpc": "2.0", "id": 1, "result": {"protocolVersion": "2024-11-05", "capabilities": {"tools": {"listChanged": false}}, "serverInfo": {"name": "pkm", "version": "0.1.0"}, "instructions": "Typed knowledge graph (pkm) of the user's Obsidian vault \"kg-test\": 3 notes. What the vault describes: Test vault. Today is 2026-03-01; use it for \"now\", \"currently\", \"đang\", \"hiện tại\".\n"#), "{}", lines[0]);
+    let head = r#"{"jsonrpc": "2.0", "id": 1, "result": {"protocolVersion": "2024-11-05", "capabilities": {"tools": {"listChanged": false}}, "serverInfo": {"name": "pkm", "version": "VERSION"}, "instructions": "Typed knowledge graph (pkm) of the user's Obsidian vault \"kg-test\": 3 notes. What the vault describes: Test vault. Today is 2026-03-01; use it for \"now\", \"currently\", \"đang\", \"hiện tại\".\n"#;
+    let head = head.replace("VERSION", env!("CARGO_PKG_VERSION"));
+    assert!(lines[0].starts_with(&head), "{}", lines[0]);
     let init: Value = serde_json::from_str(&lines[0]).unwrap();
     let ins = init["result"]["instructions"].as_str().unwrap();
     assert!(

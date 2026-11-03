@@ -248,7 +248,7 @@ fn handshake() {
     assert_eq!(init["protocolVersion"], "2025-06-18");
     assert_eq!(
         init["serverInfo"],
-        json!({"name": "pkm", "version": "0.1.0"})
+        json!({"name": "pkm", "version": env!("CARGO_PKG_VERSION")})
     );
     assert_eq!(
         init["capabilities"],
