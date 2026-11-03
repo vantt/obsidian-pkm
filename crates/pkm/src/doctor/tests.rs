@@ -11,6 +11,7 @@ struct Fake {
     ohs: OhsState,
     node: Result<String, String>,
     long_paths: Option<bool>,
+    vc_runtime: Option<Vec<String>>,
     ohs_runs: RefCell<Vec<PathBuf>>,
 }
 
@@ -20,6 +21,7 @@ impl Fake {
             ohs: OhsState::Ready,
             node: Ok("v22.0.0".into()),
             long_paths: None,
+            vc_runtime: None,
             ohs_runs: RefCell::default(),
         }
     }
@@ -49,6 +51,10 @@ impl Hooks for Fake {
 
     fn long_paths_enabled(&self) -> Option<io::Result<bool>> {
         self.long_paths.map(Ok)
+    }
+
+    fn missing_vc_runtime(&self, _pkg: &OhsPackage) -> Option<Vec<String>> {
+        self.vc_runtime.clone()
     }
 
     fn node_version(&self, _node: &Path) -> Result<String, String> {
@@ -173,6 +179,7 @@ fn healthy_machine_passes_every_check_without_starting_ohs() {
             ("db", Status::Ok),
             ("ohs_package", Status::Ok),
             ("ohs_node", Status::Ok),
+            ("ohs_runtime", Status::Skip),
             ("ohs_state", Status::Skip),
             ("long_paths", Status::Skip),
         ]
@@ -251,7 +258,34 @@ fn missing_ohs_package_only_warns_and_explains_the_impact() {
     let fix = c.fix.as_deref().unwrap();
     assert!(fix.contains("mcp install") && fix.contains("e11"), "{fix}");
     assert_eq!(status(&report, "ohs_node"), Status::Skip);
+    assert_eq!(status(&report, "ohs_runtime"), Status::Skip);
     assert_eq!(status(&report, "ohs_state"), Status::Skip);
+}
+
+#[test]
+fn missing_vc_runtime_on_windows_warns_with_winget_fix() {
+    let m = machine();
+    let report = m.diagnose(
+        &m.args(),
+        &Fake {
+            vc_runtime: Some(vec!["vcruntime140.dll".into(), "msvcp140.dll".into()]),
+            ..Fake::new()
+        },
+    );
+    assert!(report.ok(), "thiếu runtime chỉ là cảnh báo");
+    let c = check(&report, "ohs_runtime");
+    assert_eq!(c.status, Status::Warn, "{c:?}");
+    assert!(c.detail.contains("vcruntime140.dll, msvcp140.dll"), "{c:?}");
+    assert_eq!(c.fix.as_deref(), Some(VC_RUNTIME_FIX));
+
+    let report = m.diagnose(
+        &m.args(),
+        &Fake {
+            vc_runtime: Some(Vec::new()),
+            ..Fake::new()
+        },
+    );
+    assert_eq!(status(&report, "ohs_runtime"), Status::Ok);
 }
 
 #[test]
@@ -291,7 +325,10 @@ fn broken_node_and_every_ohs_state_only_warn() {
         OhsState::Broken {
             action: "Làm X.".into(),
         },
-        OhsState::ModelMissing { detail: "m".into() },
+        OhsState::ModelMissing {
+            detail: "m".into(),
+            missing_runtime: Vec::new(),
+        },
     ] {
         let r = m.diagnose(&args, &Fake { ohs, ..Fake::new() });
         let c = check(&r, "ohs_state");

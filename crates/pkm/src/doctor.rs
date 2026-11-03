@@ -1,6 +1,6 @@
 //! `pkm doctor`: chẩn đoán máy người dùng (PRD mục 10, "Thêm"): cấu hình Claude Desktop và mục `pkm` (mã kiểm vẫn là
-//! `kg_entry` để giữ hợp đồng `--json`), MCP `ohs` riêng, file index, gói OHS và trạng thái OHS (D7), đường dẫn dài
-//! trên Windows. Mỗi mục không ổn có câu "việc cần làm" (`action`) và,
+//! `kg_entry` để giữ hợp đồng `--json`), MCP `ohs` riêng, file index, gói OHS, runtime Visual C++ của gói trên
+//! Windows, trạng thái OHS (D7), đường dẫn dài trên Windows. Mỗi mục không ổn có câu "việc cần làm" (`action`) và,
 //! khi có, một lệnh chạy được không cần hỏi gì (`fix`).
 //!
 //! Chỉ đọc: không ghi file nào, không dựng index, không chạy OHS. Chạy thử OHS (có thể bắt đầu index và nạp model) chỉ
@@ -13,7 +13,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use pkm_core::ohs::{OhsPackage, OhsState};
+use pkm_core::ohs::{OhsPackage, OhsState, VC_RUNTIME_FIX};
 use serde_json::{Value, json};
 
 use crate::install::config::{
@@ -322,6 +322,7 @@ pub fn diagnose(args: &DoctorArgs, hooks: &dyn Hooks, exe: &Path) -> Report {
         &mut checks,
     );
     checks.push(check_ohs_node(pkg.as_ref(), hooks));
+    checks.push(check_ohs_runtime(pkg.as_ref(), hooks));
     checks.push(check_ohs_state(
         pkg,
         vault.filter(|v| v.is_dir()).as_deref(),
@@ -612,6 +613,33 @@ fn check_ohs_node(pkg: Option<&OhsPackage>, hooks: &dyn Hooks) -> Check {
                 pkg.root.display()
             ),
         ),
+    }
+}
+
+/// Windows: Visual C++ Redistributable (x64) mà `onnxruntime-node` của gói OHS cần. Thiếu thì OHS chạy nhưng tìm theo
+/// nghĩa báo `model_missing` (OHS nói nhầm là thiếu `@huggingface/transformers`).
+fn check_ohs_runtime(pkg: Option<&OhsPackage>, hooks: &dyn Hooks) -> Check {
+    const ID: &str = "ohs_runtime";
+    let Some(pkg) = pkg else {
+        return Check::skip(ID, "không có gói OHS");
+    };
+    match hooks.missing_vc_runtime(pkg) {
+        None => Check::skip(ID, "không phải Windows"),
+        Some(missing) if missing.is_empty() => {
+            Check::ok(ID, "có Visual C++ Redistributable (x64) cho tìm theo nghĩa")
+        }
+        Some(missing) => Check::bad(
+            ID,
+            Status::Warn,
+            format!(
+                "thiếu Visual C++ Redistributable (x64): {}; `search` và `related` theo câu hỏi sẽ báo \
+                 model_missing, các tool graph vẫn chạy",
+                missing.join(", ")
+            ),
+            "Cài Microsoft Visual C++ Redistributable (x64) bằng lệnh dưới (hoặc tải vc_redist.x64.exe từ \
+             Microsoft), rồi khởi động lại Claude Desktop.",
+        )
+        .with_fix(Some(VC_RUNTIME_FIX.to_owned())),
     }
 }
 

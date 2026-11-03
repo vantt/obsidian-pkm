@@ -1151,6 +1151,7 @@ fn install_warms_the_ohs_index_unless_told_not_to() {
     let hooks = Fake {
         warm_state: OhsState::ModelMissing {
             detail: "không tải được".into(),
+            missing_runtime: Vec::new(),
         },
         ..Fake::new()
     };

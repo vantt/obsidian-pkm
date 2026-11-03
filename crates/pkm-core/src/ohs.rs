@@ -26,7 +26,8 @@ use unicode_normalization::{UnicodeNormalization, is_nfc};
 
 pub use package::{
     DEFAULT_DIR_NAME, IGNORE_PATTERNS_ENV, LANGUAGE_PACK_ENV, OHS_DIR_ENV, OhsPackage,
-    PACK_IGNORE_ON, PACK_IGNORE_PATTERNS, PackageError,
+    PACK_IGNORE_ON, PACK_IGNORE_PATTERNS, PackageError, VC_RUNTIME_DLLS, VC_RUNTIME_FIX,
+    missing_vc_runtime_in,
 };
 pub use state::OhsState;
 
@@ -154,6 +155,8 @@ struct Shared {
     status_timeout: Duration,
     /// Trạng thái đã lưu cũ hơn chừng này thì hỏi lại `status`.
     max_age: Duration,
+    /// DLL của Visual C++ Redistributable mà gói cần nhưng máy không có (chỉ Windows); gắn vào `model_missing`.
+    missing_runtime: Vec<String>,
 }
 
 impl Shared {
@@ -164,6 +167,7 @@ impl Shared {
             eta: Mutex::default(),
             status_timeout,
             max_age: poll_interval * 2,
+            missing_runtime: Vec::new(),
         }
     }
 
@@ -226,7 +230,13 @@ impl Shared {
         let previous = self.remembered(proc);
         let parsed = match reply {
             Ok(body) => match body.get("status") {
-                Some(s) if s.is_object() => Ok(OhsState::from_status(s)),
+                Some(s) if s.is_object() => Ok(match OhsState::from_status(s) {
+                    OhsState::ModelMissing { detail, .. } => OhsState::ModelMissing {
+                        detail,
+                        missing_runtime: self.missing_runtime.clone(),
+                    },
+                    other => other,
+                }),
                 _ => Err("phản hồi status không có object status".to_owned()),
             },
             Err(CallError::Remote(m)) => Err(format!("OHS từ chối lệnh status: {m}")),
@@ -306,11 +316,9 @@ impl Ohs {
         // OHS chạy với thư mục hiện tại là thư mục gói: đường dẫn tương đối phải được giải trước.
         cfg.vault = absolute(&cfg.vault);
         cfg.db = cfg.db.as_deref().map(absolute);
-        let shared = Arc::new(Shared::new(
-            Phase::Starting(None),
-            cfg.status_timeout,
-            cfg.poll_interval,
-        ));
+        let mut shared = Shared::new(Phase::Starting(None), cfg.status_timeout, cfg.poll_interval);
+        shared.missing_runtime = pkg.missing_vc_runtime();
+        let shared = Arc::new(shared);
         let (tx, rx) = mpsc::channel();
         let request_timeout = cfg.request_timeout;
         let supervisor = Supervisor {

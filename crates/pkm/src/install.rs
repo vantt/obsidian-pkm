@@ -212,6 +212,11 @@ pub trait Hooks {
         state
     }
 
+    /// DLL của Visual C++ Redistributable (x64) mà gói `pkg` cần nhưng máy không có; `None` khi không phải Windows.
+    fn missing_vc_runtime(&self, pkg: &OhsPackage) -> Option<Vec<String>> {
+        cfg!(windows).then(|| pkg.missing_vc_runtime())
+    }
+
     /// Windows có bật đường dẫn dài (`LongPathsEnabled`) không; `None` khi không phải Windows.
     fn long_paths_enabled(&self) -> Option<io::Result<bool>> {
         long_paths_enabled()
