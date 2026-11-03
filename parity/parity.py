@@ -148,6 +148,8 @@ def cmd_run(a, cfg):
         flags = read_flags(a)
         dump(spec, vault, expected, flags, private=bool(a.private))
         private = ['--private'] if a.private else []
+        # Mọi tầng của Rust đã xong: mục "chưa có" (như thiếu PKM_BIN) là lỗi, không phải qua.
+        private += ['--strict']
         report = ['--report', a.report] if a.report else []
         if a.against == 'python':
             actual = os.path.join(work, 'python-2')
