@@ -20,7 +20,7 @@ Từ máy Windows trống tới Claude Desktop hỏi được graph vault trong 
    Lệnh này dựng index, tải gói OHS `0.17.2-vantt.4` (khoảng 100 MB, kiểm sha256) vào `%LOCALAPPDATA%\pkm\ohs`, ghi mục `pkm`, rồi làm ấm index tìm kiếm (vault lớn lần đầu mất vài phút; `--no-warm` để bỏ). Mục `kg` cũ do `pkm` ghi được đổi tên thành `pkm`; mục `ohs` bạn tự thêm thì giữ nguyên (không cần nữa, vì `pkm` đã có `search` và `read`). Máy không ra được GitHub thì tải file gói ở [bản phát hành của fork](https://github.com/vantt/obsidian-hybrid-search/releases/tag/v0.17.2-vantt.4) rồi thêm `--ohs-package <file vừa tải>`; không cần OHS thì thêm `--no-ohs`.
 4. Mở Claude Desktop và hỏi: *"Dùng pkm: vault có bao nhiêu note, note nào được liên kết tới nhiều nhất?"*
 
-Có lỗi thì chạy `pkm doctor`: lệnh này kiểm index, cấu hình Claude Desktop, gói OHS, đường dẫn dài, và in cách sửa.
+Có lỗi thì chạy `pkm doctor`: lệnh này kiểm index, cấu hình Claude Desktop, gói OHS (cả Visual C++ Redistributable mà gói cần trên Windows), đường dẫn dài, và in cách sửa.
 
 macOS, Linux: bước 2 là `curl -fsSL https://github.com/vantt/obsidian-pkm/releases/download/v0.1.0-rc.3/install.sh | sh` (cài vào `~/.local/bin`).
 
@@ -42,7 +42,7 @@ macOS, Linux: bước 2 là `curl -fsSL https://github.com/vantt/obsidian-pkm/re
 <details>
 <summary>Windows mới cài: search báo `model_missing`</summary>
 
-Gói OHS tìm theo nghĩa bằng `onnxruntime-node`, cần Microsoft Visual C++ Redistributable 2015–2022 (x64). Máy Windows mới cài chưa có thì `search` và `related` theo câu hỏi trả `ohs_not_ready` với `state: model_missing` và câu "`@huggingface/transformers` is not installed" (câu này sai: thư viện có đủ, chỉ không nạp được). Các tool graph vẫn chạy. Cài runtime rồi khởi động lại Claude Desktop:
+Gói OHS tìm theo nghĩa bằng `onnxruntime-node`, cần Microsoft Visual C++ Redistributable 2015–2022 (x64). Máy Windows mới cài chưa có thì `search` và `related` theo câu hỏi trả `ohs_not_ready` với `state: model_missing` và câu "`@huggingface/transformers` is not installed" (câu này sai: thư viện có đủ, chỉ không nạp được). Các tool graph vẫn chạy. `pkm doctor` báo việc này ở mục `ohs_runtime`, và lỗi `ohs_not_ready` nêu tên DLL thiếu. Cài runtime rồi khởi động lại Claude Desktop:
 
 ```powershell
 winget install --id Microsoft.VCRedist.2015+.x64

@@ -102,7 +102,7 @@ Kiểm nhanh bằng CLI (index tạm, ngoài vault): `pkm C:\pkm-test\vault-thu 
 
 ### A3. `pkm mcp install`
 
-Claude Desktop phải đang tắt hẳn. Xem trước, không ghi gì:
+Claude Desktop phải đang tắt hẳn. Kiểm bằng tay thì lọc theo đường dẫn, vì `Get-Process claude` bắt cả Claude Code (`%USERPROFILE%\.local\bin\claude.exe`): `Get-Process claude -ErrorAction SilentlyContinue | Where-Object { $_.Path -like '*\WindowsApps\Claude_*' -or $_.Path -like '*\AnthropicClaude\*' }` phải không in gì. `pkm mcp install` tự kiểm đúng cách này. Xem trước, không ghi gì:
 
 ```powershell
 pkm mcp install C:\pkm-test\vault-thu --dry-run
@@ -211,7 +211,7 @@ cargo build --locked -p pkm
 
 PyYAML cài kiểu nào cũng được (`pip install --user pyyaml` hay venv): bài thử YAML gọi Python với `-E -P`, nên vẫn thấy thư mục site của người dùng. Các script Python của bộ so khớp và bài thử tự đặt stdout, stderr về UTF-8, không cần `-X utf8` hay `PYTHONIOENCODING`.
 
-Trên Windows, `python3` thường là lối tắt của Microsoft Store chứ không phải Python thật; dùng `python` (đã kiểm phiên bản ở trên). Sha ghim nằm trong `spec/spec.lock`. `cargo build -p pkm` đặt `pkm.exe` cạnh binary `parity` để bộ so khớp chạy được tầng MCP và CLI; thiếu nó thì hai tầng này báo "chưa có" (không tính là khớp). Cách khác là đặt `PKM_BIN` trỏ tới một `pkm.exe` cùng commit.
+Trên Windows, `python3` thường là lối tắt của Microsoft Store chứ không phải Python thật; dùng `python` (đã kiểm phiên bản ở trên). Sha ghim nằm trong `spec/spec.lock`. **Bắt buộc:** bộ so khớp cần một `pkm.exe` cùng commit cho tầng MCP và CLI: `cargo build -p pkm` (đặt `pkm.exe` cạnh binary `parity`), hoặc đặt `PKM_BIN` trỏ tới `pkm.exe` của bộ cài khi clone đúng tag của bản đó. Thiếu nó thì hai tầng này báo "chưa có" và `parity.py run` trả mã 1 (chạy với `--strict`).
 
 ### B1. Bài thử YAML trên bản B (phase 02)
 
