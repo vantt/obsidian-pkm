@@ -5,7 +5,7 @@
 #   curl -fsSL https://github.com/vantt/obsidian-pkm/releases/latest/download/install.sh | sh -s -- --uninstall
 #
 #   # a pre-release is never "latest": name its tag instead, e.g.
-#   curl -fsSL https://github.com/vantt/obsidian-pkm/releases/download/v0.1.0-rc.3/install.sh | sh
+#   curl -fsSL https://github.com/vantt/obsidian-pkm/releases/download/v0.1.0-rc.4/install.sh | sh
 #
 # Downloads the bare binary pkm-<target> and checksums.txt of one release, refuses unless the
 # binary's own checksums.txt line matches, runs it once, then moves it over the old one.

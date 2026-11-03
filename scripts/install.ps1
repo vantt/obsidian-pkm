@@ -6,7 +6,7 @@
     irm https://github.com/vantt/obsidian-pkm/releases/latest/download/install.ps1 | iex
 
     A pre-release is never 'latest': name its tag instead, e.g.
-    irm https://github.com/vantt/obsidian-pkm/releases/download/v0.1.0-rc.3/install.ps1 | iex
+    irm https://github.com/vantt/obsidian-pkm/releases/download/v0.1.0-rc.4/install.ps1 | iex
 
     Each asset is tried anonymously first; on HTTP 401/403/404 (a private fork set with -Repo) it
     falls back to 'gh release download' (needs the GitHub CLI, logged in with 'gh auth login').

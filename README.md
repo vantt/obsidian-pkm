@@ -2,7 +2,7 @@
 
 Hỏi Claude Desktop về graph của vault Obsidian: note nào nối với note nào, đi từ ý này tới ý kia qua đâu, note nào lạc khỏi mạng. Một file `pkm`, không cần Python.
 
-Trạng thái (2026-11-03): bản thử mới nhất là pre-release `v0.1.0-rc.3`. Mã đã xong tới bộ cài: lõi, CLI, MCP `pkm` (một cửa: tìm kiếm qua OHS và graph; trước tên là `kg`), `related` với OHS, `pkm mcp install` và `pkm doctor`, khớp bản Python trên vault thử kg-solo; đã thử cài trên Windows thật. Các bước dưới đây dùng bản đó. GitHub không coi pre-release là bản mới nhất, nên link tải phải ghi tag (khi có bản chính thức thì dùng `releases/latest/download/…`).
+Trạng thái (2026-11-03): bản thử mới nhất là pre-release `v0.1.0-rc.4`. Mã đã xong tới bộ cài: lõi, CLI, MCP `pkm` (một cửa: tìm kiếm qua OHS và graph; trước tên là `kg`), `related` với OHS, `pkm mcp install` và `pkm doctor`, khớp bản Python trên vault thử kg-solo; đã thử cài trên Windows thật. Các bước dưới đây dùng bản đó. GitHub không coi pre-release là bản mới nhất, nên link tải phải ghi tag (khi có bản chính thức thì dùng `releases/latest/download/…`).
 
 ## Bắt đầu nhanh (Windows)
 
@@ -11,7 +11,7 @@ Từ máy Windows trống tới Claude Desktop hỏi được graph vault trong 
 1. Mở PowerShell (không cần quyền admin).
 2. Cài `pkm` vào `%LOCALAPPDATA%\pkm\bin` và thêm vào PATH:
    ```powershell
-   irm https://github.com/vantt/obsidian-pkm/releases/download/v0.1.0-rc.3/install.ps1 | iex
+   irm https://github.com/vantt/obsidian-pkm/releases/download/v0.1.0-rc.4/install.ps1 | iex
    ```
 3. Thoát hẳn Claude Desktop (cả biểu tượng ở khay hệ thống), rồi nối vault vào Claude Desktop:
    ```powershell
@@ -22,7 +22,7 @@ Từ máy Windows trống tới Claude Desktop hỏi được graph vault trong 
 
 Có lỗi thì chạy `pkm doctor`: lệnh này kiểm index, cấu hình Claude Desktop, gói OHS (cả Visual C++ Redistributable mà gói cần trên Windows), đường dẫn dài, và in cách sửa.
 
-macOS, Linux: bước 2 là `curl -fsSL https://github.com/vantt/obsidian-pkm/releases/download/v0.1.0-rc.3/install.sh | sh` (cài vào `~/.local/bin`).
+macOS, Linux: bước 2 là `curl -fsSL https://github.com/vantt/obsidian-pkm/releases/download/v0.1.0-rc.4/install.sh | sh` (cài vào `~/.local/bin`).
 
 <details>
 <summary>Cập nhật, gỡ cài, tuỳ chọn của bộ cài</summary>
@@ -31,7 +31,7 @@ macOS, Linux: bước 2 là `curl -fsSL https://github.com/vantt/obsidian-pkm/re
 - **Gỡ cài:** gỡ mục `pkm` khỏi Claude Desktop trước, rồi gỡ `pkm`:
   ```powershell
   pkm mcp install --remove
-  $env:PKM_UNINSTALL = '1'; irm https://github.com/vantt/obsidian-pkm/releases/download/v0.1.0-rc.3/install.ps1 | iex
+  $env:PKM_UNINSTALL = '1'; irm https://github.com/vantt/obsidian-pkm/releases/download/v0.1.0-rc.4/install.ps1 | iex
   ```
   Index và gói OHS vẫn nằm ở `%LOCALAPPDATA%\pkm`; xoá thư mục đó nếu muốn bỏ hẳn.
 - **Cài và nối vault một lần:** `$env:PKM_MCP_INSTALL = 'D:\Vault'` trước lệnh ở bước 2.
