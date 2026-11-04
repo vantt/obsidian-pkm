@@ -11,6 +11,7 @@ struct Fake {
     ohs: OhsState,
     node: Result<String, String>,
     long_paths: Option<bool>,
+    vc_runtime: Option<Vec<String>>,
     ohs_runs: RefCell<Vec<PathBuf>>,
 }
 
@@ -20,6 +21,7 @@ impl Fake {
             ohs: OhsState::Ready,
             node: Ok("v22.0.0".into()),
             long_paths: None,
+            vc_runtime: None,
             ohs_runs: RefCell::default(),
         }
     }
@@ -51,12 +53,16 @@ impl Hooks for Fake {
         self.long_paths.map(Ok)
     }
 
+    fn missing_vc_runtime(&self, _pkg: &OhsPackage) -> Option<Vec<String>> {
+        self.vc_runtime.clone()
+    }
+
     fn node_version(&self, _node: &Path) -> Result<String, String> {
         self.node.clone()
     }
 }
 
-/// Máy giả hoàn chỉnh: binary `pkm`, vault, index SQLite, gói OHS và cấu hình có `kg` cùng `ohs`.
+/// Máy giả hoàn chỉnh: binary `pkm`, vault, index SQLite, gói OHS và cấu hình có mục `pkm`.
 struct Machine {
     tmp: tempfile::TempDir,
     exe: PathBuf,
@@ -117,8 +123,13 @@ impl Machine {
         }
     }
 
-    /// Ghi cấu hình có `ohs` và mục `kg` như `pkm mcp install` ghi, với `env` cho mục `kg`.
+    /// Ghi cấu hình có mục `pkm` như `pkm mcp install` ghi, với `env` cho mục đó.
     fn write_entry(&self, env: &[(&str, &str)]) {
+        self.write_servers(env, |entry| serde_json::json!({"pkm": entry}));
+    }
+
+    /// Ghi cấu hình với `mcpServers` dựng từ mục mà `pkm mcp install` ghi.
+    fn write_servers(&self, env: &[(&str, &str)], servers: impl Fn(Value) -> Value) {
         let mut entry = install::server_entry(
             &self.exe,
             &self.vault,
@@ -131,8 +142,7 @@ impl Machine {
             .iter()
             .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
             .collect();
-        let doc =
-            serde_json::json!({"mcpServers": {"ohs": {"command": "node"}, "kg": entry.to_value()}});
+        let doc = serde_json::json!({"mcpServers": servers(entry.to_value())});
         fs::write(&self.config, doc.to_string()).unwrap();
     }
 
@@ -165,9 +175,12 @@ fn healthy_machine_passes_every_check_without_starting_ohs() {
         [
             ("claude_config", Status::Ok),
             ("kg_entry", Status::Ok),
+            ("ohs_mcp", Status::Ok),
             ("db", Status::Ok),
+            ("edges", Status::Skip),
             ("ohs_package", Status::Ok),
             ("ohs_node", Status::Ok),
+            ("ohs_runtime", Status::Skip),
             ("ohs_state", Status::Skip),
             ("long_paths", Status::Skip),
         ]
@@ -238,14 +251,42 @@ fn missing_ohs_package_only_warns_and_explains_the_impact() {
     let c = check(&report, "ohs_package");
     assert_eq!(c.status, Status::Warn);
     assert!(
-        c.detail.contains("chỉ `related` khi không có `hits`"),
+        c.detail
+            .contains("chỉ `search` và `related` không có `hits`"),
         "{c:?}"
     );
     assert!(c.action.as_deref().unwrap().contains("PKM_OHS_PACKAGE"));
     let fix = c.fix.as_deref().unwrap();
     assert!(fix.contains("mcp install") && fix.contains("e11"), "{fix}");
     assert_eq!(status(&report, "ohs_node"), Status::Skip);
+    assert_eq!(status(&report, "ohs_runtime"), Status::Skip);
     assert_eq!(status(&report, "ohs_state"), Status::Skip);
+}
+
+#[test]
+fn missing_vc_runtime_on_windows_warns_with_winget_fix() {
+    let m = machine();
+    let report = m.diagnose(
+        &m.args(),
+        &Fake {
+            vc_runtime: Some(vec!["vcruntime140.dll".into(), "msvcp140.dll".into()]),
+            ..Fake::new()
+        },
+    );
+    assert!(report.ok(), "thiếu runtime chỉ là cảnh báo");
+    let c = check(&report, "ohs_runtime");
+    assert_eq!(c.status, Status::Warn, "{c:?}");
+    assert!(c.detail.contains("vcruntime140.dll, msvcp140.dll"), "{c:?}");
+    assert_eq!(c.fix.as_deref(), Some(VC_RUNTIME_FIX));
+
+    let report = m.diagnose(
+        &m.args(),
+        &Fake {
+            vc_runtime: Some(Vec::new()),
+            ..Fake::new()
+        },
+    );
+    assert_eq!(status(&report, "ohs_runtime"), Status::Ok);
 }
 
 #[test]
@@ -285,7 +326,10 @@ fn broken_node_and_every_ohs_state_only_warn() {
         OhsState::Broken {
             action: "Làm X.".into(),
         },
-        OhsState::ModelMissing { detail: "m".into() },
+        OhsState::ModelMissing {
+            detail: "m".into(),
+            missing_runtime: Vec::new(),
+        },
     ] {
         let r = m.diagnose(&args, &Fake { ohs, ..Fake::new() });
         let c = check(&r, "ohs_state");
@@ -327,7 +371,7 @@ fn every_problem_has_an_action_and_fail_fixes_go_to_next() {
     );
     assert_eq!(
         fix, want,
-        "dựng lại đúng index, cùng cờ đọc, bằng binary của `kg`"
+        "dựng lại đúng index, cùng cờ đọc, bằng binary của mục `pkm`"
     );
     assert!(
         check(&report, "long_paths")
@@ -368,7 +412,7 @@ fn kg_entry_with_missing_command_or_vault_fails() {
             args: vec![vault.to_string_lossy().into_owned(), "mcp".into()],
             env: vec![],
         };
-        let doc = serde_json::json!({"mcpServers": {"kg": entry.to_value()}});
+        let doc = serde_json::json!({"mcpServers": {"pkm": entry.to_value()}});
         fs::write(&m.config, doc.to_string()).unwrap();
         m.diagnose(&m.args(), &Fake::new())
     };
@@ -385,7 +429,7 @@ fn kg_entry_with_missing_command_or_vault_fails() {
             )
             .as_str()
         ),
-        "binary của `kg` mất thì cài lại bằng binary đang chạy doctor"
+        "binary của mục `pkm` mất thì cài lại bằng binary đang chạy doctor"
     );
     let r = set("pkm", &m.vault);
     assert!(
@@ -475,4 +519,94 @@ fn doctor_args_parse_deep_flag() {
     assert!(cli.args.deep && cli.args.json);
     assert!(!Cli::try_parse_from(["doctor"]).unwrap().args.deep);
     assert!(Cli::try_parse_from(["doctor", "--no-ohs-start"]).is_err());
+}
+
+/// Mục `kg` cũ do pkm ghi (trước khi đổi tên): vẫn kiểm vault và index theo mục đó, chỉ cảnh báo kèm lệnh cài lại
+/// (đổi tên thành `pkm`). Mục `kg` của Python (không phải binary pkm) không được tính là của pkm.
+#[test]
+fn legacy_kg_entry_written_by_pkm_warns_with_reinstall_fix() {
+    let m = machine();
+    m.write_servers(&[], |entry| serde_json::json!({"kg": entry}));
+    let report = m.diagnose(&m.args(), &Fake::new());
+    assert!(report.ok());
+    let c = check(&report, "kg_entry");
+    assert_eq!(c.status, Status::Warn, "{c:?}");
+    assert!(c.detail.contains("tên MCP nay là `pkm`"), "{c:?}");
+    let fix = c.fix.as_deref().unwrap();
+    assert!(fix.contains("mcp install") && fix.contains("e11"), "{fix}");
+    assert_eq!(status(&report, "db"), Status::Ok);
+
+    fs::write(
+        &m.config,
+        r#"{"mcpServers": {"kg": {"command": "python.exe", "args": ["scripts/kg/mcp_server.py"]}}}"#,
+    )
+    .unwrap();
+    let report = m.diagnose(&m.args(), &Fake::new());
+    assert_eq!(status(&report, "kg_entry"), Status::Fail);
+}
+
+/// MCP `ohs` riêng cạnh `pkm`: chỉ cảnh báo, không có lệnh sửa tự động (không xoá mục người dùng tự thêm).
+#[test]
+fn separate_ohs_mcp_only_warns() {
+    let m = machine();
+    m.write_servers(
+        &[],
+        |entry| serde_json::json!({"ohs": {"command": "node"}, "pkm": entry}),
+    );
+    let report = m.diagnose(&m.args(), &Fake::new());
+    assert!(report.ok());
+    let c = check(&report, "ohs_mcp");
+    assert_eq!(c.status, Status::Warn, "{c:?}");
+    assert!(c.detail.contains("hai tool search"), "{c:?}");
+    assert!(c.action.as_deref().unwrap().contains("giữ cũng được"));
+    assert_eq!(c.fix, None);
+    assert_eq!(status(&report, "kg_entry"), Status::Ok);
+}
+
+/// Ghi bảng `meta` như một lần dựng: số note, cạnh theo status (JSON) và cách đọc.
+fn write_meta(db: &Path, notes: u64, edges: &str, options: &str) {
+    let c = rusqlite::Connection::open(db).unwrap();
+    c.execute_batch("CREATE TABLE IF NOT EXISTS meta(key TEXT, value TEXT); DELETE FROM meta;")
+        .unwrap();
+    for (k, v) in [
+        ("notes", notes.to_string().as_str()),
+        ("edges", edges),
+        ("options", options),
+    ] {
+        c.execute("INSERT INTO meta VALUES (?1, ?2)", [k, v])
+            .unwrap();
+    }
+}
+
+#[test]
+fn empty_graph_without_body_edges_warns_with_reinstall_fix() {
+    let m = machine();
+    fs::remove_file(&m.db).unwrap();
+    write_meta(&m.db, 3, "{}", "aliases=1,edge_keys=schema,body_edges=0");
+    let report = m.diagnose(&m.args(), &Fake::new());
+    let c = check(&report, "edges");
+    assert_eq!(c.status, Status::Warn, "{c:?}");
+    assert!(report.ok(), "graph rỗng chỉ là cảnh báo");
+    let fix = c.fix.as_deref().unwrap();
+    assert!(
+        fix.contains("mcp install") && fix.ends_with("--edge-keys links --body-edges"),
+        "{fix}"
+    );
+
+    write_meta(&m.db, 3, "{}", "aliases=1,edge_keys=links,body_edges=1");
+    let c = m.diagnose(&m.args(), &Fake::new());
+    assert_eq!(
+        status(&c, "edges"),
+        Status::Ok,
+        "đã đọc thân note mà vẫn rỗng: vault không có link"
+    );
+
+    write_meta(
+        &m.db,
+        3,
+        r#"{"accepted": 4}"#,
+        "aliases=1,edge_keys=schema,body_edges=0",
+    );
+    let c = m.diagnose(&m.args(), &Fake::new());
+    assert_eq!(check(&c, "edges").detail, "3 note, 4 cạnh");
 }

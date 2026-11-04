@@ -5,11 +5,11 @@
 .DESCRIPTION
     irm https://github.com/vantt/obsidian-pkm/releases/latest/download/install.ps1 | iex
 
-    While the repository is private (needs the GitHub CLI, logged in with 'gh auth login'):
-    gh release download --repo vantt/obsidian-pkm --pattern install.ps1 --output - | Out-String | iex
+    A pre-release is never 'latest': name its tag instead, e.g.
+    irm https://github.com/vantt/obsidian-pkm/releases/download/v0.1.0-rc.4/install.ps1 | iex
 
-    Each asset is tried anonymously first; on HTTP 401/403/404 (private repository) it falls back
-    to 'gh release download'.
+    Each asset is tried anonymously first; on HTTP 401/403/404 (a private fork set with -Repo) it
+    falls back to 'gh release download' (needs the GitHub CLI, logged in with 'gh auth login').
     Downloads pkm-x86_64-pc-windows-msvc.exe and checksums.txt of one release, refuses unless the
     binary's own checksums.txt line matches, runs it once, then puts it at
     %LOCALAPPDATA%\pkm\bin\pkm.exe and adds that folder to the user PATH.
@@ -31,9 +31,9 @@
     Other: PKM_ALLOW_ROOT=1 (allow an elevated session).
 
     With parameters:
-      & ([scriptblock]::Create((gh release download --repo vantt/obsidian-pkm --pattern install.ps1 --output - | Out-String))) -McpInstall "D:\Vault"
+      & ([scriptblock]::Create((irm https://github.com/vantt/obsidian-pkm/releases/latest/download/install.ps1))) -McpInstall "D:\Vault"
     Uninstall:
-      $env:PKM_UNINSTALL = '1'; gh release download --repo vantt/obsidian-pkm --pattern install.ps1 --output - | Out-String | iex
+      $env:PKM_UNINSTALL = '1'; irm https://github.com/vantt/obsidian-pkm/releases/latest/download/install.ps1 | iex
 
     Kept ASCII-only on purpose: Windows PowerShell 5.1 decodes 'irm' output and BOM-less .ps1
     files with a legacy code page.
@@ -98,7 +98,7 @@ function Invoke-PkmInstaller {
         throw "PowerShell $($PSVersionTable.PSVersion) is too old; need 5.1 or later."
     }
     if ($env:OS -ne 'Windows_NT') {
-        throw "this installer is for Windows. On macOS or Linux use install.sh: gh release download --repo $repo --pattern install.sh --output - | sh"
+        throw "this installer is for Windows. On macOS or Linux use install.sh: curl -fsSL https://github.com/$repo/releases/latest/download/install.sh | sh"
     }
     if ($releaseBase -notlike 'https://*') { throw "release base URL must be https: $releaseBase" }
 
@@ -233,7 +233,7 @@ public static extern System.IntPtr SendMessageTimeout(System.IntPtr hWnd, uint m
         Write-Step "will remove: $exePath and its PATH entry"
         Write-Step "will keep:   index and data in $(Join-Path $env:LOCALAPPDATA 'pkm') (delete that folder yourself to remove them)"
         if (Test-Path -LiteralPath $exePath -PathType Leaf) {
-            Write-Step "will keep:   the 'kg' entry in Claude Desktop. To remove it first, run:"
+            Write-Step "will keep:   the 'pkm' entry (and an old 'kg' entry written by pkm) in Claude Desktop. To remove them first, run:"
             Write-Step "               & `"$exePath`" mcp install --remove"
         }
         if ($DryRun) { Write-Step 'dry-run: nothing removed'; return }

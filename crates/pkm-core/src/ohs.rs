@@ -1,8 +1,9 @@
 //! Module OHS duy nhất của `pkm` (D6, PRD mục 9): giữ một tiến trình `ohs serve --stdio` sống lâu, gửi request có `id`
 //! đồng thời từ nhiều luồng, khởi động lại có giới hạn khi OHS chết, và báo trạng thái theo D7.
 //!
-//! Dùng: [`Ohs::launch`] khi `pkm` khởi động (không chặn: OHS khởi động ở luồng nền), [`Ohs::search`] trong tool cần
-//! OHS, [`Ohs::state`] để báo trạng thái. Khi OHS chưa sẵn sàng, [`Ohs::search`] trả [`OhsError::NotReady`] và tool
+//! Dùng: [`Ohs::launch`] khi `pkm` khởi động (không chặn: OHS khởi động ở luồng nền), [`Ohs::search`] và
+//! [`Ohs::read`] trong tool cần OHS, [`Ohs::state`] để báo trạng thái. Khi OHS chưa sẵn sàng, hai hàm đó trả
+//! [`OhsError::NotReady`] và tool
 //! trả [`OhsError::not_ready_error`] cho agent; không có đường lùi cho ra kết quả kém (D7). Bỏ [`Ohs`] (hoặc gọi
 //! [`Ohs::shutdown`]) thì đóng stdin của OHS, chờ có giới hạn rồi kill: không để lại tiến trình `node` nào.
 //!
@@ -25,7 +26,8 @@ use unicode_normalization::{UnicodeNormalization, is_nfc};
 
 pub use package::{
     DEFAULT_DIR_NAME, IGNORE_PATTERNS_ENV, LANGUAGE_PACK_ENV, OHS_DIR_ENV, OhsPackage,
-    PACK_IGNORE_ON, PACK_IGNORE_PATTERNS, PackageError,
+    PACK_IGNORE_ON, PACK_IGNORE_PATTERNS, PackageError, VC_RUNTIME_DLLS, VC_RUNTIME_FIX,
+    missing_vc_runtime_in,
 };
 pub use state::OhsState;
 
@@ -153,6 +155,8 @@ struct Shared {
     status_timeout: Duration,
     /// Trạng thái đã lưu cũ hơn chừng này thì hỏi lại `status`.
     max_age: Duration,
+    /// DLL của Visual C++ Redistributable mà gói cần nhưng máy không có (chỉ Windows); gắn vào `model_missing`.
+    missing_runtime: Vec<String>,
 }
 
 impl Shared {
@@ -163,6 +167,7 @@ impl Shared {
             eta: Mutex::default(),
             status_timeout,
             max_age: poll_interval * 2,
+            missing_runtime: Vec::new(),
         }
     }
 
@@ -225,7 +230,13 @@ impl Shared {
         let previous = self.remembered(proc);
         let parsed = match reply {
             Ok(body) => match body.get("status") {
-                Some(s) if s.is_object() => Ok(OhsState::from_status(s)),
+                Some(s) if s.is_object() => Ok(match OhsState::from_status(s) {
+                    OhsState::ModelMissing { detail, .. } => OhsState::ModelMissing {
+                        detail,
+                        missing_runtime: self.missing_runtime.clone(),
+                    },
+                    other => other,
+                }),
                 _ => Err("phản hồi status không có object status".to_owned()),
             },
             Err(CallError::Remote(m)) => Err(format!("OHS từ chối lệnh status: {m}")),
@@ -305,11 +316,9 @@ impl Ohs {
         // OHS chạy với thư mục hiện tại là thư mục gói: đường dẫn tương đối phải được giải trước.
         cfg.vault = absolute(&cfg.vault);
         cfg.db = cfg.db.as_deref().map(absolute);
-        let shared = Arc::new(Shared::new(
-            Phase::Starting(None),
-            cfg.status_timeout,
-            cfg.poll_interval,
-        ));
+        let mut shared = Shared::new(Phase::Starting(None), cfg.status_timeout, cfg.poll_interval);
+        shared.missing_runtime = pkg.missing_vc_runtime();
+        let shared = Arc::new(shared);
         let (tx, rx) = mpsc::channel();
         let request_timeout = cfg.request_timeout;
         let supervisor = Supervisor {
@@ -373,8 +382,23 @@ impl Ohs {
         }
     }
 
+    /// Chờ tối đa `max` khi OHS đang `starting` (vừa khởi động, chưa trả `status`); trả trạng thái cuối. Trạng thái
+    /// khác (`indexing`, `model_missing`, `broken`, `ready`) trả ngay: chờ thêm không làm chúng đổi trong vài giây.
+    pub fn wait_while_starting(&self, max: Duration) -> OhsState {
+        let deadline = Instant::now() + max;
+        loop {
+            let state = self.state();
+            let left = deadline.saturating_duration_since(Instant::now());
+            if !matches!(state, OhsState::Starting) || left.is_zero() {
+                return state;
+            }
+            thread::sleep(left.min(Duration::from_millis(200)));
+        }
+    }
+
     /// Tìm bằng OHS. `options` là object tuỳ chọn của OHS (`limit`, `mode`, `snippetLength`, `scope`, …) hoặc `null`.
-    /// `path` của mỗi kết quả được chuẩn hoá NFC (OHS trả NFD) để tra được trong index.
+    /// Đường dẫn trong mỗi kết quả được chuẩn hoá NFC (OHS trả NFD) để tra được trong index, xem
+    /// [`normalize_result_paths`].
     ///
     /// Kiểm `status` trước: OHS in `ready` trước khi index xong và lúc đó tìm trả `[]` không báo lỗi, nên chỉ tìm khi
     /// trạng thái là `ready`; ngược lại trả [`OhsError::NotReady`].
@@ -382,35 +406,63 @@ impl Ohs {
         if query.trim().is_empty() {
             return Err(OhsError::Invalid("câu tìm rỗng".into()));
         }
-        let options = match options {
-            Value::Object(m) => m,
-            Value::Null => Map::new(),
-            other => {
-                return Err(OhsError::Invalid(format!(
-                    "options phải là object, nhận {other}"
-                )));
-            }
-        };
+        let options = options_object(options)?;
+        let mut req = Map::new();
+        req.insert("query".into(), query.into());
+        req.insert("options".into(), Value::Object(options));
+        self.request(req, "results")
+    }
+
+    /// Đọc note bằng action `read` của OHS: mỗi phần tử của `paths` cho đúng một phần tử kết quả, cùng thứ tự. Note có
+    /// trong index là `{path, found: true, title, aliases, tags, content, links, backlinks, markdownLinks,
+    /// markdownBacklinks, urls}`, không có là `{path, found: false, suggestions}`. `options` là các khoá còn lại của
+    /// request (`snippetLength`, `related`) hoặc `null`; OHS bỏ qua khoá nó không biết. Đường dẫn được chuẩn hoá NFC như
+    /// [`Ohs::search`]. OHS tự đưa `paths` về NFD khi tra, nên gửi NFC được.
+    ///
+    /// Chỉ đọc khi trạng thái là `ready`, như [`Ohs::search`]: lúc đang index, note chưa vào index sẽ bị báo `found:
+    /// false` sai.
+    pub fn read(&self, paths: &[String], options: Value) -> Result<Vec<Value>, OhsError> {
+        if paths.is_empty() {
+            return Err(OhsError::Invalid("paths rỗng".into()));
+        }
+        if paths.iter().any(|p| p.trim().is_empty()) {
+            return Err(OhsError::Invalid("paths có đường dẫn rỗng".into()));
+        }
+        let options = options_object(options)?;
+        if let Some(key) = ["id", "action", "paths"]
+            .into_iter()
+            .find(|k| options.contains_key(*k))
+        {
+            return Err(OhsError::Invalid(format!(
+                "options của read không được có khoá {key}"
+            )));
+        }
+        let mut req = Map::new();
+        req.insert("action".into(), "read".into());
+        req.insert("paths".into(), paths.into());
+        req.extend(options);
+        self.request(req, "notes")
+    }
+
+    /// Gửi `req` khi OHS `ready` và lấy mảng `field` của phản hồi, đường dẫn đã chuẩn hoá NFC.
+    fn request(&self, req: Map<String, Value>, field: &str) -> Result<Vec<Value>, OhsError> {
         let proc = self.shared.running().map_err(OhsError::NotReady)?;
         let state = self.shared.current(&proc);
         if !state.is_ready() {
             return Err(OhsError::NotReady(state));
         }
-        let mut req = Map::new();
-        req.insert("query".into(), query.into());
-        req.insert("options".into(), Value::Object(options));
         let body = match proc.call(req, self.request_timeout) {
             Ok(body) => body,
             Err(CallError::Disconnected) => return Err(OhsError::NotReady(self.state())),
             Err(CallError::Timeout(d)) => return Err(OhsError::Timeout(d)),
             Err(CallError::Remote(m)) => return Err(OhsError::Remote(m)),
         };
-        let mut results = match body {
-            Value::Object(mut m) => match m.remove("results") {
+        let mut items = match body {
+            Value::Object(mut m) => match m.remove(field) {
                 Some(Value::Array(a)) => a,
                 other => {
                     return Err(OhsError::Protocol(format!(
-                        "phản hồi search không có mảng results: {other:?}"
+                        "phản hồi không có mảng {field}: {other:?}"
                     )));
                 }
             },
@@ -420,8 +472,8 @@ impl Ohs {
                 )));
             }
         };
-        normalize_result_paths(&mut results);
-        Ok(results)
+        normalize_result_paths(&mut items);
+        Ok(items)
     }
 
     /// PID của tiến trình OHS hiện tại, nếu có (để chẩn đoán và kiểm không mồ côi).
@@ -456,13 +508,66 @@ fn absolute(p: &Path) -> PathBuf {
     std::path::absolute(p).unwrap_or_else(|_| p.to_path_buf())
 }
 
-/// Chuẩn hoá `path` của mỗi kết quả sang NFC, tại chỗ; trường khác giữ nguyên.
+/// Câu tìm gửi OHS và `options.queries` từ tham số kiểu MCP của OHS (`query`, `queries`, `path`), đúng như MCP
+/// `search` của OHS đổi trước khi tìm: các câu là `query` rồi `queries` (bỏ câu rỗng); câu gửi đi là `path` nếu có,
+/// không thì câu đầu; `queries` chỉ gửi khi có từ hai câu. `None` khi không có câu nào và không có `path`.
+pub fn search_input(
+    query: Option<&str>,
+    queries: &[String],
+    path: Option<&str>,
+) -> Option<(String, Option<Vec<String>>)> {
+    let all: Vec<String> = query
+        .into_iter()
+        .chain(queries.iter().map(String::as_str))
+        .filter(|q| !q.trim().is_empty())
+        .map(str::to_owned)
+        .collect();
+    let input = path
+        .filter(|p| !p.trim().is_empty())
+        .map(str::to_owned)
+        .or_else(|| all.first().cloned())?;
+    let multi = (all.len() > 1).then_some(all);
+    Some((input, multi))
+}
+
+/// Object tuỳ chọn của request: object giữ nguyên, `null` là object rỗng, kiểu khác là lỗi.
+fn options_object(options: Value) -> Result<Map<String, Value>, OhsError> {
+    match options {
+        Value::Object(m) => Ok(m),
+        Value::Null => Ok(Map::new()),
+        other => Err(OhsError::Invalid(format!(
+            "options phải là object, nhận {other}"
+        ))),
+    }
+}
+
+/// Khoá chứa danh sách đường dẫn note trong kết quả `search` và `read` của OHS.
+const PATH_LIST_FIELDS: [&str; 5] = [
+    "links",
+    "backlinks",
+    "markdownLinks",
+    "markdownBacklinks",
+    "suggestions",
+];
+
+/// Chuẩn hoá sang NFC, tại chỗ, `path` và các danh sách đường dẫn ([`PATH_LIST_FIELDS`]) của mỗi kết quả; trường
+/// khác giữ nguyên.
 fn normalize_result_paths(results: &mut [Value]) {
-    for r in results {
-        if let Some(Value::String(p)) = r.get_mut("path")
+    fn nfc(v: &mut Value) {
+        if let Value::String(p) = v
             && !is_nfc(p)
         {
             *p = p.nfc().collect();
+        }
+    }
+    for r in results {
+        if let Some(p) = r.get_mut("path") {
+            nfc(p);
+        }
+        for key in PATH_LIST_FIELDS {
+            if let Some(Value::Array(list)) = r.get_mut(key) {
+                list.iter_mut().for_each(nfc);
+            }
         }
     }
 }
@@ -684,6 +789,73 @@ mod tests {
         assert_eq!(results[0]["score"], 0.5);
         assert_eq!(results[1], json!({"score": 1}));
         assert_eq!(results[2]["path"], "ascii.md");
+    }
+
+    #[test]
+    fn path_lists_of_read_and_search_results_are_normalized_to_nfc() {
+        let n = |s: &str| -> String { s.nfd().collect() };
+        let mut results = vec![
+            json!({"path": n("Đà Nẵng.md"), "found": true, "content": n("Đà"),
+                   "links": [n("Huế.md"), "a.md"], "backlinks": [n("Hà Nội.md")],
+                   "markdownLinks": [n("Ổn.md")], "markdownBacklinks": [], "urls": [n("https://ví.dụ")]}),
+            json!({"path": n("Thiếu.md"), "found": false, "suggestions": [n("Thiếu sót.md")]}),
+        ];
+        normalize_result_paths(&mut results);
+        assert_eq!(
+            results[0],
+            json!({"path": "Đà Nẵng.md", "found": true, "content": n("Đà"),
+                   "links": ["Huế.md", "a.md"], "backlinks": ["Hà Nội.md"],
+                   "markdownLinks": ["Ổn.md"], "markdownBacklinks": [], "urls": [n("https://ví.dụ")]})
+        );
+        assert_eq!(
+            results[1],
+            json!({"path": "Thiếu.md", "found": false, "suggestions": ["Thiếu sót.md"]})
+        );
+    }
+
+    #[test]
+    fn invalid_read_input_is_rejected_before_anything_is_sent() {
+        let ohs = Ohs::unavailable(OhsState::Starting);
+        let one = vec!["a.md".to_owned()];
+        for (paths, options) in [
+            (vec![], Value::Null),
+            (vec![" ".to_owned()], Value::Null),
+            (one.clone(), json!("x")),
+            (one.clone(), json!({"paths": ["b.md"]})),
+            (one.clone(), json!({"action": "search"})),
+            (one.clone(), json!({"id": "r1"})),
+        ] {
+            assert!(
+                matches!(ohs.read(&paths, options.clone()), Err(OhsError::Invalid(_))),
+                "{paths:?} {options}"
+            );
+        }
+        let err = ohs.read(&one, json!({"related": false})).unwrap_err();
+        assert_eq!(err.not_ready_error().unwrap()["state"], "broken");
+    }
+
+    #[test]
+    fn search_input_maps_like_the_ohs_search_tool() {
+        let qs = |v: &[&str]| v.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>();
+        assert_eq!(search_input(None, &[], None), None);
+        assert_eq!(search_input(Some(" "), &qs(&[""]), None), None);
+        assert_eq!(
+            search_input(Some("khách"), &[], None),
+            Some(("khách".to_owned(), None))
+        );
+        assert_eq!(
+            search_input(Some("khách"), &qs(&["client", ""]), None),
+            Some(("khách".to_owned(), Some(qs(&["khách", "client"]))))
+        );
+        assert_eq!(
+            search_input(None, &qs(&["a", "b"]), None),
+            Some(("a".to_owned(), Some(qs(&["a", "b"]))))
+        );
+        // `path` là câu gửi đi; các câu vẫn đi kèm như OHS làm.
+        assert_eq!(
+            search_input(Some("x"), &[], Some("A/B.md")),
+            Some(("A/B.md".to_owned(), None))
+        );
     }
 
     #[test]

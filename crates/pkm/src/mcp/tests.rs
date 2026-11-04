@@ -108,6 +108,9 @@ impl ToolSession for FakeSession {
                 json!({"count": 1, "items": [{"id": "Khách hàng/Công ty ABC.md", "title": "Công ty ABC", "type": "organization", "aliases": [], "note": null, "x": ""}]}),
             ),
             "big" => Ok(json!({"text": "đ".repeat(100)})),
+            "notready" => Ok(
+                json!({"error": "ohs_not_ready", "state": "starting", "progress": null, "eta_s": null, "action": "Chờ."}),
+            ),
             "boom" => Err("ValueError('hỏng')".to_owned()),
             "panic" => panic!("tool hỏng giữa chừng"),
             "neighbors" => Ok(
@@ -208,6 +211,24 @@ fn compact_drops_null_and_empty_strings_but_keeps_empty_lists() {
 }
 
 #[test]
+fn compact_keeps_every_key_of_ohs_not_ready() {
+    let e = json!({"error": "ohs_not_ready", "state": "broken", "progress": null, "eta_s": null, "action": "x"});
+    assert_eq!(compact(e.clone()), e);
+}
+
+/// Lỗi `ohs_not_ready` tới agent đủ năm khoá, đúng thứ tự, kể cả `progress`, `eta_s` là `null` (D7), và là lỗi.
+#[test]
+fn ohs_not_ready_reaches_the_client_with_all_five_keys() {
+    let s = start(&["--refresh-every", "-1"], true);
+    let (text, err) = call(&s.server, "notready", json!({}));
+    assert!(err);
+    assert_eq!(
+        text,
+        r#"{"error":"ohs_not_ready","state":"starting","progress":null,"eta_s":null,"action":"Chờ."}"#
+    );
+}
+
+#[test]
 fn handshake() {
     let s = start(
         &[
@@ -227,7 +248,7 @@ fn handshake() {
     assert_eq!(init["protocolVersion"], "2025-06-18");
     assert_eq!(
         init["serverInfo"],
-        json!({"name": "kg", "version": "0.1.0"})
+        json!({"name": "pkm", "version": env!("CARGO_PKG_VERSION")})
     );
     assert_eq!(
         init["capabilities"],
@@ -240,7 +261,7 @@ fn handshake() {
         "never to your own tools",
         "proposed_by",
         "increases (inverse increased_by, polarity +)",
-        "OHS",
+        "Use only this server (pkm)",
         "\"Vault thử\": 6 notes.",
         "obsidian://open?vault=Vault%20th%E1%BB%AD&file=PATH",
     ] {
@@ -553,7 +574,7 @@ fn missing_vault_reports_the_build_error_in_instructions() {
     let ins = s.instructions();
     assert!(
         ins.starts_with(
-            "Typed knowledge graph (kg) of an Obsidian vault; the index is still being built. "
+            "Typed knowledge graph (pkm) of an Obsidian vault; the index is still being built. "
         ),
         "{ins}"
     );

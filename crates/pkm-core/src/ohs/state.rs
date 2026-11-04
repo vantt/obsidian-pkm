@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 
-use super::package::{OHS_DIR_ENV, PackageError};
+use super::package::{OHS_DIR_ENV, PackageError, VC_RUNTIME_FIX};
 
 /// Trạng thái của OHS mà tool nhìn thấy.
 #[derive(Debug, Clone, PartialEq)]
@@ -22,7 +22,13 @@ pub enum OhsState {
     },
     /// Không có model dùng được: không nạp hoặc tải được model, hoặc index dựng bằng model khác model tiến trình
     /// đang dùng. OHS ngừng index hoặc nhánh nghĩa không đáng tin; D7 không cho trả kết quả kém.
-    ModelMissing { detail: String },
+    ///
+    /// `missing_runtime`: trên Windows, DLL của Visual C++ Redistributable mà gói cần nhưng máy không có (nguyên
+    /// nhân thật khi OHS báo thiếu `@huggingface/transformers`); rỗng nơi khác.
+    ModelMissing {
+        detail: String,
+        missing_runtime: Vec<String>,
+    },
     /// Không chạy được và không tự khỏi: thiếu gói, chết quá số lần khởi động lại, khởi tạo index lỗi, hoặc `pkm`
     /// đang tắt. `action` là câu đầy đủ nói việc người dùng cần làm.
     Broken { action: String },
@@ -93,7 +99,16 @@ impl OhsState {
                     indexed + pending
                 )
             }
-            Self::ModelMissing { detail } => format!(
+            Self::ModelMissing {
+                detail,
+                missing_runtime,
+            } if !missing_runtime.is_empty() => format!(
+                "Windows thiếu Microsoft Visual C++ Redistributable (x64) ({}) mà tìm theo nghĩa của OHS cần. Cài bằng \
+                 `{VC_RUNTIME_FIX}` (hoặc tải vc_redist.x64.exe từ Microsoft), rồi khởi động lại Claude Desktop. OHS \
+                 báo: {detail}",
+                missing_runtime.join(", ")
+            ),
+            Self::ModelMissing { detail, .. } => format!(
                 "OHS không có model tìm theo nghĩa dùng được ({detail}). Kiểm kết nối mạng để OHS tải được model, \
                  hoặc dựng lại index của OHS nếu đã đổi model, rồi khởi động lại pkm."
             ),
@@ -135,6 +150,7 @@ impl OhsState {
         {
             return Self::ModelMissing {
                 detail: format!("index dựng bằng {model}, OHS đang dùng {active}"),
+                missing_runtime: Vec::new(),
             };
         }
         let init_error = status
@@ -156,6 +172,7 @@ impl OhsState {
             {
                 Self::ModelMissing {
                     detail: message.to_owned(),
+                    missing_runtime: Vec::new(),
                 }
             } else {
                 Self::Broken {
@@ -393,7 +410,10 @@ mod tests {
     fn progress_and_eta_are_null_outside_indexing() {
         for s in [
             OhsState::Starting,
-            OhsState::ModelMissing { detail: "x".into() },
+            OhsState::ModelMissing {
+                detail: "x".into(),
+                missing_runtime: Vec::new(),
+            },
             OhsState::Broken {
                 action: "cài lại".into(),
             },
@@ -403,6 +423,25 @@ mod tests {
             assert_eq!(e["state"], s.name());
             assert!(!e["action"].as_str().unwrap().is_empty());
         }
+    }
+
+    #[test]
+    fn model_missing_names_the_vc_runtime_before_the_ohs_message() {
+        let s = OhsState::ModelMissing {
+            detail: "@huggingface/transformers is not installed".into(),
+            missing_runtime: vec!["vcruntime140.dll".into(), "msvcp140.dll".into()],
+        };
+        let action = s.action();
+        assert!(
+            action.starts_with("Windows thiếu Microsoft Visual C++ Redistributable (x64) (vcruntime140.dll, msvcp140.dll)"),
+            "{action}"
+        );
+        assert!(action.contains(VC_RUNTIME_FIX), "{action}");
+        assert!(
+            action.ends_with("OHS báo: @huggingface/transformers is not installed"),
+            "{action}"
+        );
+        assert_eq!(s.not_ready_error().unwrap()["state"], "model_missing");
     }
 
     #[test]

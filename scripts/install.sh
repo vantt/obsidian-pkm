@@ -4,13 +4,13 @@
 #   curl -fsSL https://github.com/vantt/obsidian-pkm/releases/latest/download/install.sh | sh
 #   curl -fsSL https://github.com/vantt/obsidian-pkm/releases/latest/download/install.sh | sh -s -- --uninstall
 #
-#   # while the repository is private (needs the GitHub CLI, logged in with `gh auth login`):
-#   gh release download --repo vantt/obsidian-pkm --pattern install.sh --output - | sh
+#   # a pre-release is never "latest": name its tag instead, e.g.
+#   curl -fsSL https://github.com/vantt/obsidian-pkm/releases/download/v0.1.0-rc.4/install.sh | sh
 #
 # Downloads the bare binary pkm-<target> and checksums.txt of one release, refuses unless the
 # binary's own checksums.txt line matches, runs it once, then moves it over the old one.
-# Each asset is tried anonymously first; on HTTP 401/403/404 (private repository) it falls back to
-# `gh release download`. Re-running updates in place; the same version is a no-op. Asset names come from
+# Each asset is tried anonymously first; on HTTP 401/403/404 (a private fork set with --repo) it falls
+# back to `gh release download`. Re-running updates in place; the same version is a no-op. Asset names come from
 # scripts/release-assets.sh (asset_name), which the release workflow uses.
 # Kept ASCII-only on purpose (see release-assets.sh stamp).
 # main "$@" is the LAST line so a truncated `curl | sh` never runs a partial script.
@@ -26,14 +26,14 @@ BLOCK_END="# <<< ${APP} <<<"
 
 usage() {
   cat <<EOF
-Install, update or remove ${APP} (knowledge-graph tools and the 'kg' MCP server for an Obsidian vault).
+Install, update or remove ${APP} (knowledge-graph tools and the 'pkm' MCP server for an Obsidian vault).
 
 Usage:
   curl -fsSL https://github.com/${DEFAULT_REPO}/releases/latest/download/install.sh | sh -s -- [options]
-  gh release download --repo ${DEFAULT_REPO} --pattern install.sh --output - | sh -s -- [options]
   sh install.sh [options]
 
-While ${DEFAULT_REPO} is private, anonymous downloads fail and the script falls back to the
+A pre-release is never "latest": put its tag in the URL (releases/download/<tag>/install.sh).
+From a private repository (--repo) anonymous downloads fail and the script falls back to the
 GitHub CLI: install gh (https://cli.github.com) and run 'gh auth login' first.
 
 Options (each also as an env var):
@@ -126,7 +126,7 @@ detect_target() {
     Linux) os=linux ;;
     Darwin) os=darwin ;;
     MINGW*|MSYS*|CYGWIN*) die "Windows shell detected" "this script is for macOS and Linux" \
-      "in PowerShell: gh release download --repo $REPO --pattern install.ps1 --output - | Out-String | iex" ;;
+      "in PowerShell: irm https://github.com/$REPO/releases/latest/download/install.ps1 | iex" ;;
     *) die "unsupported OS: $(uname -s)" "no prebuilt binary" "build from source: cargo install --git https://github.com/$REPO --locked pkm" ;;
   esac
   cpu="$(uname -m)"
@@ -332,7 +332,7 @@ uninstall() {
   say "will remove: $INSTALL_DIR/$APP and the PATH lines this script added"
   say "will keep:   index and data in $(data_dir)  (delete that folder yourself to remove them)"
   if [ -x "$INSTALL_DIR/$APP" ]; then
-    say "will keep:   the 'kg' entry in Claude Desktop. To remove it first, run:"
+    say "will keep:   the 'pkm' entry (and an old 'kg' entry written by pkm) in Claude Desktop. To remove them first, run:"
     say "               \"$INSTALL_DIR/$APP\" mcp install --remove"
   fi
   if [ "$DRY_RUN" = 1 ]; then say "dry-run: nothing removed"; return 0; fi

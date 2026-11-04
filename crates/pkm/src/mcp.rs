@@ -1,4 +1,5 @@
-//! `pkm VAULT mcp`: MCP server stdio của index graph, chép `scripts/kg/mcp_server.py` ở sha ghim.
+//! `pkm VAULT mcp`: MCP server stdio `pkm` của vault (một cửa: tìm kiếm qua OHS và graph), chép
+//! `scripts/kg/mcp_server.py` ở sha ghim; phần khác Python ghi trong `docs/MCP-CHANGELOG.md`.
 //!
 //! Giao thức (DECISIONS Q4): JSON-RPC 2.0 tự viết, mỗi dòng một bản tin, đồng bộ, không async runtime.
 //! `initialize`, `ping`, `tools/list`, `tools/call`; `resources/list`, `prompts/list`, `resources/templates/list`
@@ -34,8 +35,9 @@ use tool_layer::{ToolContext, ToolLayer, ToolSession};
 
 /// Phiên bản giao thức nhận được, theo thứ tự ưu tiên; phần tử đầu là bản trả khi client xin bản lạ.
 pub const PROTOCOLS: [&str; 3] = ["2025-06-18", "2025-03-26", "2024-11-05"];
-pub const SERVER_NAME: &str = "kg";
-pub const SERVER_VERSION: &str = "0.1.0";
+pub const SERVER_NAME: &str = "pkm";
+/// Phiên bản của chính binary `pkm` (cùng số với `pkm --version`).
+pub const SERVER_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// `initialize` và `tools/list` chờ lần dựng đầu tối đa chừng này (vault lớn trên ổ chậm: không giữ client quá lâu).
 const READY_WAIT: Duration = Duration::from_secs(20);
@@ -95,8 +97,8 @@ pub struct McpArgs {
     /// Ngày "hôm nay" cho instructions (mặc định ngày máy).
     #[arg(long)]
     pub today: Option<String>,
-    /// Thư mục gói OHS (có `node/` và `app/dist/`) cho `related` chỉ có `query`; mặc định biến PKM_OHS_DIR, rồi
-    /// thư mục gói mà `pkm mcp install` cài.
+    /// Thư mục gói OHS (có `node/` và `app/dist/`) cho `search` và `related` gieo bằng câu hỏi hay note; mặc định biến
+    /// PKM_OHS_DIR, rồi thư mục gói mà `pkm mcp install` cài.
     #[arg(long)]
     pub ohs: Option<PathBuf>,
     /// Cờ cũ của bản Python (đường dẫn `cli.js` của OHS): nhận để tương thích. Trỏ vào một gói OHS (thư mục gói, hoặc
@@ -135,7 +137,7 @@ pub fn main(argv: Vec<OsString>) -> ExitCode {
     }
 }
 
-/// Biến môi trường mà `pkm mcp install --no-ohs` ghi vào mục `kg`: `1` là không chạy OHS.
+/// Biến môi trường mà `pkm mcp install --no-ohs` ghi vào mục `pkm`: `1` là không chạy OHS.
 pub const NO_OHS_ENV: &str = "PKM_NO_OHS";
 
 /// Khởi động OHS ở nền (không chặn) cho `related` chỉ có `query`: gói theo `--ohs`, rồi gói mà cờ cũ `--ohs-cli` trỏ
@@ -223,9 +225,13 @@ pub fn py_str(v: Option<&Value>) -> String {
     }
 }
 
-/// Bỏ trường `null` và chuỗi rỗng trong object (ít token hơn cho model); danh sách rỗng giữ lại.
+/// Bỏ trường `null` và chuỗi rỗng trong object (ít token hơn cho model); danh sách rỗng giữ lại. Lỗi
+/// `ohs_not_ready` giữ nguyên cả năm khoá (D7), kể cả `progress`, `eta_s` là `null`.
 pub fn compact(v: Value) -> Value {
     match v {
+        Value::Object(m) if m.get("error").and_then(Value::as_str) == Some("ohs_not_ready") => {
+            Value::Object(m)
+        }
         Value::Object(m) => Value::Object(
             m.into_iter()
                 .filter(|(_, x)| !x.is_null() && x.as_str() != Some(""))
@@ -518,6 +524,7 @@ impl Shared {
             vault_name: self.vault_name.clone(),
             limit: None,
             ohs: lock(&self.ohs).clone(),
+            max_chars: Some(self.a.max_chars),
         }
     }
 

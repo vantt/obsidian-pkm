@@ -39,9 +39,9 @@ const VERSION: &str = concat!(
 
 const USAGE: &str = "Cách gọi:
   pkm VAULT build [--packs business] [--full] [--json]   dựng hoặc cập nhật tăng dần (mặc định VAULT/.kg/graph.db)
-  pkm VAULT stats | validate | find | note | neighbors | reach | paths | loops | provenance | select | valid | related ...
+  pkm VAULT stats | validate | find | note | read | neighbors | reach | paths | loops | provenance | select | valid | related ...
   pkm VAULT mcp [--packs business] [--db PATH] ...       MCP server stdio (pkm VAULT mcp --help)
-  pkm mcp install VAULT [--dry-run] | --check | --remove  cài MCP `kg` cho Claude Desktop (pkm mcp install --help)
+  pkm mcp install VAULT [--dry-run] | --check | --remove  cài MCP `pkm` cho Claude Desktop (pkm mcp install --help)
   pkm doctor [--json] [--deep]                            chẩn đoán (chỉ đọc) cấu hình, index, gói OHS
 Chi tiết lệnh trên vault: pkm VAULT stats --help.";
 
@@ -64,6 +64,7 @@ không --json.
   pkm VAULT validate [--rule R4] [--limit 5] [--json]
   pkm VAULT find \"cong ty abc\" [--type organization]
   pkm VAULT note \"Claim/X.md\"
+  pkm VAULT read \"Claim/X.md\" \"Người/An.md\" [--max-chars 4000] [--offset 0]   thân note, đọc thẳng từ vault
   pkm VAULT neighbors NODE [--dir in] [--rels a,b] [--as-of 2026-01-01] [--statuses proposed] [--accepted]
   pkm VAULT reach NODE [--dir in] [--max-depth 3] ...
   pkm VAULT paths FROM TO [--max-len 6] ...
@@ -79,12 +80,13 @@ Tuỳ chọn chung: --db PATH, --refresh (build tăng dần trước khi hỏi),
 trong index sau lần build đầu.
 Đầu ra nêu tên note thật của vault: chỉ in ra terminal, không dán vào repo nếu là vault thật.";
 
-const OPS: [&str; 13] = [
+const OPS: [&str; 14] = [
     "build",
     "stats",
     "validate",
     "find",
     "note",
+    "read",
     "neighbors",
     "reach",
     "paths",
@@ -168,12 +170,18 @@ struct VaultArgs {
     /// `related`: chờ OHS sẵn sàng tối đa chừng này giây.
     #[arg(long, default_value_t = OHS_WAIT_SECS)]
     ohs_wait: u64,
+    /// `read`: số ký tự mỗi note (mặc định 4000, 0 là cả note).
+    #[arg(long, allow_negative_numbers = true)]
+    max_chars: Option<i64>,
+    /// `read`: bỏ qua chừng này ký tự đầu của mỗi thân note.
+    #[arg(long, allow_negative_numbers = true)]
+    offset: Option<i64>,
 }
 
 #[derive(Parser)]
 #[command(
     name = "pkm mcp install",
-    about = "Cài MCP `kg` trỏ vào binary pkm cho Claude Desktop"
+    about = "Cài MCP `pkm` trỏ vào binary pkm cho Claude Desktop"
 )]
 struct InstallCmd {
     #[command(flatten)]
@@ -451,6 +459,13 @@ fn tool_kwargs(a: &VaultArgs) -> Result<(&'static str, Map<String, Value>), Fail
             ),
         ),
         "note" => ("note", with(Map::new(), json!({"node": positional(a, 0)?}))),
+        "read" => {
+            positional(a, 0)?;
+            (
+                "read",
+                json_map(json!({"nodes": a.args, "max_chars": a.max_chars, "offset": a.offset})),
+            )
+        }
         "neighbors" => (
             "neighbors",
             with(
@@ -549,6 +564,7 @@ fn tool_command(a: &VaultArgs, db: &Path) -> Result<(), Failure> {
         vault_name: None,
         limit: Some(a.limit.filter(|n| *n != 0).unwrap_or(20)),
         ohs,
+        max_chars: None,
     };
     let result = {
         let mut session = layer.open(&ctx).map_err(Failure::Message)?;
@@ -557,11 +573,12 @@ fn tool_command(a: &VaultArgs, db: &Path) -> Result<(), Failure> {
     // Tắt OHS (nếu có) trước khi in: phiên đã bỏ, đây là chỗ giữ cuối.
     drop(ctx);
     print_json(&result)?;
-    // `related` báo lỗi (gồm `ohs_not_ready`): JSON ra stdout cho agent đọc, thoát 1 như lỗi của `cli.py`.
+    // `related`, `read` báo lỗi (gồm `ohs_not_ready`): JSON ra stdout cho agent đọc, thoát 1 như lỗi của `cli.py`.
+    // Lỗi của từng note trong `read` nằm trong mục của nó, không phải lỗi của lệnh.
     match result.get("error") {
-        Some(e) if method == "related" => Err(Failure::Exit(
+        Some(e) if method == "related" || method == "read" => Err(Failure::Exit(
             1,
-            format!("related: {}", mcp::py_str(Some(e))),
+            format!("{method}: {}", mcp::py_str(Some(e))),
         )),
         _ => Ok(()),
     }

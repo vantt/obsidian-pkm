@@ -117,7 +117,42 @@ impl OhsPackage {
     }
 }
 
+/// DLL của Microsoft Visual C++ Redistributable (x64) mà `onnxruntime-node` (tìm theo nghĩa) trong gói win32-x64 cần.
+/// Thiếu thì OHS không nạp được model và báo "`@huggingface/transformers` is not installed".
+pub const VC_RUNTIME_DLLS: [&str; 3] = ["vcruntime140.dll", "vcruntime140_1.dll", "msvcp140.dll"];
+
+/// Lệnh cài Visual C++ Redistributable (x64) trên Windows.
+pub const VC_RUNTIME_FIX: &str = "winget install --id Microsoft.VCRedist.2015+.x64";
+
+/// Thư mục binding gốc của `onnxruntime-node` trong gói win32-x64; DLL đặt cạnh nó cũng được Windows tìm thấy.
+const ONNX_BINDING_DIR: &str = "app/node_modules/onnxruntime-node/bin/napi-v6/win32/x64";
+
+/// DLL trong [`VC_RUNTIME_DLLS`] không có ở `binding_dir` lẫn `system_dir`. Rỗng khi không có `binding_dir` (gói
+/// không dùng binding gốc win32-x64 của `onnxruntime-node`, như gói linux hay macOS).
+pub fn missing_vc_runtime_in(binding_dir: &Path, system_dir: Option<&Path>) -> Vec<String> {
+    if !binding_dir.is_dir() {
+        return Vec::new();
+    }
+    VC_RUNTIME_DLLS
+        .iter()
+        .filter(|dll| {
+            !binding_dir.join(dll).is_file() && !system_dir.is_some_and(|d| d.join(dll).is_file())
+        })
+        .map(|dll| (*dll).to_owned())
+        .collect()
+}
+
 impl OhsPackage {
+    /// Trên Windows: DLL của Visual C++ Redistributable mà `onnxruntime-node` của gói cần nhưng máy không có (không ở
+    /// `%SystemRoot%\System32`, không cạnh binding). Nơi khác luôn rỗng.
+    pub fn missing_vc_runtime(&self) -> Vec<String> {
+        if !cfg!(windows) {
+            return Vec::new();
+        }
+        let system = std::env::var_os("SystemRoot").map(|r| PathBuf::from(r).join("System32"));
+        missing_vc_runtime_in(&self.root.join(ONNX_BINDING_DIR), system.as_deref())
+    }
+
     /// Phiên bản OHS ghi trong `MANIFEST.json` của gói (`0.17.2-vantt.3`…); `None` khi thiếu file hay khoá.
     pub fn version(&self) -> Option<String> {
         let text = std::fs::read_to_string(self.root.join(MANIFEST)).ok()?;
@@ -172,6 +207,30 @@ mod tests {
         fs::write(&node, b"").unwrap();
         fs::create_dir_all(dir.join("app/dist/src")).unwrap();
         fs::write(dir.join(CLI_REL), b"").unwrap();
+    }
+
+    #[test]
+    fn vc_runtime_is_found_in_the_system_dir_or_beside_the_binding() {
+        let tmp = tempfile::tempdir().unwrap();
+        let binding = tmp.path().join(ONNX_BINDING_DIR);
+        let system = tmp.path().join("System32");
+        assert!(
+            missing_vc_runtime_in(&binding, Some(&system)).is_empty(),
+            "gói không có binding win32-x64 thì không cần runtime"
+        );
+        fs::create_dir_all(&binding).unwrap();
+        fs::create_dir_all(&system).unwrap();
+        assert_eq!(
+            missing_vc_runtime_in(&binding, Some(&system)),
+            VC_RUNTIME_DLLS
+        );
+        assert_eq!(missing_vc_runtime_in(&binding, None), VC_RUNTIME_DLLS);
+        fs::write(system.join("vcruntime140.dll"), b"").unwrap();
+        fs::write(binding.join("msvcp140.dll"), b"").unwrap();
+        assert_eq!(
+            missing_vc_runtime_in(&binding, Some(&system)),
+            ["vcruntime140_1.dll"]
+        );
     }
 
     #[test]

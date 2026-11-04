@@ -2,6 +2,9 @@
 //!
 //! Đặc tả: `tool_defs` của `scripts/kg/mcp_server.py` ở sha ghim. Chuỗi chép nguyên, khoá theo đúng thứ tự Python
 //! (client thấy đúng các câu này, nên câu chữ là một phần của hợp đồng MCP).
+//!
+//! Lệch có chủ ý của một cửa (`docs/MCP-CHANGELOG.md`): thêm `search` (sau `find`) và `read` (sau `note`), viết lại
+//! `related`. Mười tool còn lại giữ nguyên chữ của Python.
 
 use serde_json::{Map, Value, json};
 
@@ -85,6 +88,88 @@ fn props(
         .collect()
 }
 
+fn str_or_list(description: &str) -> Value {
+    json!({"oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}], "description": description})
+}
+
+/// Tool `search` của một cửa.
+fn search_def(s: Vec<(&'static str, Value)>) -> ToolDef {
+    ToolDef {
+        name: "search",
+        description: "Find notes by meaning or words: topics, ideas, half-remembered content (\"cái bài về…\"), questions whose wording differs from the note, bilingual (question in Vietnamese, note in English), typos and missing diacritics. Hybrid BM25 + embeddings via the vault's search index. Use it when the user DESCRIBES what a note is about; use `find` when the user NAMES a note, person or thing; use `select` for every note of a type. Returns ranked items: id (note id, the same id the graph tools take), title, type, score (0-1), snippet. A snippet is an excerpt: call `read` before quoting or judging relevance. Result {\"error\":\"ohs_not_ready\",...} means the search index is starting or indexing (state, progress, eta_s, action): tell the user, answer with find / select / graph tools meanwhile, and never conclude from it that a note does not exist.",
+        properties: props(
+            vec![
+                (
+                    "query",
+                    json!({"type": "string", "description": "What to look for, in the user's words (Vietnamese or English). Omit only when `path` is given."}),
+                ),
+                (
+                    "queries",
+                    json!({"type": "array", "items": str_(), "description": "2-4 reformulations searched together and merged (better recall; add an English or Vietnamese translation of the question when the note may be in the other language)."}),
+                ),
+                (
+                    "path",
+                    json!({"type": "string", "description": "Note id. Return notes similar in meaning to this note instead of searching text (what an isolated note could connect to). Ignores query."}),
+                ),
+                (
+                    "mode",
+                    json!({"type": "string", "enum": ["hybrid", "semantic", "fulltext", "title"], "description": "hybrid (default) for most questions; semantic when the user's wording differs from the note's; fulltext for an exact term; title only to navigate to a named note (prefer `find`)."}),
+                ),
+                (
+                    "scope",
+                    str_or_list(
+                        "Folder prefix(es) to search in, e.g. \"Dự án/\"; prefix \"-\" to exclude. Only when the user limits the area.",
+                    ),
+                ),
+                (
+                    "tag",
+                    str_or_list(
+                        "Tag(s) every result must have; prefix \"-\" to exclude. Only when the user names a tag.",
+                    ),
+                ),
+                (
+                    "limit",
+                    json!({"type": "integer", "description": "Items returned (default 10; keep <= 15, later ranks are weak)."}),
+                ),
+                (
+                    "snippet_length",
+                    json!({"type": "integer", "description": "Snippet characters per item (default 200; 0 = none)."}),
+                ),
+            ],
+            s,
+            vec![],
+        ),
+        required: &[],
+    }
+}
+
+/// Tool `read` của một cửa.
+fn read_def() -> ToolDef {
+    ToolDef {
+        name: "read",
+        description: "Full body text of one or more notes (frontmatter removed), for quoting and for judging relevance. `note` gives metadata and edge counts; `read` gives the text. Pass note ids exactly as returned by search / find / related. Reads several notes in ONE call: after search or related, read the top 5-8 together instead of one call each. Bodies longer than max_chars are cut with truncated:true and chars = full length; call again with offset for the rest. Unknown id: that item carries error + did_you_mean, the others are still returned. Works while the search index is still starting.",
+        properties: props(
+            vec![
+                (
+                    "nodes",
+                    json!({"type": "array", "items": str_(), "description": "Note ids (vault paths), 1-20."}),
+                ),
+                (
+                    "max_chars",
+                    json!({"type": "integer", "description": "Characters per note (default 4000; 0 = whole note). The whole reply is also capped by the server; with many notes each body is cut evenly."}),
+                ),
+                (
+                    "offset",
+                    json!({"type": "integer", "description": "Skip this many characters of each body (default 0)."}),
+                ),
+            ],
+            vec![],
+            vec![],
+        ),
+        required: &["nodes"],
+    }
+}
+
 /// `tool_defs(hidden)`: mọi tool theo thứ tự của `tools/list`. `hidden`: vault có note hệ thống (thêm tham số
 /// `system`).
 pub fn definitions(hidden: bool) -> Vec<ToolDef> {
@@ -114,6 +199,7 @@ pub fn definitions(hidden: bool) -> Vec<ToolDef> {
             ),
             required: &["name"],
         },
+        search_def(s()),
         ToolDef {
             name: "note",
             description: "Read one note: type, frontmatter properties, aliases, validity window, provenance fields (status, proposed_by, extracted_by, asserted_at), edge counts by relation and layer, block ids, and the start of the body. For a claim note also the edge it asserts.",
@@ -130,6 +216,7 @@ pub fn definitions(hidden: bool) -> Vec<ToolDef> {
             ),
             required: &["node"],
         },
+        read_def(),
         ToolDef {
             name: "neighbors",
             description: "Typed edges around one note, one step. Each item: rel (name in walking direction; incoming edges use the inverse name, e.g. has_project for an incoming client edge), node, type, dir, status and layer (accepted | proposed), claim (the claim note behind a causal/fact edge), valid_from/valid_to, source (note#^block), proposed_by, extracted_by, confidence. Good for \"what is X connected to\", \"who works at X now\" (rels + as_of), \"what increases X\" (dir in).",
@@ -259,16 +346,24 @@ pub fn definitions(hidden: bool) -> Vec<ToolDef> {
         },
         ToolDef {
             name: "related",
-            description: "Notes related to search hits, ranked by personalised PageRank over the typed graph (both directions). Chain it after the OHS (obsidian-hybrid-search) `search` tool: pass its results as `hits` ([{\"path\", \"score\"}], or plain paths, in OHS order). Returns the hits re-ranked by graph support (found_by \"ohs\") and notes only the graph reached (found_by \"graph\": what text search missed), each with `via` = the shortest edge chain from a hit. Without hits, `query` is searched with the OHS index if this server can reach it; otherwise call OHS search first.",
+            description: "Notes related to a question or a note, ranked by personalised PageRank over the typed graph and seeded by semantic search: ONE call = search + graph walk. Give `query` (the user's question or an idea, in their words), or `node` (a note id: start from notes similar in meaning to it, e.g. what an isolated note could connect to), or `hits` (search results you already hold; skips the search). Returns seeds (the search hits re-ranked by graph support, found_by \"ohs\", with snippet when seeded by query or node) and related (notes only the graph reached, found_by \"graph\": what text search missed), each with via = the edge chain from a seed and layer (accepted | proposed, say which). Use for \"liên quan gì / nối với gì / có thể nối với gì\"; do not run search first just to feed hits; then `read` the top notes before stating a relation. accepted_only=true shows what the user's own links contribute. Result {\"error\":\"ohs_not_ready\",...}: as in search.",
             properties: props(
                 vec![
                     (
-                        "hits",
-                        json!({"type": "array", "items": {}, "description": "OHS search results: objects with path (and score), or path strings."}),
+                        "query",
+                        json!({"type": "string", "description": "Question or idea to search, then walk the graph from the hits."}),
                     ),
                     (
-                        "query",
-                        json!({"type": "string", "description": "Used only when hits is empty."}),
+                        "queries",
+                        json!({"type": "array", "items": str_(), "description": "2-4 rewordings searched together (e.g. the question in English and Vietnamese) for better seeds."}),
+                    ),
+                    (
+                        "node",
+                        json!({"type": "string", "description": "Note id: seeds are the notes most similar in meaning to this note (the note itself excluded)."}),
+                    ),
+                    (
+                        "hits",
+                        json!({"type": "array", "items": {}, "description": "Search results you already have: objects with id or path (and score), or id strings, in search order. Skips the search step. Precedence: hits, then node, then query/queries."}),
                     ),
                     (
                         "k",

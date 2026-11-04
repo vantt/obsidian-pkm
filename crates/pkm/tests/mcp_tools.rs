@@ -245,23 +245,25 @@ fn tools_list() {
     let mut p = protocol();
     let r = p.c.send("tools/list", None);
     let tools = r["result"]["tools"].as_array().unwrap();
-    let mut names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
-    names.sort_unstable();
-    let mut want = [
-        "find",
-        "note",
-        "neighbors",
-        "reach",
-        "paths",
-        "loops",
-        "provenance",
-        "select",
-        "valid",
-        "related",
-        "more",
-    ];
-    want.sort_unstable();
-    assert_eq!(names, want);
+    let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
+    assert_eq!(
+        names,
+        [
+            "find",
+            "search",
+            "note",
+            "read",
+            "neighbors",
+            "reach",
+            "paths",
+            "loops",
+            "provenance",
+            "select",
+            "valid",
+            "related",
+            "more",
+        ]
+    );
     let by = |n: &str| tools.iter().find(|t| t["name"] == n).unwrap();
     assert_eq!(
         by("loops")["inputSchema"]["required"],
@@ -921,7 +923,7 @@ impl WithFakeOhs {
 }
 
 /// `related` chỉ có câu hỏi: server chạy OHS một lần ở nền, `initialize` trả lời ngay; hạt giống lấy từ OHS
-/// (`seed_source` giữ `ohs-cli` như Python); index dựng lại giữa hai lời gọi vẫn giữ OHS; hết stdin thì tắt OHS,
+/// (`seed_source` là `query`); index dựng lại giữa hai lời gọi vẫn giữ OHS; hết stdin thì tắt OHS,
 /// không để lại tiến trình.
 #[test]
 fn related_query_seeds_come_from_ohs() {
@@ -939,7 +941,8 @@ fn related_query_seeds_come_from_ohs() {
         assert_eq!(r["error"], "ohs_not_ready", "{r}");
         std::thread::sleep(std::time::Duration::from_millis(100));
     };
-    assert_eq!(r["seed_source"], "ohs-cli", "{r}");
+    assert_eq!(r["seed_source"], "query", "{r}");
+    assert_eq!(r["seeds"][0]["snippet"], "trích Yếu tố/Số lead.md", "{r}");
     assert_eq!(r["seeds"][0]["id"], "Yếu tố/Số lead.md");
     // Sửa một note: lời gọi sau dựng lại index và mở lại graph, OHS vẫn gắn với phiên.
     let p = f.vault.join("Yếu tố").join("Doanh thu.md");
@@ -971,6 +974,74 @@ fn related_query_while_ohs_starts_is_not_ready() {
     assert_eq!(r["state"], "starting");
     let (r, err) = c.call("find", json!({"name": "doanh thu"}));
     assert!(!err && r["count"] == 4, "{r}");
+    c.close();
+    f.assert_no_fake_left();
+}
+
+/// `read` qua giao thức: không cần OHS (server chạy `PKM_NO_OHS=1`), và với `--max-chars` nhỏ kết quả vẫn là JSON
+/// nguyên vẹn (thân note bị cắt đều), không bị bộ cắt chung chặt giữa chừng.
+#[test]
+fn read_fits_max_chars_without_ohs() {
+    let tmp = tempfile::tempdir().unwrap();
+    let vault = tmp.path().join(VAULT_NAME);
+    write_vault(&vault);
+    let long = "Câu dài có \"ngoặc\" và dấu.\n".repeat(300);
+    for n in ["Yếu tố/Doanh thu.md", "Người/An.md"] {
+        fs::write(vault.join(n), format!("---\ntype: x\n---\n{long}")).unwrap();
+    }
+    let db = tmp.path().join("graph.db");
+    let db = db.to_string_lossy();
+    let mut c = Client::new(
+        &vault,
+        &["--db", &db, "--packs", "business", "--max-chars", "2000"],
+    );
+    c.init();
+    let (r, err) = c.call(
+        "read",
+        json!({"nodes": ["Yếu tố/Doanh thu.md", "Không có.md", "Người/An.md"], "max_chars": 0}),
+    );
+    assert!(!err, "{r}");
+    let it = items(&r);
+    assert_eq!(it.len(), 3);
+    assert_eq!(it[0]["truncated"], true);
+    assert_eq!(it[0]["type"], "x");
+    assert!(
+        it[0]["url"]
+            .as_str()
+            .unwrap()
+            .starts_with("obsidian://open?vault=")
+    );
+    assert!(it[1]["error"].as_str().unwrap().contains("no note with id"));
+    assert_eq!(it[2]["truncated"], true);
+    assert!(it[0]["body"].as_str().unwrap().chars().count() > 300);
+    let (r, err) = c.call("read", json!({}));
+    assert!(err, "{r}");
+    c.close();
+}
+
+/// `search` qua giao thức với OHS giả: kết quả gọn có `type` của index; OHS chưa sẵn sàng là `ohs_not_ready`.
+#[test]
+fn search_over_protocol_with_ohs() {
+    let Some(f) = with_fake_ohs(Value::Null) else {
+        return;
+    };
+    let mut c = f.client();
+    c.init();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+    let (r, err) = loop {
+        let (r, err) = c.call("search", json!({"query": "Yếu tố/Số lead.md"}));
+        if r.get("error").is_none() || std::time::Instant::now() > deadline {
+            break (r, err);
+        }
+        assert_eq!(r["error"], "ohs_not_ready", "{r}");
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    };
+    assert!(!err, "{r}");
+    assert_eq!(
+        r,
+        json!({"count": 1, "mode": "hybrid", "items": [{"id": "Yếu tố/Số lead.md", "title": "Số lead",
+               "type": "factor", "score": 1.0, "snippet": "trích Yếu tố/Số lead.md"}]})
+    );
     c.close();
     f.assert_no_fake_left();
 }

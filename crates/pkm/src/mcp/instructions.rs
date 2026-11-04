@@ -32,7 +32,7 @@ pub struct Inputs<'a> {
 /// Khi chưa có index để đọc (`index is still being built`), kèm lỗi build nếu có.
 pub fn pending(build_error: Option<&str>) -> String {
     format!(
-        "Typed knowledge graph (kg) of an Obsidian vault; the index is still being built. {}",
+        "Typed knowledge graph (pkm) of an Obsidian vault; the index is still being built. {}",
         build_error.unwrap_or_default()
     )
 }
@@ -206,7 +206,7 @@ pub fn compose(inp: &Inputs<'_>, db: &Connection) -> rusqlite::Result<String> {
 
     let mut lines = vec![
         format!(
-            "Typed knowledge graph (kg) of the user's Obsidian vault \"{name}\": {n} notes. What the vault describes: {about} Today is {today}; use it for \"now\", \"currently\", \"đang\", \"hiện tại\"."
+            "Typed knowledge graph (pkm) of the user's Obsidian vault \"{name}\": {n} notes. What the vault describes: {about} Today is {today}; use it for \"now\", \"currently\", \"đang\", \"hiện tại\"."
         ),
         "Questions the user asks are about the content of this vault. Words like tools / công cụ, projects / dự án, people / người, decisions, contracts refer to NOTES of that type in the vault, never to your own tools, MCP servers or environment: answer them with select {type: ...}, find or the graph tools.".to_owned(),
         format!("Note types (count, meaning): {}.", types.join("; ")),
@@ -242,9 +242,12 @@ pub fn compose(inp: &Inputs<'_>, db: &Connection) -> rusqlite::Result<String> {
             quote(v)
         ));
     }
-    lines.push("Search vs graph: if the OHS server (obsidian-hybrid-search) is also connected, use its `search` for words, meaning, full text, similar notes and reading note bodies; use kg for typed relations, multi-hop, paths, loops, time windows and provenance. To combine them, call OHS search, then pass its results to kg `related` as hits (or start neighbors/reach from a hit path).".to_owned());
+    lines.push(ONE_DOOR.to_owned());
     Ok(lines.join("\n"))
 }
+
+/// Đoạn cuối: chọn tool trong một cửa (thay đoạn phối hợp hai server của Python, lệch có chủ ý).
+pub const ONE_DOOR: &str = "Use only this server (pkm) for the vault: it does both search and graph. Choose by how the user refers to things: they NAME a note, person, client, factor -> find, then neighbors / reach / paths / loops / note. They DESCRIBE content, a topic, an idea, or remember vaguely -> search; add related when they also ask what it connects to or what else is relevant (related with query = search + graph walk in one call; do not run search first just to feed hits). Every note of a type -> select. Before quoting or judging relevance -> read (several ids in one call). Ids from search are the same ids the graph tools take. find returns nothing -> try search before saying the note does not exist. search and related need the vault's search index: {\"error\":\"ohs_not_ready\"} means it is starting or indexing (state, progress, eta_s, action): tell the user that and what to do, keep answering with find / select / graph tools, never treat it as \"not found\". If a separate `ohs` server is also connected, do not use it: the tools here use the same index and their ids match the graph.";
 
 #[cfg(test)]
 mod tests {
