@@ -70,6 +70,23 @@ jobs:
         shell: bash
         run: cargo run -q --locked -p pkm-parity -- check --vault "$RUNNER_TEMP/kg-solo" --dump-out "$RUNNER_TEMP/rust-dump" --report "$RUNNER_TEMP/parity-report.json"
 
+  # Plugin Obsidian (TS): một bản cho mọi nền, chỉ chạy trên Linux.
+  plugin:
+    name: obsidian plugin
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter pkm-obsidian-plugin run typecheck
+      - run: pnpm --filter pkm-obsidian-plugin run test
+      # build kiểm phiên bản manifest == Cargo.toml, typecheck, rồi ra dist/.
+      - run: pnpm --filter pkm-obsidian-plugin run build
+
   # Dựng, đóng gói, chạy thử bốn binary phát hành và thử bộ cài trên mọi PR, không đăng gì.
   assets:
     uses: ./.github/workflows/release-assets.yml

@@ -1,6 +1,6 @@
 name: Release
 
-# Tag v* : kiểm tag == phiên bản crate, chạy lại toàn bộ CI (gồm dựng và chạy thử bốn binary, thử bộ cài), gộp
+# Tag v* : kiểm tag == phiên bản crate, chạy lại toàn bộ CI (gồm dựng và chạy thử bốn binary và plugin Obsidian, thử bộ cài), gộp
 #          checksums.txt, đóng dấu phiên bản vào bộ cài, rồi đăng GitHub Release.
 # workflow_dispatch : làm y hệt nhưng dừng ở artifact `release-assets`, không tạo Release.
 on:
@@ -67,8 +67,9 @@ jobs:
             f="out/$(sh scripts/release-assets.sh asset-name "$t")"
             [ -s "$f" ] || { echo "::error::thiếu $f"; exit 1; }
           done
-          # 4 binary + install.sh + install.ps1; checksums.txt là file thứ 7.
-          sh scripts/release-assets.sh checksums out 6
+          [ -s out/pkm-obsidian-plugin.zip ] || { echo "::error::thiếu out/pkm-obsidian-plugin.zip"; exit 1; }
+          # 4 binary + plugin Obsidian + install.sh + install.ps1; checksums.txt là file thứ 8.
+          sh scripts/release-assets.sh checksums out 7
           ls -l out
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -93,7 +94,7 @@ jobs:
         run: |
           set -euo pipefail
           sha256sum -c --strict checksums.txt
-          [ "$(ls -1 | wc -l)" -eq 7 ] || { echo "::error::cần 7 file"; ls -l; exit 1; }
+          [ "$(ls -1 | wc -l)" -eq 8 ] || { echo "::error::cần 8 file"; ls -l; exit 1; }
       - name: Tạo GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -4,6 +4,7 @@
 #
 #   sh scripts/release-assets.sh asset-name <target>
 #   sh scripts/release-assets.sh package <target> <out-dir>    # sau `cargo build --release --target <target> -p pkm`
+#   sh scripts/release-assets.sh plugin <dist-dir> <out-dir>    # sau khi dựng plugin Obsidian (apps/obsidian-plugin)
 #   sh scripts/release-assets.sh checksums <dir> <số file>      # viết <dir>/checksums.txt, kiểm đủ số file
 #   sh scripts/release-assets.sh stamp <vX.Y.Z> <in> <out>      # đóng dấu phiên bản vào bộ cài
 #   sh scripts/release-assets.sh version                        # phiên bản crate `pkm`
@@ -11,6 +12,9 @@
 # Asset là binary trần: `pkm-<target>` (Windows thêm `.exe`). `package` chạy thử binary (`--version`) khi máy này
 # chạy được đích đó, kiểm binary Windows không phụ thuộc CRT động (VCRUNTIME140.dll), rồi viết `checksums.txt` cho
 # riêng asset đó, để thư mục ra dùng được ngay làm `--local-fixture` của bộ cài.
+# Plugin Obsidian là `pkm-obsidian-plugin.zip` (phẳng: main.js, manifest.json, styles.css); `pkm setup` tải nó từ
+# Release cùng tag với binary và kiểm theo checksums.txt, nên tên asset phải khớp `PLUGIN_ASSET` của
+# crates/pkm/src/setup.rs.
 set -eu
 
 say() { printf '%s\n' "$*" >&2; }
@@ -101,6 +105,27 @@ package() {  # target out-dir
   say "đóng gói xong: $out/$name"
 }
 
+PLUGIN_ASSET="pkm-obsidian-plugin.zip"
+
+plugin() {  # dist-dir out-dir
+  dist="$1"; out="$2"
+  for f in main.js manifest.json styles.css; do
+    [ -s "$dist/$f" ] || die "thiếu $dist/$f; chạy: pnpm --filter pkm-obsidian-plugin run build"
+  done
+  version="$(crate_version)"
+  # manifest.json do esbuild.config.mjs chép nguyên: kiểm id và phiên bản bằng grep, không cần jq.
+  grep -Eq '"id"[[:space:]]*:[[:space:]]*"pkm"' "$dist/manifest.json" || die "$dist/manifest.json không có id pkm"
+  version_re="$(printf '%s' "$version" | sed 's/\./\\./g')"
+  grep -Eq "\"version\"[[:space:]]*:[[:space:]]*\"$version_re\"" "$dist/manifest.json" \
+    || die "phiên bản trong $dist/manifest.json khác phiên bản crate $version"
+  command -v zip >/dev/null 2>&1 || die "không có lệnh zip"
+  mkdir -p "$out"
+  rm -f "$out/$PLUGIN_ASSET"
+  # -X: bỏ thuộc tính riêng của máy; -j: phẳng, không thư mục.
+  zip -q -X -j "$out/$PLUGIN_ASSET" "$dist/main.js" "$dist/manifest.json" "$dist/styles.css"
+  say "đóng gói plugin xong: $out/$PLUGIN_ASSET ($version)"
+}
+
 checksums() {  # dir expected-count
   dir="$1"; want="$2"
   rm -f "$dir/checksums.txt"
@@ -136,6 +161,7 @@ main() {
   case "$cmd" in
     asset-name) [ $# -eq 1 ] || die "asset-name <target>"; asset_name "$1" ;;
     package) [ $# -eq 2 ] || die "package <target> <out-dir>"; package "$1" "$2" ;;
+    plugin) [ $# -eq 2 ] || die "plugin <dist-dir> <out-dir>"; plugin "$1" "$2" ;;
     checksums) [ $# -eq 2 ] || die "checksums <dir> <số file>"; checksums "$1" "$2" ;;
     stamp) [ $# -eq 3 ] || die "stamp <vX.Y.Z> <in> <out>"; stamp "$1" "$2" "$3" ;;
     version) crate_version ;;
