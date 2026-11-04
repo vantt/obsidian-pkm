@@ -49,6 +49,8 @@ macOS, Linux: bước 2 là `gh release download v0.1.0-rc.2 --repo vantt/obsidi
 `pkm.exe` chưa ký mã. Cài bằng bộ cài ở trên thì không bị chặn. Nếu tự tải file bằng trình duyệt và Windows báo "Windows protected your PC", bấm **More info → Run anyway**, hoặc chạy `Unblock-File .\pkm.exe` sau khi đã so sha256 với `checksums.txt` (`Get-FileHash .\pkm.exe`).
 </details>
 
+Hướng dẫn dùng bản B (vault xưởng: lưu, trang xưởng, đề xuất, hỏi Claude, viết bài): [docs/user-guide](docs/user-guide/README.md).
+
 ## Cho người phát triển
 
 Lõi Rust của sản phẩm PKM trên Obsidian: index graph của vault (SQLite), bộ tool hỏi graph và MCP server, thay cho bản Python trong [`vantt/obsidian-pkm-automation`](https://github.com/vantt/obsidian-pkm-automation).
