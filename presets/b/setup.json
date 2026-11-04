@@ -44,13 +44,13 @@
     "about": "Kho ghi chú cá nhân chuyển từ Evernote: bài cắt, trích dẫn, ý, dự án, chủ đề."
   },
   "snippets": {
-    "e11-folder-grid": "folder-grid.css",
     "e11-theme": "theme/e11-theme.css"
   },
   "theme": {
     "css_theme": "Primary",
     "css_theme_version": "2.10.0",
     "base_font_size": 19,
-    "disable_plugins": ["obsidian-minimal-settings"]
+    "disable_plugins": ["obsidian-minimal-settings"],
+    "style_settings_plugin": "obsidian-style-settings"
   }
 }

@@ -4,6 +4,7 @@
 //! - `pkm VAULT mcp ...`: MCP server ([`crate::mcp`]); như Python, chữ thứ hai là `mcp` thì luôn là server.
 //! - `pkm mcp install ...`: cài cho Claude Desktop ([`crate::install`]).
 //! - `pkm doctor ...`: chẩn đoán máy ([`crate::doctor`]).
+//! - `pkm setup VAULT ...`: dựng bản B trên vault ([`crate::setup`]).
 //! - `pkm VAULT <lệnh> ...`: các lệnh của `cli.py`.
 //! - `pkm --version`, `pkm --help`.
 
@@ -23,6 +24,7 @@ use serde_json::{Map, Value, json};
 use crate::doctor::{self, DoctorArgs};
 use crate::install::{self, InstallArgs, SystemHooks};
 use crate::mcp::{self, pyjson, tool_layer};
+use crate::setup::{self, SetupArgs, SystemSetupHooks};
 
 /// Mã thoát của lệnh cần tầng tool khi binary chưa có tầng tool (bộ so khớp coi là "chưa có"). Python không dùng mã
 /// này (`argparse` thoát 2, lỗi khác 1).
@@ -47,6 +49,7 @@ const USAGE: &str = "Cách gọi:
   pkm VAULT zones [--write] [--apply] vùng tri thức gợi ý bài viết (cần OHS; JSON)
   pkm mcp install VAULT [--dry-run] | --check | --remove  cài MCP `pkm` cho Claude Desktop (pkm mcp install --help)
   pkm doctor [--json] [--deep]                            chẩn đoán (chỉ đọc) cấu hình, index, gói OHS
+  pkm setup VAULT [--apply] [--remove] [--json]           dựng bản B trên vault (pkm setup --help)
 Chi tiết lệnh trên vault: pkm VAULT stats --help.";
 
 #[derive(Parser)]
@@ -194,6 +197,18 @@ struct InstallCmd {
 
 #[derive(Parser)]
 #[command(
+    name = "pkm setup",
+    about = "Dựng bản B trên một vault: plugin, theme, chat trong Obsidian, index, OHS, MCP, đề xuất. Mặc định chỉ in \
+kế hoạch; --apply để làm. Chạy lại an toàn: bước nào xong thì bỏ qua, file bạn đã sửa giữ nguyên. Đóng vault trong \
+Obsidian trước khi chạy."
+)]
+struct SetupCmd {
+    #[command(flatten)]
+    args: SetupArgs,
+}
+
+#[derive(Parser)]
+#[command(
     name = "pkm doctor",
     about = "Chẩn đoán cấu hình Claude Desktop, index, gói OHS, đường dẫn dài trên Windows"
 )]
@@ -232,6 +247,17 @@ pub fn run(argv: Vec<OsString>) -> ExitCode {
             Ok(true) => ExitCode::SUCCESS,
             Ok(false) => ExitCode::FAILURE,
             Err(e) => fail(&format!("doctor: {e}")),
+        };
+    }
+    // `pkm setup VAULT`; `pkm setup <lệnh>` vẫn là lệnh trên vault tên `setup`.
+    if word(0) == Some("setup")
+        && !word(1).is_some_and(|w| OPS.contains(&w) || WRITING_OPS.contains(&w))
+    {
+        let cmd = SetupCmd::parse_from(with_name("pkm setup", &argv[1..]));
+        let mut out = io::stdout().lock();
+        return match setup::run(&cmd.args, &SystemSetupHooks, &mut out) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => fail(&format!("setup: {e}")),
         };
     }
     if argv.is_empty() || flag(0) {
