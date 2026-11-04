@@ -30,11 +30,11 @@ Thứ tự đổi so với bảng phase: bước 4, 5, 6 không đợi bước 3
 | Bước | Nhánh | Đợt | Trạng thái |
 |---|---|---|---|
 | 2 preset bản B, hướng dẫn người dùng | `main` | 1 | xong (`6b7e48e`, `3c7dbf8`) |
-| 6a `propose` vào `pkm-core` | `product-b` | 1 | đang làm |
-| 6b `material`, `zones`, cặp note giống nhau (thay `note_knn.mjs`, `similar_pairs.mjs`) qua `vectors`, `neighbors` của OHS | `product-b` | 1 | đang làm |
-| 5a khung plugin, `workshop_ui`, review log, CSS lưới thư mục, phóng to bảng | `product-b` | 1 | đang làm |
-| 4 `pkm setup`, plugin trong Release | `product-b-setup` (từ `product-b`) | 2 (cần 2, 5a) | viết xong, chờ merge vào `product-b` (`e5f1b1e`, `d78b154`, `e93a34d`; [báo cáo](reports/fullstack-developer-261104-1130-pkm-setup.md)). Còn: chạy thử Release (`workflow_dispatch`) ra `pkm-obsidian-plugin.zip`, thử trên máy sạch ba nền, user thử trên Windows |
-| 5b giao diện plugin cho đề xuất, nguyên liệu, vùng | `product-b` | 2 (cần 5a, 6) | chờ đợt 1 |
+| 6a `propose` vào `pkm-core` | `product-b` | 1 | xong (`14c024b`, [báo cáo](../reports/fullstack-developer-261104-1100-propose-port.md)): `pkm VAULT propose [--similar] [--create] [--json]`, khớp Python từng byte trên vault bịa và kg-solo (60 đề xuất). Còn: đếm trên bản B |
+| 6b `material`, `zones`, cặp note giống nhau (thay `note_knn.mjs`, `similar_pairs.mjs`) qua `vectors`, `neighbors` của OHS | `product-b` | 1 | xong (`63d67e1`, [báo cáo](../reports/fullstack-developer-261104-1100-material-zones-port.md)): `pkm VAULT material`, `pairs`, `zones`; kg-solo với gói OHS thật: `zones.json` giống từng byte, `pairs` cùng tập và điểm, `material` khớp. Còn: golden kg-solo cho ba lệnh (cần OHS giả phát lại vector), đếm trên bản B |
+| 5a khung plugin, `workshop_ui`, review log, CSS lưới thư mục, phóng to bảng | `product-b` | 1 | xong (`8a2425d`, [báo cáo](../reports/fullstack-developer-261104-1100-obsidian-plugin.md)): "Dựng xưởng" giống `workshop_ui.py` từng byte trên vault bịa; thư mục chủ đề, inbox là thiết lập (mặc định rỗng). Còn: thử trong Obsidian thật |
+| 4 `pkm setup`, plugin trong Release | `product-b-setup` (từ `product-b`) | 2 (cần 2, 5a) | viết xong, đã merge vào `product-b` (`e5f1b1e`, `d78b154`, `e93a34d`; [báo cáo](../reports/fullstack-developer-261104-1130-pkm-setup.md)). Còn: chạy thử Release (`workflow_dispatch`) ra `pkm-obsidian-plugin.zip`, thử trên máy sạch ba nền, user thử trên Windows |
+| 5b giao diện plugin cho đề xuất, nguyên liệu, vùng | `product-b` | 2 (cần 5a, 6) | xong (`4a1b5d6`, [báo cáo](../reports/fullstack-developer-261104-1130-plugin-writing-ui.md)): duyệt, áp dụng, hoàn tác, đo duyệt; trang nguyên liệu ghi `uses`; màn hình vùng không đè dòng chấm. Note đề xuất dặn lệnh áp dụng của plugin (`4b367e5`). Còn: thử trong Obsidian thật với `pkm` đã dựng |
 | 3 đổi thư mục, `pkm-contract` | sau merge | 3 | chờ `phase-17-one-door` merge |
 
 Không làm ở đây (E12.7 mục 3.5, 3.6): `migrate_v3`, `selection_signals`, `board.mjs`, Apps Script; nhập Evernote (`normalize`, `highlight_colours`) chờ user quyết có bán không. Điện thoại (`pkm serve`) không thuộc plan này.
