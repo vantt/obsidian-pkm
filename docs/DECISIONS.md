@@ -306,3 +306,18 @@ User tự chuyển repo sang public khi GitHub Actions của repo private bị c
 - **Lý do:** user chọn (2026-11-04): tải ghim theme; người dùng bản B chỉ cần Claude (Claude Code), không cần Claude Desktop.
 - **Đổi ý khi:** cần hỗ trợ khách chỉ có Claude Desktop; hoặc license của theme/plugin ghim không hợp khi bán (xem `plans/reports/researcher-261104-1416-license-review.md`).
 - **Bằng chứng:** `setup::tests` (theme tải và chọn, gỡ trả lại; thiếu `claude` thì dừng trước bước `mcp`), `cli_setup.rs` (`setup_without_claude_desktop_builds_the_index_for_claude_code`: không `--config`, HOME rỗng, index dựng, không có file cấu hình Desktop), `install::config::tests::find_is_none_only_when_no_claude_desktop_dir_exists`.
+
+## Sản phẩm là bộ cài; chỉ chịu giấy phép cho thứ mình phát hành
+- **Ngày:** 2026-11-04
+- **Lựa chọn:** sản phẩm bán cho khách là bộ cài (`pkm`, `pkm setup`, plugin `pkm`, gói OHS) dựng bản B trên máy khách. Plugin, theme, adapter ACP của bên thứ ba được `pkm setup` tải từ nơi phát hành chính thức (GitHub, npm), giữ nguyên, không sửa; Obsidian và Claude Code khách tự cài và đăng nhập bằng tài khoản Claude của họ. Mình không phân phối lại các thành phần đó, nên không kèm giấy phép của chúng. Mình chịu giấy phép cho: binary `pkm` (crate Rust, font OFL nhúng trong snippet), plugin `pkm`, gói OHS (Node.js, 181 gói npm, gói tiếng Việt).
+- **Lý do:** user chốt (2026-11-04): "chỉ là tạo bộ cài đặt giúp khách hàng".
+- **Đổi ý khi:** mình bắt đầu sửa, đóng gói lại hay tự host một thành phần bên thứ ba (ví dụ chép plugin vào Release thay vì tải từ GitHub); khi đó phải kèm giấy phép của nó, với GPL/AGPL thì kèm cả mã nguồn.
+- **Quản lý tiếp:** [LICENSING.md](LICENSING.md) (giấy phép cho mã của mình, thứ phải kèm, việc còn làm).
+- **Bằng chứng:** `plans/reports/researcher-261104-1416-license-review.md`, mục "Bổ sung": gói OHS `v0.17.2-vantt.4` không chứa model (model tải từ Hugging Face lúc chạy), đã có `LICENSES/` cho 171 gói, còn thiếu văn bản giấy phép cho khoảng 16 gói chỉ khai trong `package.json` và cho libvips (LGPL-3.0-or-later, qua `sharp`).
+
+## Giấy phép đóng + EULA; repo công khai tới khi có self-hosted runner
+- **Ngày:** 2026-11-04
+- **Lựa chọn:** mô hình bán là website: khách trả tiền, đăng nhập rồi mới tải bộ cài; tiền nằm ở phần tuỳ biến (preset, plugin `pkm`, `pkm`), không ở phần mềm bên thứ ba bộ cài tải về. Mã của repo này theo giấy phép đóng ([`LICENSE`](../LICENSE): giữ mọi quyền, Van Tran), quyền dùng chỉ cấp qua EULA khách đồng ý khi mua. `Cargo.toml` khai `license-file`, hai `package.json` khai `UNLICENSED`. Repo giữ công khai trong lúc phát triển, chuyển private sau khi có self-hosted runner cho CI; các bản rc trên Release công khai tạm giữ tới lúc đó.
+- **Lý do:** user chốt (2026-11-04). FSL hay MIT/Apache cho phép khách đã mua chép bộ cài cho người khác dùng hợp pháp, làm mất tác dụng của việc trả tiền mới tải. Mọi crate trong binary và font OFL cho phép dùng trong phần mềm đóng; các bản rc chưa có giấy phép nên không có quyền nào phải thu hồi. Chi tiết và các phương án: [LICENSING.md](LICENSING.md).
+- **Đổi ý khi:** thêm bản miễn phí, bán theo cách khác, hay muốn mở mã (mở dần được, đóng lại thì không).
+- **Còn mở:** giấy phép của `ohs-lang-vi` (đề xuất đóng); EULA do luật sư soạn; phát hành qua website (plan riêng).
