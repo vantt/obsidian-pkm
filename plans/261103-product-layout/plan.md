@@ -33,7 +33,7 @@ Thứ tự đổi so với bảng phase: bước 4, 5, 6 không đợi bước 3
 | 6a `propose` vào `pkm-core` | `product-b` | 1 | đang làm |
 | 6b `material`, `zones`, cặp note giống nhau (thay `note_knn.mjs`, `similar_pairs.mjs`) qua `vectors`, `neighbors` của OHS | `product-b` | 1 | đang làm |
 | 5a khung plugin, `workshop_ui`, review log, CSS lưới thư mục, phóng to bảng | `product-b` | 1 | đang làm |
-| 4 `pkm setup`, plugin trong Release | `product-b` | 2 (cần 2, 5a) | chờ đợt 1 |
+| 4 `pkm setup`, plugin trong Release | `product-b-setup` (từ `product-b`) | 2 (cần 2, 5a) | viết xong, chờ merge vào `product-b` (`e5f1b1e`, `d78b154`, `e93a34d`; [báo cáo](reports/fullstack-developer-261104-1130-pkm-setup.md)). Còn: chạy thử Release (`workflow_dispatch`) ra `pkm-obsidian-plugin.zip`, thử trên máy sạch ba nền, user thử trên Windows |
 | 5b giao diện plugin cho đề xuất, nguyên liệu, vùng | `product-b` | 2 (cần 5a, 6) | chờ đợt 1 |
 | 3 đổi thư mục, `pkm-contract` | sau merge | 3 | chờ `phase-17-one-door` merge |
 
