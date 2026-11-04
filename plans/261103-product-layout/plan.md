@@ -36,6 +36,8 @@ Thứ tự đổi so với bảng phase: bước 4, 5, 6 không đợi bước 3
 | 4 `pkm setup`, plugin trong Release | `product-b-setup` (từ `product-b`) | 2 (cần 2, 5a) | viết xong, đã merge vào `product-b` (`e5f1b1e`, `d78b154`, `e93a34d`; [báo cáo](../reports/fullstack-developer-261104-1130-pkm-setup.md)). Còn: chạy thử Release (`workflow_dispatch`) ra `pkm-obsidian-plugin.zip`, thử trên máy sạch ba nền, user thử trên Windows |
 | 5b giao diện plugin cho đề xuất, nguyên liệu, vùng | `product-b` | 2 (cần 5a, 6) | xong (`4a1b5d6`, [báo cáo](../reports/fullstack-developer-261104-1130-plugin-writing-ui.md)): duyệt, áp dụng, hoàn tác, đo duyệt; trang nguyên liệu ghi `uses`; màn hình vùng không đè dòng chấm. Note đề xuất dặn lệnh áp dụng của plugin (`4b367e5`). Còn: thử trong Obsidian thật với `pkm` đã dựng |
 | 3 đổi thư mục, `pkm-contract` | sau merge | 3 | chờ `phase-17-one-door` merge |
+| 4b theme ghim; bản B không cần Claude Desktop | `product-b` | 2 | xong (quyết định user 2026-11-04, [DECISIONS](../../docs/DECISIONS.md)): Primary 2.10.0 và Style Settings 1.0.9 tải ghim sha256; thiếu Claude Code thì `--apply` dừng; không có Claude Desktop thì chỉ dựng index cho Claude Code, `pkm doctor` chỉ cảnh báo. Không đưa plugin lên kho cộng đồng |
+| License khi bán | — | — | đã rà ([báo cáo](../reports/researcher-261104-1416-license-review.md)). Còn: LICENSE/EULA cho repo, `THIRD_PARTY_NOTICES` trong Release (Templater AGPL-3.0; Style Settings, Primary GPL-3.0; font OFL), hỏi Anthropic về đăng nhập gói Pro/Max qua Agent SDK trong sản phẩm bán |
 
 Không làm ở đây (E12.7 mục 3.5, 3.6): `migrate_v3`, `selection_signals`, `board.mjs`, Apps Script; nhập Evernote (`normalize`, `highlight_colours`) chờ user quyết có bán không. Điện thoại (`pkm serve`) không thuộc plan này.
 
