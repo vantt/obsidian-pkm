@@ -204,3 +204,44 @@ Mỗi quyết định một mục, theo khung:
 ## Repo `vantt/obsidian-pkm` chuyển sang public (2026-11-03)
 
 User tự chuyển repo sang public khi GitHub Actions của repo private bị chặn vì hạn mức thanh toán. Thay quyết định giữ private trước đó. Hệ quả: tải Release không còn cần `gh` đăng nhập; trước khi chuyển đã rà lịch sử git theo mẫu token GitHub, khoá Anthropic, khoá AWS, private key và không thấy gì. Không đưa nội dung vault thật (bản B) vào repo vẫn là ràng buộc.
+
+## Tách vai hai repo; `obsidian-pkm` là nguồn sự thật của lõi từ 2026-11-03
+- **Ngày:** 2026-11-03
+- **Lựa chọn:**
+  - Repo này là repo sản phẩm: mọi thứ để dựng một bản B hoàn chỉnh trên máy khách: code, preset bản B (`schema.yaml`, adapter e11, mẫu `CLAUDE.md`, template, theme), hướng dẫn người dùng (phần playbook dành cho khách), bộ cài, Release. Repo đặc tả `vantt/obsidian-pkm-automation` thành repo nghiên cứu: thử nghiệm, số đo, PRD và kế hoạch, chất liệu blog; code ở đó là nguyên mẫu, không giao khách. Fork OHS vẫn là repo riêng.
+  - Từ 2026-11-03 repo này là nguồn sự thật của lõi (graph, tools, MCP, adapter, index). Spec ghim `da62ecb` là lần ghim cuối; phase 15 (đuổi theo commit Python) đóng, không còn lượt đuổi theo. Tính năng mới viết thẳng ở đây, có test và golden riêng.
+  - Repo nghiên cứu không viết thêm Python, kể cả sửa tính năng. Script Python hiện có chạy nguyên trạng cho bản B tới khi được chuyển; muốn đổi hành vi script nào thì chuyển nó trước rồi đổi trên bản mới.
+  - Quy tắc chuyển: lõi, tính nặng, đóng gói (đọc cả vault, index, `propose`, `material`, `zones`, setup) viết Rust ở đây; tích hợp Obsidian (giao diện, hành vi, `workshop_ui`, review log) viết TS trong plugin; script vốn là JS thì giữ JS. Python nội bộ của repo nghiên cứu (`normalize`, `highlight_colours`, `migrate_v3`, `selection_signals`) đóng băng, chuyển khi cần dùng lại.
+  - Tuần chạy song song (phase 16) vẫn giữ để user duyệt chất lượng trước `v0.1.0`. Bản Python `kg` chỉ là đường lùi, không còn là đặc tả.
+- **Lý do:** user chốt 2026-11-03. Rust đã bắt kịp Python: bộ so khớp trên bản B và kg-solo 0 lệch chưa có tên. Giữ Python làm đặc tả nữa là viết mỗi tính năng hai lần. Khách cần một chỗ lấy đủ đồ; đồ giao khách trộn với nguyên mẫu và số đo thì không rõ thứ gì là giao.
+- **Bằng chứng:** phase 10 trên bản B (rc.3, spec `da62ecb`): 54 mục, 0 lệch chưa có tên; CI so khớp kg-solo 0 lệch. Mục quyết định cùng ngày trong `docs/GATES.md` của repo nghiên cứu.
+
+## Cài đặt là `pkm setup`, không làm app cài riêng
+- **Ngày:** 2026-11-03
+- **Lựa chọn:** lệnh `pkm setup VAULT` của chính binary `pkm` thay `scripts/e11/setup_vault.py` của repo nghiên cứu. Không làm app cài riêng. Khách cần giao diện thì sau làm vỏ GUI mỏng bằng Tauri gọi `pkm setup --json`. Plugin Obsidian (TS) chỉ lo giao diện và hành vi, gọi `pkm … --json`, không tự tính nặng. Một tag ra cả binary và plugin cùng phiên bản.
+- **Lý do:** phần lớn việc cài đã có trong `pkm`: `mcp install`, tải gói OHS ghim và kiểm sha256, `doctor`. Một binary thì một chỗ ký mã, một chỗ phát hành, không phải giữ khớp phiên bản giữa hai app.
+- **Đổi ý khi:** cần app cài riêng thật sự, ví dụ khách không mở được terminal và vỏ Tauri không đủ.
+
+## Bố cục `apps/` + `packages/`; đổi thư mục sau khi `phase-17-one-door` merge
+- **Ngày:** 2026-11-03
+- **Lựa chọn:**
+
+  ```
+  apps/
+    pkm/               Rust bin: CLI, MCP, doctor, setup, serve
+    obsidian-plugin/   TS: giao diện, hành vi trong Obsidian
+    setup-gui/         (sau) Tauri, vỏ mỏng gọi `pkm setup --json`
+  packages/
+    pkm-core/          Rust lib: vault, index, graph, related, propose, zones, OHS client
+    pkm-contract/      kiểu JSON chung, sinh từ Rust (schemars/ts-rs) ra TS cho plugin và GUI
+  presets/
+    b/                 schema, adapter, CLAUDE.md, template, theme (dữ liệu)
+  tools/
+    parity/, probes/   bộ so khớp, probe (không giao khách)
+  Cargo.toml           workspace: apps/pkm, packages/pkm-core, tools/parity
+  pnpm-workspace.yaml  apps/obsidian-plugin, packages/pkm-contract
+  ```
+
+  Đổi `crates/` (và `parity/`, `probes/`) sang bố cục này trong một PR, cùng lúc dựng khung plugin, khi `phase-17-one-door` đã merge, không còn nhánh chờ merge và CI xanh. Các việc khác (chuyển preset bản B và hướng dẫn người dùng sang đây, chuyển script E11) không đợi. Kế hoạch: `plans/261103-product-layout/plan.md`.
+- **Lý do:** ba thứ chạy được (binary, plugin, GUI sau này) dùng chung lõi và hợp đồng JSON. `pkm-contract` sinh kiểu TS từ Rust nên lệch hợp đồng lộ ra lúc build. Cargo và pnpm workspace đều cho thành viên ở thư mục tuỳ ý. Đổi thư mục bây giờ đụng nhánh `phase-17-one-door` đang chờ merge.
+- **Đổi ý khi:** plugin và GUI không thành hình sau `v0.1.0` thì giữ `crates/` và `plugin/` cũng được.
