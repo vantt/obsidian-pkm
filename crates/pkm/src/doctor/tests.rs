@@ -177,6 +177,7 @@ fn healthy_machine_passes_every_check_without_starting_ohs() {
             ("kg_entry", Status::Ok),
             ("ohs_mcp", Status::Ok),
             ("db", Status::Ok),
+            ("edges", Status::Skip),
             ("ohs_package", Status::Ok),
             ("ohs_node", Status::Ok),
             ("ohs_runtime", Status::Skip),
@@ -560,4 +561,52 @@ fn separate_ohs_mcp_only_warns() {
     assert!(c.action.as_deref().unwrap().contains("giữ cũng được"));
     assert_eq!(c.fix, None);
     assert_eq!(status(&report, "kg_entry"), Status::Ok);
+}
+
+/// Ghi bảng `meta` như một lần dựng: số note, cạnh theo status (JSON) và cách đọc.
+fn write_meta(db: &Path, notes: u64, edges: &str, options: &str) {
+    let c = rusqlite::Connection::open(db).unwrap();
+    c.execute_batch("CREATE TABLE IF NOT EXISTS meta(key TEXT, value TEXT); DELETE FROM meta;")
+        .unwrap();
+    for (k, v) in [
+        ("notes", notes.to_string().as_str()),
+        ("edges", edges),
+        ("options", options),
+    ] {
+        c.execute("INSERT INTO meta VALUES (?1, ?2)", [k, v])
+            .unwrap();
+    }
+}
+
+#[test]
+fn empty_graph_without_body_edges_warns_with_reinstall_fix() {
+    let m = machine();
+    fs::remove_file(&m.db).unwrap();
+    write_meta(&m.db, 3, "{}", "aliases=1,edge_keys=schema,body_edges=0");
+    let report = m.diagnose(&m.args(), &Fake::new());
+    let c = check(&report, "edges");
+    assert_eq!(c.status, Status::Warn, "{c:?}");
+    assert!(report.ok(), "graph rỗng chỉ là cảnh báo");
+    let fix = c.fix.as_deref().unwrap();
+    assert!(
+        fix.contains("mcp install") && fix.ends_with("--edge-keys links --body-edges"),
+        "{fix}"
+    );
+
+    write_meta(&m.db, 3, "{}", "aliases=1,edge_keys=links,body_edges=1");
+    let c = m.diagnose(&m.args(), &Fake::new());
+    assert_eq!(
+        status(&c, "edges"),
+        Status::Ok,
+        "đã đọc thân note mà vẫn rỗng: vault không có link"
+    );
+
+    write_meta(
+        &m.db,
+        3,
+        r#"{"accepted": 4}"#,
+        "aliases=1,edge_keys=schema,body_edges=0",
+    );
+    let c = m.diagnose(&m.args(), &Fake::new());
+    assert_eq!(check(&c, "edges").detail, "3 note, 4 cạnh");
 }

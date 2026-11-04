@@ -5,6 +5,10 @@
 //! đã có `search`, `read`, nhưng người dùng muốn giữ MCP `ohs` riêng thì vẫn được. Sau khi ghi, làm ấm index tìm kiếm
 //! của OHS (trừ khi `--no-warm` hoặc `--no-ohs`) để lần hỏi đầu trong Claude Desktop không gặp `ohs_not_ready`.
 //!
+//! Cách đọc cạnh: người dùng không chọn (`--edge-keys`, `--body-edges`, `--schema-edges-only`) mà index dựng theo
+//! mặc định có note nhưng không có cạnh nào (vault Obsidian thường chỉ có wikilink trong thân note), bộ cài dựng lại
+//! với `--edge-keys links --body-edges` và ghi hai cờ đó vào mục `pkm` (xem [`body_edges_fallback`]).
+//!
 //! Đặc tả: `scripts/kg/desktop_config.py` ở sha ghim. Khác Python ở chỗ không chép mã nào: `command` là chính binary
 //! `pkm` đang chạy, index dựng vào thư mục dữ liệu của `pkm` (ngoài vault), và gói OHS cài vào `<thư mục pkm>/ohs`.
 //!
@@ -52,6 +56,10 @@ pub struct InstallArgs {
     /// Đọc cạnh trong thân note.
     #[arg(long)]
     pub body_edges: bool,
+    /// Giữ cách đọc cạnh mặc định (chỉ khoá frontmatter theo schema) cả khi graph không có cạnh nào. Không có cờ này
+    /// (và không có --edge-keys, --body-edges) thì graph rỗng làm bộ cài dựng lại với --edge-keys links --body-edges.
+    #[arg(long, conflicts_with_all = ["edge_keys", "body_edges"])]
+    pub schema_edges_only: bool,
     /// Adapter của vault (tên ngắn hoặc file).
     #[arg(long)]
     pub adapter: Option<String>,
@@ -462,7 +470,7 @@ pub fn run_with(
         Some(db) => std::path::absolute(db).map_err(|e| format!("{}: {e}", db.display()))?,
         None => inst.default_db(&vault),
     };
-    let mut read_args = args.read_args();
+    let mut ohs_args = Vec::new();
     if let Some(dir) = &args.ohs {
         let pkg = OhsPackage::from_dir(dir).map_err(|e| format!("--ohs: {e}"))?;
         let root = pkg.root.to_str().ok_or_else(|| {
@@ -471,13 +479,20 @@ pub fn run_with(
                 pkg.root.display()
             )
         })?;
-        read_args.extend(["--ohs".to_owned(), root.to_owned()]);
+        ohs_args.extend(["--ohs".to_owned(), root.to_owned()]);
     }
-    let mut entry = server_entry(&inst.exe, &vault, &db, &read_args, args.about.as_deref())?;
-    if args.no_ohs {
-        entry.env.push((NO_OHS_ENV.to_owned(), "1".to_owned()));
-    }
-    let after = entry.to_value();
+    // Cờ đọc của `read` cộng `--ohs`: dùng cho cả lần dựng index và mục `pkm`.
+    let with_ohs = |read: &InstallArgs| [read.read_args(), ohs_args.clone()].concat();
+    let make_entry = |read_args: &[String]| -> Result<ServerEntry, String> {
+        let mut entry = server_entry(&inst.exe, &vault, &db, read_args, args.about.as_deref())?;
+        if args.no_ohs {
+            entry.env.push((NO_OHS_ENV.to_owned(), "1".to_owned()));
+        }
+        Ok(entry)
+    };
+    let read_args = with_ohs(args);
+    let mut entry = make_entry(&read_args)?;
+    let mut after = entry.to_value();
     let mut changed = put_entry(&mut doc, &after);
     let p = |out: &mut dyn Write, s: String| writeln!(out, "{s}").map_err(|e| e.to_string());
     let location = inst.exe_location_warning(&rerun_args(&entry.args, args));
@@ -500,6 +515,16 @@ pub fn run_with(
         }
         p(out, format!("- {}", ohs_plan(inst, args)))?;
         p(out, format!("- {}", warm_plan(args)))?;
+        if may_switch_edges(args) {
+            p(
+                out,
+                format!(
+                    "- nếu index dựng theo mặc định có note mà không có cạnh nào: dựng lại với {} và ghi vào mục \
+                     `{SERVER_NAME}` (--schema-edges-only để giữ mặc định)",
+                    BODY_EDGE_FLAGS.join(" ")
+                ),
+            )?;
+        }
         p(
             out,
             format!(
@@ -549,6 +574,22 @@ pub fn run_with(
     hooks
         .build_index(&inst.exe, &vault, &db, &read_args)
         .map_err(|e| format!("{e}; cấu hình Claude Desktop chưa đổi"))?;
+    if body_edges_fallback(
+        &inst.exe, args, &vault, &db, &read_args, &ohs_args, hooks, out,
+    )? {
+        let links = InstallArgs {
+            edge_keys: Some("links".to_owned()),
+            body_edges: true,
+            ..args.clone()
+        };
+        entry = make_entry(&with_ohs(&links))?;
+        after = entry.to_value();
+        // Đặt mục mới lên bản đọc từ file, để `changed` so với cấu hình thật chứ không với mục vừa đặt ở trên.
+        doc = load_with_digest(&path)
+            .map_err(|e| format!("{e}. Index đã dựng xong; cấu hình Claude Desktop chưa đổi"))?
+            .0;
+        changed = put_entry(&mut doc, &after);
+    }
     // So rồi mới ghi: trong lúc dựng index, Claude Desktop có thể đã mở, hoặc app khác đã sửa file cấu hình.
     refuse_if_desktop_running(hooks, args.force)
         .map_err(|e| format!("{e}. Index đã dựng xong; cấu hình Claude Desktop chưa đổi"))?;
@@ -646,6 +687,94 @@ fn ohs_note(doc: &ConfigDoc) -> Option<String> {
              `{OHS_SERVER_NAME}` (không bắt buộc; để cả hai thì agent thấy hai tool search và OHS nạp model hai lần)"
         )
     })
+}
+
+/// Cờ đọc cạnh mà bộ cài thêm khi graph theo mặc định rỗng: khoá frontmatter nào chứa link cũng là cạnh, và link
+/// trong thân note cũng vậy.
+pub const BODY_EDGE_FLAGS: [&str; 3] = ["--edge-keys", "links", "--body-edges"];
+
+/// Người dùng không chọn cách đọc cạnh, nên bộ cài được đổi sang [`BODY_EDGE_FLAGS`] khi graph rỗng.
+fn may_switch_edges(args: &InstallArgs) -> bool {
+    args.edge_keys.is_none() && !args.body_edges && !args.schema_edges_only
+}
+
+/// Số note và số cạnh (mọi status) mà lần dựng gần nhất ghi vào `meta` của `db`; `None` khi không đọc được.
+pub fn graph_size(db: &Path) -> Option<(u64, u64)> {
+    use pkm_core::index::try_previous;
+    let notes = try_previous(db, "notes").ok()??.parse().ok()?;
+    let edges: serde_json::Map<String, serde_json::Value> =
+        serde_json::from_str(&try_previous(db, "edges").ok()??).ok()?;
+    Some((
+        notes,
+        edges.values().filter_map(serde_json::Value::as_u64).sum(),
+    ))
+}
+
+/// Vault Obsidian thường chỉ có wikilink trong thân note: cách đọc mặc định (như Python: chỉ khoá frontmatter theo
+/// schema) cho graph rỗng và mọi tool graph trả rỗng. Khi [`may_switch_edges`] và index vừa dựng có note mà không có
+/// cạnh nào, dựng lại với [`BODY_EDGE_FLAGS`]. Có cạnh thì giữ và trả `true` (mục `pkm` cần ghi thêm hai cờ); vẫn không
+/// có thì dựng lại theo mặc định (`--edge-keys schema`, để index không nhớ cách đọc kia) và trả `false`.
+#[allow(clippy::too_many_arguments)]
+fn body_edges_fallback(
+    exe: &Path,
+    args: &InstallArgs,
+    vault: &Path,
+    db: &Path,
+    read_args: &[String],
+    ohs_args: &[String],
+    hooks: &dyn Hooks,
+    out: &mut dyn Write,
+) -> Result<bool, String> {
+    if !may_switch_edges(args) {
+        return Ok(false);
+    }
+    let Some((notes @ 1.., 0)) = graph_size(db) else {
+        return Ok(false);
+    };
+    let w = |out: &mut dyn Write, s: String| writeln!(out, "{s}").map_err(|e| e.to_string());
+    let flags = BODY_EDGE_FLAGS.join(" ");
+    w(
+        out,
+        format!(
+            "{notes} note mà không có cạnh nào khi chỉ đọc khoá frontmatter theo schema; dựng lại với {flags} (đọc \
+             wikilink trong frontmatter và thân note) …"
+        ),
+    )?;
+    let fail = |e: String| format!("{e}; cấu hình Claude Desktop chưa đổi");
+    let links = InstallArgs {
+        edge_keys: Some("links".to_owned()),
+        body_edges: true,
+        ..args.clone()
+    };
+    hooks
+        .build_index(
+            exe,
+            vault,
+            db,
+            &[links.read_args(), ohs_args.to_vec()].concat(),
+        )
+        .map_err(fail)?;
+    if let Some((_, edges @ 1..)) = graph_size(db) {
+        w(
+            out,
+            format!(
+                "dùng {flags}: {edges} cạnh. Muốn chỉ đọc khoá frontmatter theo schema thì cài lại với \
+                 --schema-edges-only"
+            ),
+        )?;
+        return Ok(true);
+    }
+    w(
+        out,
+        "vẫn không có cạnh nào (vault không có wikilink); giữ cách đọc mặc định".to_owned(),
+    )?;
+    let schema = [
+        read_args.to_vec(),
+        vec!["--edge-keys".to_owned(), "schema".to_owned()],
+    ]
+    .concat();
+    hooks.build_index(exe, vault, db, &schema).map_err(fail)?;
+    Ok(false)
 }
 
 /// Mô tả việc làm ấm index OHS (cho `--dry-run`).
@@ -774,20 +903,14 @@ fn rerun_args(entry_args: &[String], args: &InstallArgs) -> Vec<String> {
     out
 }
 
-/// Lệnh bộ cài cho shell của máy này (repo riêng tư nên tải bộ cài qua `gh` đã đăng nhập). Ghim tag của chính bản
-/// đang chạy: `gh release download` không tag lấy bản "latest", mà bản pre-release (`v0.1.0-rc.1`) không bao giờ là
-/// "latest".
+/// Lệnh bộ cài cho shell của máy này (repo public, tải thẳng không cần `gh`). Ghim tag của chính bản đang chạy:
+/// `releases/latest` không bao giờ trỏ tới bản pre-release (`v0.1.0-rc.4`).
 pub fn installer_command() -> String {
-    let tag = concat!("v", env!("CARGO_PKG_VERSION"));
+    let base = concat!("releases/download/v", env!("CARGO_PKG_VERSION"));
     if cfg!(windows) {
-        format!(
-            "& ([scriptblock]::Create((gh release download {tag} --repo {RELEASE_REPO} --pattern install.ps1 \
-             --output - | Out-String)))"
-        )
+        format!("irm https://github.com/{RELEASE_REPO}/{base}/install.ps1 | iex")
     } else {
-        format!(
-            "gh release download {tag} --repo {RELEASE_REPO} --pattern install.sh --output - | sh"
-        )
+        format!("curl -fsSL https://github.com/{RELEASE_REPO}/{base}/install.sh | sh")
     }
 }
 

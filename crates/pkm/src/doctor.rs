@@ -278,6 +278,17 @@ impl Fixes {
         install::reinstall_args(self.entry_args.as_deref()?, self.no_ohs).map(|a| self.line(a))
     }
 
+    /// `pkm mcp install` lại với cách đọc cạnh [`install::BODY_EDGE_FLAGS`] thay cho cách đọc cạnh đang ghi.
+    fn reinstall_with_body_edges(&self) -> Option<String> {
+        let mut args = install::reinstall_args(self.entry_args.as_deref()?, self.no_ohs)?;
+        if let Some(i) = args.iter().position(|a| a == "--edge-keys") {
+            args.drain(i..(i + 2).min(args.len()));
+        }
+        args.retain(|a| a != "--body-edges");
+        args.extend(install::BODY_EDGE_FLAGS.map(str::to_owned));
+        Some(self.line(args))
+    }
+
     /// Dựng lại index của mục `pkm` vào `db`.
     fn rebuild(&self, db: &Path) -> Option<String> {
         let mut args = install::rebuild_args(self.entry_args.as_deref()?)?;
@@ -314,7 +325,9 @@ pub fn diagnose(args: &DoctorArgs, hooks: &dyn Hooks, exe: &Path) -> Report {
         .as_ref()
         .map(|e| install::entry_paths(&e.args))
         .unwrap_or_default();
-    checks.push(check_db(args.db.clone().or(entry_db), &fixes, hooks));
+    let db = args.db.clone().or(entry_db);
+    checks.push(check_db(db.clone(), &fixes, hooks));
+    checks.push(check_edges(db.as_deref(), &fixes));
     let entry_ohs = entry.as_ref().and_then(|e| install::entry_ohs(&e.args));
     let pkg = check_ohs_package(
         args.ohs.as_deref().or(entry_ohs.as_deref()),
@@ -508,6 +521,34 @@ fn check_db(db: Option<PathBuf>, fixes: &Fixes, hooks: &dyn Hooks) -> Check {
         format!("{} chưa có", db.display())
     };
     Check::bad(ID, Status::Fail, detail, action).with_fix(fixes.rebuild(&db))
+}
+
+/// Index có note mà không có cạnh nào, với cách đọc không lấy link trong thân note: vault Obsidian thường (wikilink
+/// trong thân note) khi đó có graph rỗng, mọi tool graph trả rỗng.
+fn check_edges(db: Option<&Path>, fixes: &Fixes) -> Check {
+    const ID: &str = "edges";
+    let Some((notes, edges)) = db.and_then(install::graph_size) else {
+        return Check::skip(ID, "không đọc được số cạnh của index");
+    };
+    let body = db
+        .and_then(|d| pkm_core::index::try_previous(d, "options").ok().flatten())
+        .is_some_and(|o| o.contains("body_edges=1"));
+    if notes == 0 || edges > 0 || body {
+        return Check::ok(ID, format!("{notes} note, {edges} cạnh"));
+    }
+    Check::bad(
+        ID,
+        Status::Warn,
+        format!(
+            "{notes} note mà không có cạnh nào: index chỉ đọc khoá frontmatter theo schema, không đọc wikilink trong \
+             thân note; mọi tool graph sẽ trả rỗng"
+        ),
+        format!(
+            "Vault dùng wikilink trong thân note thì thoát hẳn Claude Desktop rồi cài lại với {} (lệnh dưới).",
+            install::BODY_EDGE_FLAGS.join(" ")
+        ),
+    )
+    .with_fix(fixes.reinstall_with_body_edges())
 }
 
 fn check_ohs_package(

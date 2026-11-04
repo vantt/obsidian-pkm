@@ -17,8 +17,10 @@ Từ máy Windows trống tới Claude Desktop hỏi được graph vault trong 
    ```powershell
    pkm mcp install "D:\Duong\dan\toi\Vault"
    ```
-   Lệnh này dựng index, tải gói OHS `0.17.2-vantt.4` (khoảng 100 MB, kiểm sha256) vào `%LOCALAPPDATA%\pkm\ohs`, ghi mục `pkm`, rồi làm ấm index tìm kiếm (vault lớn lần đầu mất vài phút; `--no-warm` để bỏ). Mục `kg` cũ do `pkm` ghi được đổi tên thành `pkm`; mục `ohs` bạn tự thêm thì giữ nguyên (không cần nữa, vì `pkm` đã có `search` và `read`). Máy không ra được GitHub thì tải file gói ở [bản phát hành của fork](https://github.com/vantt/obsidian-hybrid-search/releases/tag/v0.17.2-vantt.4) rồi thêm `--ohs-package <file vừa tải>`; không cần OHS thì thêm `--no-ohs`.
+   Lệnh này dựng index (vault chỉ có wikilink trong thân note thì tự đọc link ở đó, xem dưới), tải gói OHS `0.17.2-vantt.4` (khoảng 100 MB, kiểm sha256) vào `%LOCALAPPDATA%\pkm\ohs`, ghi mục `pkm`, rồi làm ấm index tìm kiếm (vault lớn lần đầu mất vài phút; `--no-warm` để bỏ). Mục `kg` cũ do `pkm` ghi được đổi tên thành `pkm`; mục `ohs` bạn tự thêm thì giữ nguyên (không cần nữa, vì `pkm` đã có `search` và `read`). Máy không ra được GitHub thì tải file gói ở [bản phát hành của fork](https://github.com/vantt/obsidian-hybrid-search/releases/tag/v0.17.2-vantt.4) rồi thêm `--ohs-package <file vừa tải>`; không cần OHS thì thêm `--no-ohs`.
 4. Mở Claude Desktop và hỏi: *"Dùng pkm: vault có bao nhiêu note, note nào được liên kết tới nhiều nhất?"*
+
+Cách đọc cạnh của graph: mặc định `pkm` chỉ lấy cạnh từ khoá frontmatter theo schema (như bản Python). Vault Obsidian thường chỉ có wikilink trong thân note nên cách đó cho graph rỗng; khi gặp vậy, `pkm mcp install` tự dựng lại với `--edge-keys links --body-edges` và ghi hai cờ đó vào mục `pkm`. Muốn giữ cách đọc theo schema thì thêm `--schema-edges-only`.
 
 Có lỗi thì chạy `pkm doctor`: lệnh này kiểm index, cấu hình Claude Desktop, gói OHS (cả Visual C++ Redistributable mà gói cần trên Windows), đường dẫn dài, và in cách sửa.
 

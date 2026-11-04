@@ -20,6 +20,24 @@ struct Fake {
     /// Vault đã làm ấm index OHS, và trạng thái trả về.
     warmed: RefCell<Vec<PathBuf>>,
     warm_state: OhsState,
+    /// Khi có: "dựng index" ghi `meta` thật (2 note, số cạnh do hàm trả theo cờ đọc) vào DB.
+    edges: Option<fn(&[String]) -> u64>,
+}
+
+/// Ghi bảng `meta` tối thiểu như một lần dựng thật: `notes` và `edges` (JSON theo status).
+fn write_meta(db: &Path, notes: u64, edges: u64) {
+    let c = rusqlite::Connection::open(db).unwrap();
+    c.execute_batch("CREATE TABLE IF NOT EXISTS meta(key TEXT, value TEXT); DELETE FROM meta;")
+        .unwrap();
+    let edges = if edges == 0 {
+        "{}".to_owned()
+    } else {
+        format!(r#"{{"accepted": {edges}}}"#)
+    };
+    for (k, v) in [("notes", notes.to_string()), ("edges", edges)] {
+        c.execute("INSERT INTO meta VALUES (?1, ?2)", [k, v.as_str()])
+            .unwrap();
+    }
 }
 
 impl Fake {
@@ -35,6 +53,7 @@ impl Fake {
             served: Vec::new(),
             warmed: RefCell::default(),
             warm_state: OhsState::Ready,
+            edges: None,
         }
     }
 }
@@ -54,6 +73,10 @@ impl Hooks for Fake {
             f();
         }
         self.built.set(true);
+        if let Some(edges) = self.edges {
+            fs::create_dir_all(db.parent().unwrap()).unwrap();
+            write_meta(db, 2, edges(read));
+        }
         self.build.clone()
     }
 
@@ -790,9 +813,9 @@ fn refuses_binary_outside_install_dir_without_allow_any_location() {
     assert!(err.contains("thư mục tải về hoặc thư mục tạm"), "{err}");
     assert!(
         err.contains(concat!(
-            "gh release download v",
+            "https://github.com/vantt/obsidian-pkm/releases/download/v",
             env!("CARGO_PKG_VERSION"),
-            " --repo vantt/obsidian-pkm"
+            "/install."
         )),
         "{err}"
     );
@@ -1175,4 +1198,112 @@ fn install_warms_the_ohs_index_unless_told_not_to() {
     let out = s.run(&s.args(), &hooks).unwrap();
     assert!(hooks.warmed.borrow().is_empty());
     assert!(!out.contains("làm ấm"), "{out}");
+}
+
+/// Số cạnh của vault chỉ có wikilink trong thân note: có cạnh khi đọc thân note.
+fn body_links_only(read: &[String]) -> u64 {
+    if read.iter().any(|a| a == "--body-edges") {
+        2
+    } else {
+        0
+    }
+}
+
+fn entry_args(s: &Setup) -> Vec<String> {
+    s.read()["mcpServers"]["pkm"]["args"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|a| a.as_str().unwrap().to_owned())
+        .collect()
+}
+
+fn builds(hooks: &Fake) -> Vec<Vec<String>> {
+    hooks
+        .builds
+        .borrow()
+        .iter()
+        .map(|(_, _, r)| r.clone())
+        .collect()
+}
+
+#[test]
+fn empty_graph_switches_to_body_edges_and_writes_the_flags() {
+    let s = setup(None);
+    let hooks = Fake {
+        edges: Some(body_links_only),
+        ..Fake::new()
+    };
+    let out = s.run(&s.args(), &hooks).unwrap();
+    assert!(
+        out.contains("dựng lại với --edge-keys links --body-edges"),
+        "{out}"
+    );
+    assert!(
+        out.contains("--edge-keys links --body-edges: 2 cạnh"),
+        "{out}"
+    );
+    assert_eq!(
+        builds(&hooks),
+        [
+            vec![],
+            vec![
+                "--edge-keys".to_owned(),
+                "links".into(),
+                "--body-edges".into()
+            ]
+        ]
+    );
+    let args = entry_args(&s);
+    assert!(
+        args.ends_with(&["--edge-keys".into(), "links".into(), "--body-edges".into()]),
+        "{args:?}"
+    );
+}
+
+#[test]
+fn vault_without_links_keeps_the_default_reading() {
+    let s = setup(None);
+    let hooks = Fake {
+        edges: Some(|_| 0),
+        ..Fake::new()
+    };
+    let out = s.run(&s.args(), &hooks).unwrap();
+    assert!(out.contains("giữ cách đọc mặc định"), "{out}");
+    let b = builds(&hooks);
+    assert_eq!(b.len(), 3, "{b:?}");
+    assert_eq!(
+        b[2],
+        ["--edge-keys", "schema"],
+        "index không được nhớ cách đọc thử"
+    );
+    assert!(
+        !entry_args(&s)
+            .iter()
+            .any(|a| a.starts_with("--edge") || a == "--body-edges")
+    );
+}
+
+#[test]
+fn chosen_edge_reading_or_existing_edges_never_switch() {
+    let s = setup(None);
+    let hooks = Fake {
+        edges: Some(body_links_only),
+        ..Fake::new()
+    };
+    let args = InstallArgs {
+        schema_edges_only: true,
+        ..s.args()
+    };
+    s.run(&args, &hooks).unwrap();
+    assert_eq!(builds(&hooks).len(), 1);
+    assert!(!entry_args(&s).iter().any(|a| a == "--body-edges"));
+
+    let s = setup(None);
+    let hooks = Fake {
+        edges: Some(|_| 5),
+        ..Fake::new()
+    };
+    s.run(&s.args(), &hooks).unwrap();
+    assert_eq!(builds(&hooks).len(), 1, "graph theo schema đã có cạnh");
 }
