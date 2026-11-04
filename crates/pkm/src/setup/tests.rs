@@ -387,7 +387,7 @@ fn apply_sets_up_the_vault_and_a_second_run_changes_nothing() {
     let data = t.json(".obsidian/plugins/pkm/data.json");
     assert_eq!(data["pkmPath"], json!(t.inst.exe.to_str().unwrap()));
     assert_eq!(
-        data["dbPath"],
+        data["graphDbPath"],
         json!(t.inst.default_db(&t.vault).to_str().unwrap())
     );
     assert_eq!(

@@ -155,7 +155,7 @@ fn setup_dry_run_apply_rerun_and_remove() {
         Path::new(data["pkmPath"].as_str().unwrap()),
         Path::new(env!("CARGO_BIN_EXE_pkm"))
     );
-    let db = PathBuf::from(data["dbPath"].as_str().unwrap());
+    let db = PathBuf::from(data["graphDbPath"].as_str().unwrap());
     assert!(
         db.starts_with(e.tmp.path().join("home")),
         "{}",

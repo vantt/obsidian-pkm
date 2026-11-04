@@ -736,14 +736,15 @@ impl<'a> Ctx<'a> {
         self.enable_plugins(log, m, &[PLUGIN_ID.to_owned()])
     }
 
-    /// `data.json` của plugin `pkm`: binary đang chạy và index mà mục MCP `pkm` dùng.
+    /// `data.json` của plugin `pkm` (khoá `pkmPath`, `graphDbPath` của cài đặt plugin): binary đang chạy và index mà mục
+    /// MCP `pkm` dùng (plugin truyền nó làm `--db` cho material, zones, pairs).
     fn plugin_settings(&self) -> Result<Vec<u8>, String> {
         let text = |p: &Path| {
             p.to_str()
                 .map(str::to_owned)
                 .ok_or_else(|| format!("{} không phải UTF-8, không ghi được vào JSON", p.display()))
         };
-        let v = json!({"pkmPath": text(&self.inst.exe)?, "dbPath": text(&self.db)?});
+        let v = json!({"pkmPath": text(&self.inst.exe)?, "graphDbPath": text(&self.db)?});
         Ok(serde_json::to_string_pretty(&v)
             .map_err(|e| e.to_string())?
             .into_bytes())
