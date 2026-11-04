@@ -1,0 +1,100 @@
+{
+ "vaultName": "fixture-vault",
+ "topicRoots": [
+  "Notes",
+  "Missing"
+ ],
+ "inboxFolders": [
+  "Capture/Inbox"
+ ],
+ "notes": [
+  "Notes/1. Projects/Alpha/a.md",
+  "Notes/1. Projects/Alpha/b.md",
+  "Notes/1. Projects/Alpha/sub/c.md",
+  "Notes/1. Projects/Beta/a.md",
+  "Notes/1. Projects/Beta/b.md",
+  "Notes/2. Areas/Gamma (x)/a.md",
+  "Notes/2. Areas/Gamma (x)/b.md",
+  "Notes/2. Areas/Gamma (x)/c.md",
+  "Notes/2. Areas/_Hidden/a.md",
+  "Notes/2. Areas/_Hidden/b.md",
+  "Notes/2. Areas/_Hidden/c.md",
+  "Notes/loose.md",
+  "Other/1. Projects/Delta/a.md",
+  "Other/1. Projects/Delta/b.md",
+  "Other/1. Projects/Delta/c.md"
+ ],
+ "files": {
+  "Trang chủ.md": "# Trang chủ\n\n**Tạo nhanh:** [Ý mới](obsidian://new?vault=fixture-vault&file=%C3%9D%2F%C3%9D%20m%E1%BB%9Bi&content=---%0Atype%3A%20note%0Atopic%3A%20%27%27%0Agist%3A%20%27%27%0Asource%3A%20%5B%5D%0Awise%3A%20null%0Ause%3A%20null%0Awf%3A%20%5B%5D%0A---%0A%0A%23%23%20%C3%9D%20ch%C3%ADnh%20%28l%E1%BB%9Di%20m%C3%ACnh%29%0A%0A%0A%23%23%20T%E1%BB%AB%20ngu%E1%BB%93n%0A%0A%0A%23%23%20M%C3%ACnh%20th%E1%BA%A5y%20g%C3%AC%2C%20%C4%91em%20th%E1%BB%AD%20%E1%BB%9F%20%C4%91%C3%A2u%0A) · [Bài viết mới](obsidian://new?vault=fixture-vault&file=B%C3%A0i%20vi%E1%BA%BFt%2FB%C3%A0i%20m%E1%BB%9Bi&content=---%0Atype%3A%20post%0Astatus%3A%20%C3%BD%20t%C6%B0%E1%BB%9Fng%0Auses%3A%20%5B%5D%0Achannel%3A%20%27%27%0A---%0A%0A%23%23%20%C3%9D%20t%C6%B0%E1%BB%9Fng%20m%E1%BB%99t%20c%C3%A2u%0A%0A%0A%23%23%20Nguy%C3%AAn%20li%E1%BB%87u%0A%0ATh%C3%AAm%20note%20v%C3%A0o%20%60uses%60%20%E1%BB%9F%20tr%C3%AAn%3B%20ch%C3%BAng%20hi%E1%BB%87n%20%E1%BB%9F%20%C4%91%C3%A2y.%0A%0A%60%60%60base%0Afilters%3A%0A%20%20and%3A%0A%20%20%20%20-%20%27this.uses.contains%28file.asLink%28%29%29%27%0Aviews%3A%0A%20%20-%20type%3A%20table%0A%20%20%20%20name%3A%20Nguy%C3%AAn%20li%E1%BB%87u%0A%20%20%20%20order%3A%0A%20%20%20%20%20%20-%20file.name%0A%20%20%20%20%20%20-%20note.gist%0A%20%20%20%20%20%20-%20note.why%0A%20%20%20%20%20%20-%20note.wise%0A%60%60%60%0A%0A%23%23%20B%C3%A0i%0A) · [Bài cắt mới](obsidian://new?vault=fixture-vault&file=Inbox%2FB%C3%A0i%20c%E1%BA%AFt%20m%E1%BB%9Bi&content=---%0Atype%3A%20clip%0Atopic%3A%20%27%27%0Awhy%3A%20%27%27%0Aurl%3A%20%27%27%0Awise%3A%20null%0Ause%3A%20null%0Awf%3A%0A-%20to-read%0A---%0A%0A%23%23%20V%C3%AC%20sao%20l%C6%B0u%20%28m%E1%BB%99t%20c%C3%A2u%29%0A%0A%0A%23%23%20N%E1%BB%99i%20dung%0A)\n\n## Hôm nay\n\nTối đa 5 note nên đụng tới hôm nay: mức dùng 1–2, hoặc đang ở trạm áp dụng, viết blog. Xong thì thêm `done` vào `wf`, note rời khỏi danh sách.\n\n![[Xưởng.base#Hôm nay]]\n\n## Bốn trạm\n\nTheo bộ thẻ `wf-` của bạn. Chuyển trạm: sửa `wf` trong thuộc tính note.\n\n### Làm rõ\n\n![[Xưởng.base#Làm rõ]]\n\n### Suy ngẫm\n\n![[Xưởng.base#Suy ngẫm]]\n\n### Ghi nhớ\n\n![[Xưởng.base#Ghi nhớ]]\n\n### Sản xuất\n\n![[Xưởng.base#Sản xuất]]\n\n### Đã xong\n\n![[Xưởng.base#Đã xong]]\n\n## Chủ đề\n\nMỗi thư mục có từ 3 note trở lên có một mục lục do máy sinh (`toc`). Mục lục không phải bản đồ: bản đồ (MOC) là trang bạn tự viết về khoảng giữa các note, tạo từ template \"Bản đồ (MOC)\".\n\n![[Chủ đề.base#Mọi chủ đề]]\n\n### Bản đồ (MOC)\n\n![[Chủ đề.base#Bản đồ (MOC)]]\n\n## Bài viết\n\n![[Xưởng.base#Bài viết]]\n\n## Đề xuất chờ duyệt\n\nMáy đề xuất, bạn quyết. Mở một đề xuất: hai note nguồn hiện ngay trong đó. Đổi `status` thành `nhận` hoặc `bỏ`; agent áp dụng và ghi sổ, mọi thay đổi trả lại được.\n\n![[Xưởng.base#Đề xuất chờ duyệt]]\n\n### Đã xử lý\n\n![[Xưởng.base#Đề xuất đã xử lý]]\n\n### Note có loại do máy đoán\n\n![[Xưởng.base#Chờ duyệt]]\n\n## Mới lưu\n\n![[Xưởng.base#Mới lưu]]\n\n## Độ thông thái\n\nThang DIKW 1–7 của bạn: nội dung note đang là tín hiệu thô, thông tin, tri thức hay minh triết.\n\n![[Xưởng.base#Độ thông thái]]\n\n## Trích theo tác giả\n\n![[Xưởng.base#Trích theo tác giả]]\n",
+  "_Xưởng/Xưởng.base": "properties:\n  note.type:\n    displayName: Loại\n  note.wf:\n    displayName: Trạm\n  note.wise:\n    displayName: Độ thông thái\n  note.use:\n    displayName: Mức dùng\n  note.proposed_type:\n    displayName: Máy đề xuất\n  note.author:\n    displayName: Tác giả\n  note.source:\n    displayName: Nguồn (note)\n  note.url:\n    displayName: Link gốc\n  note.updated:\n    displayName: Sửa lần cuối\n  note.created:\n    displayName: Tạo\n  note.captured:\n    displayName: Lưu lúc\n  file.folder:\n    displayName: Thư mục\n  note.kind:\n    displayName: Kiểu đề xuất\n  note.reason:\n    displayName: Lý do\n  note.status:\n    displayName: Trạng thái\n  note.closed:\n    displayName: Xử lý lúc\n  note.who:\n    displayName: Người\n  note.reject_reason:\n    displayName: Lý do bỏ\n  note.asserted_at:\n    displayName: Nhận ngày\n  formula.cover:\n    displayName: Ảnh bìa\nfilters:\n  and:\n    - 'file.ext == \"md\"'\n    - '!file.inFolder(\"_Templates\")'\nviews:\n  - type: table\n    name: Hôm nay\n    filters:\n      and:\n        - '(!use.isEmpty() && use <= 2) || (!wf.isEmpty() && wf.containsAny(\"to-apply\", \"to-blog\"))'\n        - 'wf.isEmpty() || !wf.contains(\"done\")'\n    order:\n      - file.name\n      - wf\n      - use\n      - wise\n      - file.folder\n    sort:\n      - property: updated\n        direction: ASC\n    limit: 5\n  - type: table\n    name: Làm rõ\n    filters:\n      and:\n        - '!wf.isEmpty() && wf.containsAny(\"to-read\", \"to-research\", \"to-summary\", \"to-clarify\")'\n        - 'wf.isEmpty() || !wf.contains(\"done\")'\n    order:\n      - file.name\n      - wf\n      - wise\n      - use\n      - updated\n    sort:\n      - property: updated\n        direction: ASC\n  - type: table\n    name: Suy ngẫm\n    filters:\n      and:\n        - '!wf.isEmpty() && wf.containsAny(\"to-review\", \"re-read\", \"to-re-read\", \"to-absorb\", \"re-think\")'\n        - 'wf.isEmpty() || !wf.contains(\"done\")'\n    order:\n      - file.name\n      - wf\n      - wise\n      - use\n      - updated\n    sort:\n      - property: updated\n        direction: ASC\n  - type: table\n    name: Ghi nhớ\n    filters:\n      and:\n        - '!wf.isEmpty() && wf.containsAny(\"to-remember\", \"to-surprise\")'\n        - 'wf.isEmpty() || !wf.contains(\"done\")'\n    order:\n      - file.name\n      - wf\n      - wise\n      - use\n      - updated\n    sort:\n      - property: updated\n        direction: ASC\n  - type: table\n    name: Sản xuất\n    filters:\n      and:\n        - '!wf.isEmpty() && wf.containsAny(\"to-organize\", \"to-apply\", \"to-blog\", \"to-mixture\")'\n        - 'wf.isEmpty() || !wf.contains(\"done\")'\n    order:\n      - file.name\n      - wf\n      - wise\n      - use\n      - updated\n    sort:\n      - property: updated\n        direction: ASC\n  - type: table\n    name: Đã xong\n    filters:\n      and:\n        - '!wf.isEmpty() && wf.contains(\"done\")'\n    order:\n      - file.name\n      - wise\n      - use\n      - updated\n    sort:\n      - property: updated\n        direction: DESC\n  - type: table\n    name: Đề xuất chờ duyệt\n    filters:\n      and:\n        - 'type == \"proposal\"'\n        - 'status == \"chờ\"'\n    groupBy:\n      property: note.kind\n      direction: ASC\n    order:\n      - file.name\n      - kind\n      - reason\n    sort:\n      - property: kind\n        direction: ASC\n  - type: table\n    name: Đề xuất đã xử lý\n    filters:\n      and:\n        - 'type == \"proposal\"'\n        - 'status != \"chờ\"'\n    order:\n      - file.name\n      - kind\n      - status\n      - closed\n    sort:\n      - property: closed\n        direction: DESC\n    limit: 20\n  - type: table\n    name: Chờ duyệt\n    filters:\n      and:\n        - '!proposed_type.isEmpty()'\n    order:\n      - file.name\n      - proposed_type\n      - url\n      - file.folder\n    sort:\n      - property: created\n        direction: DESC\n    limit: 50\n  - type: table\n    name: Trích theo tác giả\n    filters:\n      and:\n        - 'type == \"quote\"'\n    groupBy:\n      property: note.author\n      direction: ASC\n    order:\n      - file.name\n      - author\n      - captured\n      - file.folder\n    sort:\n      - property: captured\n        direction: ASC\n  - type: table\n    name: Mới lưu\n    filters:\n      and:\n        - 'file.inFolder(\"Capture/Inbox\") || file.inFolder(\"Inbox\")'\n    order:\n      - file.name\n      - type\n      - proposed_type\n      - created\n    sort:\n      - property: created\n        direction: DESC\n    limit: 10\n  - type: table\n    name: Độ thông thái\n    filters:\n      and:\n        - '!wise.isEmpty()'\n    order:\n      - file.name\n      - wise\n      - use\n      - wf\n      - file.folder\n    sort:\n      - property: wise\n        direction: DESC\n  - type: table\n    name: Bài viết\n    filters:\n      and:\n        - 'file.inFolder(\"Bài viết\")'\n        - 'file.name != \"Bài viết\"'\n    groupBy:\n      property: note.status\n      direction: ASC\n    order:\n      - file.name\n      - status\n      - channel\n      - uses\n    sort:\n      - property: updated\n        direction: DESC\n",
+  "_Xưởng/Chủ đề.base": "formulas:\n  cover: 'if(!cover.isEmpty(), cover, file.embeds.filter(value.toString().lower().contains(\".png\") || value.toString().lower().contains(\".jpg\") || value.toString().lower().contains(\".jpeg\") || value.toString().lower().contains(\".gif\") || value.toString().lower().contains(\".webp\") || value.toString().lower().contains(\".svg\"))[0])'\nproperties:\n  note.type:\n    displayName: Loại\n  note.wf:\n    displayName: Trạm\n  note.wise:\n    displayName: Độ thông thái\n  note.use:\n    displayName: Mức dùng\n  note.proposed_type:\n    displayName: Máy đề xuất\n  note.author:\n    displayName: Tác giả\n  note.source:\n    displayName: Nguồn (note)\n  note.url:\n    displayName: Link gốc\n  note.updated:\n    displayName: Sửa lần cuối\n  note.created:\n    displayName: Tạo\n  note.captured:\n    displayName: Lưu lúc\n  file.folder:\n    displayName: Thư mục\n  note.kind:\n    displayName: Kiểu đề xuất\n  note.reason:\n    displayName: Lý do\n  note.status:\n    displayName: Trạng thái\n  note.closed:\n    displayName: Xử lý lúc\n  note.who:\n    displayName: Người\n  note.reject_reason:\n    displayName: Lý do bỏ\n  note.asserted_at:\n    displayName: Nhận ngày\n  formula.cover:\n    displayName: Ảnh bìa\nfilters:\n  and:\n    - 'file.ext == \"md\"'\n    - '!file.inFolder(\"_Templates\")'\nviews:\n  - type: cards\n    name: Lưới\n    image: formula.cover\n    imageFit: cover\n    imageAspectRatio: 0.55\n    cardSize: 220\n    filters:\n      and:\n        - 'file.inFolder(this.file.folder)'\n        - 'file.path != this.file.path'\n        - 'type != \"toc\"'\n    groupBy:\n      property: file.folder\n      direction: ASC\n    order:\n      - file.name\n      - type\n      - wise\n      - wf\n    sort:\n      - property: file.mtime\n        direction: DESC\n  - type: table\n    name: Mọi chủ đề\n    filters:\n      and:\n        - 'type == \"toc\"'\n    order:\n      - file.name\n      - file.folder\n    sort:\n      - property: file.name\n        direction: ASC\n  - type: table\n    name: Bản đồ (MOC)\n    filters:\n      and:\n        - 'type == \"moc\"'\n    order:\n      - file.name\n      - file.folder\n      - updated\n    sort:\n      - property: updated\n        direction: DESC\n  - type: table\n    name: Ghi chép của mình\n    filters:\n      and:\n        - 'file.inFolder(this.file.folder)'\n        - 'file.path != this.file.path'\n        - 'type != \"quote\"'\n        - 'url.isEmpty()'\n        - 'type != \"toc\"'\n    order:\n      - file.name\n      - wise\n      - use\n      - wf\n      - updated\n    sort:\n      - property: updated\n        direction: DESC\n  - type: table\n    name: Trích\n    filters:\n      and:\n        - 'file.inFolder(this.file.folder)'\n        - 'type == \"quote\"'\n    order:\n      - file.name\n      - author\n      - captured\n    sort:\n      - property: captured\n        direction: ASC\n  - type: table\n    name: Bài cắt\n    filters:\n      and:\n        - 'file.inFolder(this.file.folder)'\n        - 'type != \"quote\"'\n        - '!url.isEmpty()'\n    order:\n      - file.name\n      - proposed_type\n      - wise\n      - use\n      - url\n    sort:\n      - property: created\n        direction: DESC\n  - type: table\n    name: Trong chủ đề có thẻ\n    filters:\n      and:\n        - 'file.inFolder(this.file.folder)'\n        - '!wf.isEmpty() || !wise.isEmpty() || !use.isEmpty()'\n    order:\n      - file.name\n      - wf\n      - wise\n      - use\n    sort:\n      - property: updated\n        direction: ASC\n",
+  "_Templates/Ý.md": "---\ntype: note\ntopic: ''\ngist: ''\nsource: []\nwise: null\nuse: null\nwf: []\n---\n\n## Ý chính (lời mình)\n\n\n## Từ nguồn\n\n\n## Mình thấy gì, đem thử ở đâu\n",
+  "_Templates/Bài viết.md": "---\ntype: post\nstatus: ý tưởng\nuses: []\nchannel: ''\n---\n\n## Ý tưởng một câu\n\n\n## Nguyên liệu\n\nThêm note vào `uses` ở trên; chúng hiện ở đây.\n\n```base\nfilters:\n  and:\n    - 'this.uses.contains(file.asLink())'\nviews:\n  - type: table\n    name: Nguyên liệu\n    order:\n      - file.name\n      - note.gist\n      - note.why\n      - note.wise\n```\n\n## Bài\n",
+  "_Templates/Bài cắt.md": "---\ntype: clip\ntopic: ''\nwhy: ''\nurl: ''\nwise: null\nuse: null\nwf:\n- to-read\n---\n\n## Vì sao lưu (một câu)\n\n\n## Nội dung\n",
+  "_Templates/Trích.md": "---\ntype: quote\ntopic: ''\nauthor: ''\nurl: ''\n---\n\n> \n",
+  "_Templates/Khái niệm.md": "---\ntype: concept\ntopic: ''\nup: ''\nrelated: []\n---\n\n## Định nghĩa\n\n\n## Ví dụ\n",
+  "_Templates/Dự án.md": "---\ntype: project\nstatus: đang làm\ngoal: ''\nuses: []\n---\n\n## Mục tiêu\n\n\n## Bước\n",
+  "_Templates/Mục lục.md": "---\ntype: toc\n---\n\n![[Chủ đề.base#Lưới]]\n",
+  "_Templates/Bản đồ (MOC).md": "---\ntype: moc\nparent_moc: ''\n---\n\n> [!question] Ý định — Lời của bạn\n> Vì sao chủ đề này quan trọng lúc này? Bạn đang đuổi theo câu hỏi gì?\n\n## Nhóm 1\n\n- [[ ]]: \n\n> [!question] Cầu nối — Lời của bạn\n> Nhóm này liên quan nhóm kia thế nào?\n\n## Căng thẳng\n\n\n## Câu hỏi còn mở\n\n\n%% moc:auto:start %%\n## Note mới chưa xếp\n\n## Chỗ trống\n%% moc:auto:end %%\n",
+  "Notes/1. Projects/Alpha/Alpha (chủ đề).md": "---\ntype: toc\ncssclasses:\n- folder-grid\n---\n# Alpha\n\nMục lục sinh tự động từ thư mục (`toc`, không phải MOC). Mở trang này là thấy mọi thứ trong thư mục, không cần lệnh nào.\n\n## Mọi note trong thư mục\n\nẢnh bìa: thuộc tính `cover` của note, không có thì ảnh đầu tiên trong note. Đổi cỡ thẻ, cách sắp, cột hiện ở thanh trên lưới.\n\n![[Chủ đề.base#Lưới]]\n\n## Ghi chép của mình\n\n![[Chủ đề.base#Ghi chép của mình]]\n\n## Bài cắt đã lưu\n\n![[Chủ đề.base#Bài cắt]]\n\n## Trích\n\n![[Chủ đề.base#Trích]]\n\n## Đã gắn thẻ của bộ khung\n\n![[Chủ đề.base#Trong chủ đề có thẻ]]\n",
+  "Notes/2. Areas/Gamma (x)/Gamma (x) (chủ đề).md": "---\ntype: toc\ncssclasses:\n- folder-grid\n---\n# Gamma (x)\n\nMục lục sinh tự động từ thư mục (`toc`, không phải MOC). Mở trang này là thấy mọi thứ trong thư mục, không cần lệnh nào.\n\n## Mọi note trong thư mục\n\nẢnh bìa: thuộc tính `cover` của note, không có thì ảnh đầu tiên trong note. Đổi cỡ thẻ, cách sắp, cột hiện ở thanh trên lưới.\n\n![[Chủ đề.base#Lưới]]\n\n## Ghi chép của mình\n\n![[Chủ đề.base#Ghi chép của mình]]\n\n## Bài cắt đã lưu\n\n![[Chủ đề.base#Bài cắt]]\n\n## Trích\n\n![[Chủ đề.base#Trích]]\n\n## Đã gắn thẻ của bộ khung\n\n![[Chủ đề.base#Trong chủ đề có thẻ]]\n",
+  "Bài viết/.keep": "",
+  "Ý/.keep": "",
+  "Inbox/.keep": ""
+ },
+ "digests": {
+  "Trang chủ.md": "310b7521e2cc61af144d8571a4bf2aa0ace5973a9c1e56fbc3b725f2bd43fb84",
+  "_Xưởng/Xưởng.base": "ace5cb6d68753e29be51066ceaddda404becbbc989d382354f5a19bd39e254b1",
+  "_Xưởng/Chủ đề.base": "2ccd0bb010433e6c56ec6a1452191db021328885096d61cf1b645e8d6d06ac4b",
+  "_Templates/Ý.md": "32b44b9c07a0d9bb05d88644831f52affd61cd49f9e5f5a512ec68ecb242c914",
+  "_Templates/Bài viết.md": "c30852d0c79676305d47eab7b7ea4530a5a8de8d94da32a73c2a864c3f529d32",
+  "_Templates/Bài cắt.md": "974b11e7800b201af008138fb91a184def2334aa159ed9ce7960c0ed6f176227",
+  "_Templates/Trích.md": "2392726e59009b684733e331160dc65baede397c3c0716adadeb0828f51fd1e7",
+  "_Templates/Khái niệm.md": "2ddecb40b4301fa8d24006c15ffd2e2ff610040a991fb7e87e0a5941e2f3408a",
+  "_Templates/Dự án.md": "1309fc1a7cddbd8826c02fedd42bee79f53bdeae9bffa567021d50ba9fa4864b",
+  "_Templates/Mục lục.md": "2d1abaac5a669b68555312dd8978a7d089cd044042894039cf6f249f756f7fc4",
+  "_Templates/Bản đồ (MOC).md": "5235d5d2a1ec1a8e9cca083f27578f9b6971b308d4bae76e850dd08c6bcc1c19",
+  "Notes/1. Projects/Alpha/Alpha (chủ đề).md": "8b13e58bb083ef0a7ba9ee1318496e0452d4eefa8a01466d2d2b5b91a5f5d0c8",
+  "Notes/2. Areas/Gamma (x)/Gamma (x) (chủ đề).md": "58cd45d3cd6ae87d98fbc04958d9ed90c8e44468df453e0fdd218c06335792d4",
+  "Bài viết/.keep": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "Ý/.keep": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "Inbox/.keep": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+ },
+ "homepage": {
+  "version": 4,
+  "separateMobile": false,
+  "homepages": {
+   "Main Homepage": {
+    "value": "Trang chủ",
+    "kind": "File",
+    "openOnStartup": true,
+    "openMode": "Replace all open notes",
+    "manualOpenMode": "Keep open notes",
+    "view": "Reading view",
+    "revertView": true,
+    "openWhenEmpty": false,
+    "refreshDataview": false,
+    "autoCreate": false,
+    "autoScroll": false,
+    "pin": false,
+    "commands": [],
+    "alwaysApply": false,
+    "hideReleaseNotes": false
+   }
+  }
+ },
+ "templater": {
+  "keep": 1,
+  "templates_folder": "_Templates",
+  "folder_templates": [
+   {
+    "folder": "Bài viết",
+    "template": "_Templates/Bài viết.md"
+   },
+   {
+    "folder": "Ý",
+    "template": "_Templates/Ý.md"
+   }
+  ]
+ }
+}

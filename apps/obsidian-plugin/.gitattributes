@@ -1,0 +1,2 @@
+# Templates are hashed and compared byte for byte: keep LF on every platform.
+* text=auto eol=lf

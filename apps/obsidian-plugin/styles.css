@@ -1,0 +1,70 @@
+/* Card grid on topic pages (cssclasses: folder-grid), Bases cards view.
+   Variables and classes of Obsidian's Bases cards (--bases-cards-*, .bases-cards-item, .bases-cards-cover). */
+.folder-grid {
+  --bases-cards-radius: 12px;
+  --bases-cards-shadow: 0 1px 3px rgb(0 0 0 / .08), 0 0 0 1px var(--background-modifier-border);
+  --bases-cards-shadow-hover: 0 8px 20px rgb(0 0 0 / .16), 0 0 0 1px var(--interactive-accent);
+  --bases-cards-cover-background: var(--background-secondary);
+}
+.folder-grid .bases-cards-item {
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+.folder-grid .bases-cards-item:hover {
+  transform: translateY(-2px);
+}
+.folder-grid .bases-cards-cover {
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+@media (prefers-reduced-motion: reduce) {
+  .folder-grid .bases-cards-item { transition: none; }
+  .folder-grid .bases-cards-item:hover { transform: none; }
+}
+
+/* Table zoom button and the zoomed box. Colours come from the theme's variables, light and dark. */
+.pkm-zoom-box { position: relative; }
+.cm-table-widget .table-wrapper { position: relative; }
+
+.pkm-zoom {
+  position: absolute;
+  top: var(--size-2-2);
+  right: var(--size-2-2);
+  z-index: 3;
+  display: inline-flex;
+  padding: var(--size-2-2);
+  color: var(--text-muted);
+  background: var(--table-header-background, var(--background-primary));
+  border: 1px solid var(--table-border-color, var(--background-modifier-border));
+  border-radius: var(--radius-s);
+  box-shadow: none;
+  opacity: 0;
+  transition: opacity var(--anim-duration-fast, .14s);
+}
+.pkm-zoom svg { width: var(--icon-s); height: var(--icon-s); }
+.pkm-zoom:hover { color: var(--text-normal); background: var(--background-modifier-hover); }
+.pkm-zoom-box:hover .pkm-zoom,
+.pkm-zoom:focus-visible,
+[data-pkm-zoomed] .pkm-zoom,
+.is-mobile .pkm-zoom { opacity: 1; }
+
+/* Bases: the button sits at the end of the embed's own toolbar, like its other buttons */
+.bases-toolbar .pkm-zoom {
+  position: static;
+  opacity: 1;
+  border: none;
+  background: none;
+  margin-inline-start: auto;
+}
+
+/* Zoomed: as wide as the pane's text area, shifted left to its edge (fit() in table-zoom.ts sets both) */
+[data-pkm-zoomed] {
+  width: var(--pkm-zoom-width) !important;
+  max-width: none !important;
+  margin-left: var(--pkm-zoom-x) !important;
+  transform: none !important;
+  --bases-embed-transform: none;
+}
+.cm-table-widget[data-pkm-zoomed] .table-wrapper,
+[data-pkm-zoomed] table { width: 100%; }
+
+/* Workshop confirmation dialog */
+.pkm-workshop-list { max-height: 12em; overflow-y: auto; font-size: var(--font-ui-small); }

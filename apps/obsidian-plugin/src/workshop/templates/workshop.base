@@ -1,0 +1,241 @@
+properties:
+  note.type:
+    displayName: Loại
+  note.wf:
+    displayName: Trạm
+  note.wise:
+    displayName: Độ thông thái
+  note.use:
+    displayName: Mức dùng
+  note.proposed_type:
+    displayName: Máy đề xuất
+  note.author:
+    displayName: Tác giả
+  note.source:
+    displayName: Nguồn (note)
+  note.url:
+    displayName: Link gốc
+  note.updated:
+    displayName: Sửa lần cuối
+  note.created:
+    displayName: Tạo
+  note.captured:
+    displayName: Lưu lúc
+  file.folder:
+    displayName: Thư mục
+  note.kind:
+    displayName: Kiểu đề xuất
+  note.reason:
+    displayName: Lý do
+  note.status:
+    displayName: Trạng thái
+  note.closed:
+    displayName: Xử lý lúc
+  note.who:
+    displayName: Người
+  note.reject_reason:
+    displayName: Lý do bỏ
+  note.asserted_at:
+    displayName: Nhận ngày
+  formula.cover:
+    displayName: Ảnh bìa
+filters:
+  and:
+    - 'file.ext == "md"'
+    - '!file.inFolder("_Templates")'
+views:
+  - type: table
+    name: Hôm nay
+    filters:
+      and:
+        - '(!use.isEmpty() && use <= 2) || (!wf.isEmpty() && wf.containsAny("to-apply", "to-blog"))'
+        - 'wf.isEmpty() || !wf.contains("done")'
+    order:
+      - file.name
+      - wf
+      - use
+      - wise
+      - file.folder
+    sort:
+      - property: updated
+        direction: ASC
+    limit: 5
+  - type: table
+    name: Làm rõ
+    filters:
+      and:
+        - '!wf.isEmpty() && wf.containsAny("to-read", "to-research", "to-summary", "to-clarify")'
+        - 'wf.isEmpty() || !wf.contains("done")'
+    order:
+      - file.name
+      - wf
+      - wise
+      - use
+      - updated
+    sort:
+      - property: updated
+        direction: ASC
+  - type: table
+    name: Suy ngẫm
+    filters:
+      and:
+        - '!wf.isEmpty() && wf.containsAny("to-review", "re-read", "to-re-read", "to-absorb", "re-think")'
+        - 'wf.isEmpty() || !wf.contains("done")'
+    order:
+      - file.name
+      - wf
+      - wise
+      - use
+      - updated
+    sort:
+      - property: updated
+        direction: ASC
+  - type: table
+    name: Ghi nhớ
+    filters:
+      and:
+        - '!wf.isEmpty() && wf.containsAny("to-remember", "to-surprise")'
+        - 'wf.isEmpty() || !wf.contains("done")'
+    order:
+      - file.name
+      - wf
+      - wise
+      - use
+      - updated
+    sort:
+      - property: updated
+        direction: ASC
+  - type: table
+    name: Sản xuất
+    filters:
+      and:
+        - '!wf.isEmpty() && wf.containsAny("to-organize", "to-apply", "to-blog", "to-mixture")'
+        - 'wf.isEmpty() || !wf.contains("done")'
+    order:
+      - file.name
+      - wf
+      - wise
+      - use
+      - updated
+    sort:
+      - property: updated
+        direction: ASC
+  - type: table
+    name: Đã xong
+    filters:
+      and:
+        - '!wf.isEmpty() && wf.contains("done")'
+    order:
+      - file.name
+      - wise
+      - use
+      - updated
+    sort:
+      - property: updated
+        direction: DESC
+  - type: table
+    name: Đề xuất chờ duyệt
+    filters:
+      and:
+        - 'type == "proposal"'
+        - 'status == "chờ"'
+    groupBy:
+      property: note.kind
+      direction: ASC
+    order:
+      - file.name
+      - kind
+      - reason
+    sort:
+      - property: kind
+        direction: ASC
+  - type: table
+    name: Đề xuất đã xử lý
+    filters:
+      and:
+        - 'type == "proposal"'
+        - 'status != "chờ"'
+    order:
+      - file.name
+      - kind
+      - status
+      - closed
+    sort:
+      - property: closed
+        direction: DESC
+    limit: 20
+  - type: table
+    name: Chờ duyệt
+    filters:
+      and:
+        - '!proposed_type.isEmpty()'
+    order:
+      - file.name
+      - proposed_type
+      - url
+      - file.folder
+    sort:
+      - property: created
+        direction: DESC
+    limit: 50
+  - type: table
+    name: Trích theo tác giả
+    filters:
+      and:
+        - 'type == "quote"'
+    groupBy:
+      property: note.author
+      direction: ASC
+    order:
+      - file.name
+      - author
+      - captured
+      - file.folder
+    sort:
+      - property: captured
+        direction: ASC
+  - type: table
+    name: Mới lưu
+    filters:
+      and:
+        - {{inboxFilter}}
+    order:
+      - file.name
+      - type
+      - proposed_type
+      - created
+    sort:
+      - property: created
+        direction: DESC
+    limit: 10
+  - type: table
+    name: Độ thông thái
+    filters:
+      and:
+        - '!wise.isEmpty()'
+    order:
+      - file.name
+      - wise
+      - use
+      - wf
+      - file.folder
+    sort:
+      - property: wise
+        direction: DESC
+  - type: table
+    name: Bài viết
+    filters:
+      and:
+        - 'file.inFolder("Bài viết")'
+        - 'file.name != "Bài viết"'
+    groupBy:
+      property: note.status
+      direction: ASC
+    order:
+      - file.name
+      - status
+      - channel
+      - uses
+    sort:
+      - property: updated
+        direction: DESC
