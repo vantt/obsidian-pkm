@@ -106,6 +106,29 @@ pub fn locate(explicit: Option<&Path>) -> Result<PathBuf, String> {
     locate_in(&dirs)
 }
 
+/// Như [`locate`], nhưng máy không có Claude Desktop (không có thư mục nào của nó, và không có `--config`) là `None`
+/// thay vì lỗi. Có nhiều file hay nhiều thư mục vẫn là lỗi: phải chọn bằng `--config`.
+pub fn find(explicit: Option<&Path>) -> Result<Option<PathBuf>, String> {
+    if explicit.is_some() {
+        return locate(explicit).map(Some);
+    }
+    let home = std::env::home_dir();
+    let dirs = candidate_dirs(Os::current(), &|k| std::env::var_os(k), home.as_deref());
+    find_in(&dirs)
+}
+
+/// Như [`locate_in`], nhưng không có file và không có thư mục nào là `None`.
+pub fn find_in(dirs: &[PathBuf]) -> Result<Option<PathBuf>, String> {
+    let any = dirs
+        .iter()
+        .any(|d| d.is_dir() || d.join(CONFIG_FILE).is_file());
+    if any {
+        locate_in(dirs).map(Some)
+    } else {
+        Ok(None)
+    }
+}
+
 /// Chọn file cấu hình trong `dirs`. Đúng một file có sẵn thì dùng file đó; nhiều file thì bắt chọn bằng `--config`
 /// như Python. Khác Python: chưa có file nào nhưng đúng một thư mục Claude có sẵn (Claude Desktop đã chạy nhưng
 /// chưa ai sửa cấu hình) thì tạo file mới trong thư mục đó.
@@ -607,6 +630,20 @@ mod tests {
         assert!(locate_in(&[a, b]).unwrap_err().contains("thư mục"));
         let err = locate_in(&[tmp.path().join("không có")]).unwrap_err();
         assert!(err.contains("không thấy Claude Desktop"), "{err}");
+    }
+
+    #[test]
+    fn find_is_none_only_when_no_claude_desktop_dir_exists() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (a, b) = (tmp.path().join("a"), tmp.path().join("b"));
+        assert_eq!(find_in(&[a.clone(), b.clone()]).unwrap(), None);
+        fs::create_dir_all(&b).unwrap();
+        assert_eq!(
+            find_in(&[a.clone(), b.clone()]).unwrap(),
+            Some(b.join(CONFIG_FILE))
+        );
+        fs::create_dir_all(&a).unwrap();
+        assert!(find_in(&[a, b]).unwrap_err().contains("thư mục"));
     }
 
     #[test]

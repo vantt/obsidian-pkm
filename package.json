@@ -1,0 +1,10 @@
+{
+  "name": "obsidian-pkm",
+  "private": true,
+  "license": "UNLICENSED",
+  "packageManager": "pnpm@12.10.1",
+  "scripts": {
+    "plugin:build": "pnpm --filter pkm-obsidian-plugin run build",
+    "plugin:test": "pnpm --filter pkm-obsidian-plugin run test"
+  }
+}

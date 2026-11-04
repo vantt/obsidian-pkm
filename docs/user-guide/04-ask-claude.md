@@ -10,8 +10,8 @@ Claude đọc vault qua một MCP server tên `pkm` (binary `pkm` của repo nà
 
 | Chỗ | Cài | Hợp với |
 |---|---|---|
-| Claude Desktop | `pkm mcp install VAULT …` ([README](../../README.md), "Bắt đầu nhanh"). Thoát hẳn Claude Desktop, cả ở khay hệ thống, trước khi cài: app ghi đè cấu hình lúc thoát | Câu hỏi về cả vault, phiên dài |
-| Chat trong Obsidian | Plugin Agent Client mở Claude Code ở side panel, cùng server `pkm`, đăng ký riêng cho thư mục vault. Cách trả lời nằm ở `VAULT/.claude/CLAUDE.md` | Câu hỏi về note đang mở: "bài này", "note này" là note đó |
+| Claude Desktop (không bắt buộc) | `pkm mcp install VAULT …` ([README](../../README.md), "Bắt đầu nhanh"). Thoát hẳn Claude Desktop, cả ở khay hệ thống, trước khi cài: app ghi đè cấu hình lúc thoát | Câu hỏi về cả vault, phiên dài |
+| Chat trong Obsidian (bản B cần) | Plugin Agent Client mở Claude Code ở side panel, cùng server `pkm`, đăng ký riêng cho thư mục vault (`pkm setup` thêm). Cần Claude Code đã đăng nhập bằng tài khoản Claude của bạn. Cách trả lời nằm ở `VAULT/.claude/CLAUDE.md` | Câu hỏi về note đang mở: "bài này", "note này" là note đó |
 
 Nội dung note Claude đọc được gửi lên Anthropic. Chỉ nối những vault bạn đồng ý cho đọc.
 

@@ -38,6 +38,6 @@ Claude, trang Nguyên liệu và các tool của `pkm` coi `_E11/`, `_Xưởng/`
 
 ## Cài đặt
 
-Cài `pkm` và nối vault với Claude Desktop: xem [README](../../README.md), mục "Bắt đầu nhanh". Lệnh `pkm setup VAULT` dựng đủ bản B (plugin, mẫu, giao diện, MCP) từ [presets/b](../../presets/b/README.md) đang được viết; tới khi có, người cài dựng vault cho bạn.
+Cài `pkm` và nối vault với Claude Desktop: xem [README](../../README.md), mục "Bắt đầu nhanh". Dựng bản B trên vault bằng `pkm setup VAULT --apply` (plugin, theme, chat trong Obsidian, MCP, index): xem [README](../../README.md), mục "Dựng bản B".
 
 Lần đầu mở vault, Obsidian hỏi có tin plugin của vault không (Restricted mode). Đó là chốt an toàn của Obsidian; bấm tin thì Trang chủ và các view mới chạy.

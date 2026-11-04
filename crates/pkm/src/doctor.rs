@@ -382,8 +382,20 @@ fn check_entry(
 ) -> (Option<ServerEntry>, Option<ConfigDoc>) {
     const CONFIG: &str = "claude_config";
     const ENTRY: &str = "kg_entry";
-    let path = match config::locate(explicit) {
-        Ok(p) => p,
+    let path = match config::find(explicit) {
+        Ok(Some(p)) => p,
+        Ok(None) => {
+            // Bản B chạy `pkm` qua Claude Code; Claude Desktop không bắt buộc.
+            checks.push(Check::bad(
+                CONFIG,
+                Status::Warn,
+                "không thấy Claude Desktop trên máy này (không bắt buộc: Claude Code chạy MCP pkm riêng cho từng vault)",
+                "Dùng Claude Code: kiểm bằng `claude mcp get pkm` trong thư mục vault. Muốn dùng Claude Desktop thì cài, \
+                 mở một lần, rồi chạy `pkm mcp install VAULT`.",
+            ));
+            checks.push(Check::skip(ENTRY, "không có Claude Desktop"));
+            return (None, None);
+        }
         Err(e) => {
             checks.push(Check::bad(
                 CONFIG,

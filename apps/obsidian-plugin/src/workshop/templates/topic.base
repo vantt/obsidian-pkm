@@ -1,0 +1,154 @@
+formulas:
+  cover: 'if(!cover.isEmpty(), cover, file.embeds.filter(value.toString().lower().contains(".png") || value.toString().lower().contains(".jpg") || value.toString().lower().contains(".jpeg") || value.toString().lower().contains(".gif") || value.toString().lower().contains(".webp") || value.toString().lower().contains(".svg"))[0])'
+properties:
+  note.type:
+    displayName: Loại
+  note.wf:
+    displayName: Trạm
+  note.wise:
+    displayName: Độ thông thái
+  note.use:
+    displayName: Mức dùng
+  note.proposed_type:
+    displayName: Máy đề xuất
+  note.author:
+    displayName: Tác giả
+  note.source:
+    displayName: Nguồn (note)
+  note.url:
+    displayName: Link gốc
+  note.updated:
+    displayName: Sửa lần cuối
+  note.created:
+    displayName: Tạo
+  note.captured:
+    displayName: Lưu lúc
+  file.folder:
+    displayName: Thư mục
+  note.kind:
+    displayName: Kiểu đề xuất
+  note.reason:
+    displayName: Lý do
+  note.status:
+    displayName: Trạng thái
+  note.closed:
+    displayName: Xử lý lúc
+  note.who:
+    displayName: Người
+  note.reject_reason:
+    displayName: Lý do bỏ
+  note.asserted_at:
+    displayName: Nhận ngày
+  formula.cover:
+    displayName: Ảnh bìa
+filters:
+  and:
+    - 'file.ext == "md"'
+    - '!file.inFolder("_Templates")'
+views:
+  - type: cards
+    name: Lưới
+    image: formula.cover
+    imageFit: cover
+    imageAspectRatio: 0.55
+    cardSize: 220
+    filters:
+      and:
+        - 'file.inFolder(this.file.folder)'
+        - 'file.path != this.file.path'
+        - 'type != "toc"'
+    groupBy:
+      property: file.folder
+      direction: ASC
+    order:
+      - file.name
+      - type
+      - wise
+      - wf
+    sort:
+      - property: file.mtime
+        direction: DESC
+  - type: table
+    name: Mọi chủ đề
+    filters:
+      and:
+        - 'type == "toc"'
+    order:
+      - file.name
+      - file.folder
+    sort:
+      - property: file.name
+        direction: ASC
+  - type: table
+    name: Bản đồ (MOC)
+    filters:
+      and:
+        - 'type == "moc"'
+    order:
+      - file.name
+      - file.folder
+      - updated
+    sort:
+      - property: updated
+        direction: DESC
+  - type: table
+    name: Ghi chép của mình
+    filters:
+      and:
+        - 'file.inFolder(this.file.folder)'
+        - 'file.path != this.file.path'
+        - 'type != "quote"'
+        - 'url.isEmpty()'
+        - 'type != "toc"'
+    order:
+      - file.name
+      - wise
+      - use
+      - wf
+      - updated
+    sort:
+      - property: updated
+        direction: DESC
+  - type: table
+    name: Trích
+    filters:
+      and:
+        - 'file.inFolder(this.file.folder)'
+        - 'type == "quote"'
+    order:
+      - file.name
+      - author
+      - captured
+    sort:
+      - property: captured
+        direction: ASC
+  - type: table
+    name: Bài cắt
+    filters:
+      and:
+        - 'file.inFolder(this.file.folder)'
+        - 'type != "quote"'
+        - '!url.isEmpty()'
+    order:
+      - file.name
+      - proposed_type
+      - wise
+      - use
+      - url
+    sort:
+      - property: created
+        direction: DESC
+  - type: table
+    name: Trong chủ đề có thẻ
+    filters:
+      and:
+        - 'file.inFolder(this.file.folder)'
+        - '!wf.isEmpty() || !wise.isEmpty() || !use.isEmpty()'
+    order:
+      - file.name
+      - wf
+      - wise
+      - use
+    sort:
+      - property: updated
+        direction: ASC

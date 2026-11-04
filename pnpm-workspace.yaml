@@ -1,0 +1,4 @@
+packages:
+  - apps/obsidian-plugin
+allowBuilds:
+  esbuild: true

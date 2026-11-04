@@ -4,6 +4,7 @@ mod cli;
 mod doctor;
 mod install;
 mod mcp;
+mod setup;
 
 use std::process::ExitCode;
 

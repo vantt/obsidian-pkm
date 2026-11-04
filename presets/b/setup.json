@@ -26,6 +26,15 @@
         "manifest.json": "3fc1d8d412bc9fc1ca4533d11a2ad2f2fac531fdd02c2626dbc0a0c82fdf6897",
         "styles.css": "254cfdda3f5076473f2993e04934da327f4f47425228c63ff31dcce95386b327"
       }
+    },
+    "obsidian-style-settings": {
+      "repo": "mgmeyers/obsidian-style-settings",
+      "version": "1.0.9",
+      "sha256": {
+        "main.js": "1828abaacdab4c5578b705a625c585b30512f8efad4c7cfc5a18e70cc3557468",
+        "manifest.json": "9cffdc20cf2aa1354820e0050b694b0f9b576446e3d5d44a36ae8b0187e5bfb8",
+        "styles.css": "ee7937d2be50653a89ccb30ae5f0572b23507d5b7f1328d005271a363075bfd8"
+      }
     }
   },
   "core_plugins": ["bases"],
@@ -44,12 +53,19 @@
     "about": "Kho ghi chú cá nhân chuyển từ Evernote: bài cắt, trích dẫn, ý, dự án, chủ đề."
   },
   "snippets": {
-    "e11-folder-grid": "folder-grid.css",
     "e11-theme": "theme/e11-theme.css"
   },
   "theme": {
-    "css_theme": "Primary",
-    "css_theme_version": "2.10.0",
+    "css_theme": {
+      "name": "Primary",
+      "repo": "primary-theme/obsidian",
+      "version": "2.10.0",
+      "ref": "v.2.10.0",
+      "sha256": {
+        "manifest.json": "94bc34e2ac15c2268ac5652f903dc511fa783388cf86d15204d0643a8e60f1b4",
+        "theme.css": "1a9d1320a206aea17d7ce5607f4698e66f80415561761657767ed77018d8b37d"
+      }
+    },
     "base_font_size": 19,
     "disable_plugins": ["obsidian-minimal-settings"]
   }

@@ -651,6 +651,55 @@ pub fn run_with(
     )
 }
 
+/// Dựng index cho `args.vault` khi máy không có Claude Desktop: cài gói OHS, dựng index với cờ đọc của `args`, làm
+/// ấm OHS. Không đọc hay ghi cấu hình nào, không đổi cách đọc cạnh (người gọi tự đưa cờ cạnh). MCP `pkm` khi đó do
+/// Claude Code chạy (`pkm setup` thêm bằng `claude mcp add`).
+pub fn index_only(
+    inst: &Install,
+    args: &InstallArgs,
+    hooks: &dyn Hooks,
+    out: &mut dyn Write,
+) -> Result<(), String> {
+    let vault = args
+        .vault
+        .as_deref()
+        .ok_or("thiếu VAULT (đường dẫn vault cần cài)")?;
+    let vault = std::path::absolute(vault).map_err(|e| format!("{}: {e}", vault.display()))?;
+    if !vault.is_dir() {
+        return Err(format!("{} không phải thư mục vault", vault.display()));
+    }
+    let db = match &args.db {
+        Some(db) => std::path::absolute(db).map_err(|e| format!("{}: {e}", db.display()))?,
+        None => inst.default_db(&vault),
+    };
+    let mut read_args = args.read_args();
+    if let Some(dir) = &args.ohs {
+        let pkg = OhsPackage::from_dir(dir).map_err(|e| format!("--ohs: {e}"))?;
+        read_args.extend(["--ohs".to_owned(), pkg.root.to_string_lossy().into_owned()]);
+    }
+    let p = |out: &mut dyn Write, s: String| writeln!(out, "{s}").map_err(|e| e.to_string());
+    if args.dry_run {
+        p(out, "[dry-run] không ghi gì. Kế hoạch:".to_owned())?;
+        p(out, format!("- {}", ohs_plan(inst, args)))?;
+        p(out, format!("- {}", warm_plan(args)))?;
+        return p(
+            out,
+            format!(
+                "- dựng index {} cho vault {}",
+                db.display(),
+                vault.display()
+            ),
+        );
+    }
+    install_ohs(inst, args, hooks, out)?;
+    if let Some(dir) = db.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| format!("tạo {}: {e}", dir.display()))?;
+    }
+    p(out, format!("dựng index {} …", db.display()))?;
+    hooks.build_index(&inst.exe, &vault, &db, &read_args)?;
+    warm(inst, args, &vault, hooks, out)
+}
+
 /// Mục `kg` của `doc` do `pkm` ghi (sẽ đổi tên thành `pkm`), khi chưa có mục `pkm`.
 fn legacy_entry(doc: &ConfigDoc) -> bool {
     doc.server(SERVER_NAME).is_none()

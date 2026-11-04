@@ -278,3 +278,46 @@ User tự chuyển repo sang public khi GitHub Actions của repo private bị c
   Đổi `crates/` (và `parity/`, `probes/`) sang bố cục này trong một PR, cùng lúc dựng khung plugin, khi `phase-17-one-door` đã merge, không còn nhánh chờ merge và CI xanh. Các việc khác (chuyển preset bản B và hướng dẫn người dùng sang đây, chuyển script E11) không đợi. Kế hoạch: `plans/261103-product-layout/plan.md`.
 - **Lý do:** ba thứ chạy được (binary, plugin, GUI sau này) dùng chung lõi và hợp đồng JSON. `pkm-contract` sinh kiểu TS từ Rust nên lệch hợp đồng lộ ra lúc build. Cargo và pnpm workspace đều cho thành viên ở thư mục tuỳ ý. Đổi thư mục bây giờ đụng nhánh `phase-17-one-door` đang chờ merge.
 - **Đổi ý khi:** plugin và GUI không thành hình sau `v0.1.0` thì giữ `crates/` và `plugin/` cũng được.
+
+## `pkm setup`: phạm vi, preset nhúng, plugin trong Release
+- **Ngày:** 2026-11-04
+- **Lựa chọn:**
+  - `pkm setup VAULT` (`crates/pkm/src/setup.rs`) thay `setup_vault.py`. Mặc định chạy thử, `--apply` làm, `--remove [--apply]` gỡ, `--json` cho vỏ GUI. Gỡ cũng chạy thử trước (Python gỡ ngay). Manifest giữ chỗ và khoá của Python (`_E11/setup-manifest.json`), thêm `files` (mã băm từng file đã ghi) để không đè, không xoá file người dùng đã sửa; manifest do Python ghi gỡ được bằng `pkm setup --remove`.
+  - Preset nhúng vào binary lúc build (`include_str!`, `include_bytes!`: `setup.json`, `vault-agent.md`, `theme/e11-theme.css` khoảng 1 MB), không đọc `presets/b/` lúc chạy.
+  - Plugin `pkm` ra Release thành một asset `pkm-obsidian-plugin.zip` (phẳng ba file), kiểm theo `checksums.txt` như `install.sh`; `pkm setup` tải đúng tag `v<phiên bản binary>` và từ chối plugin khác phiên bản. `--plugin-dir DIR` cài từ bản dựng tại máy. Zip một file thay vì ba file rời để tên asset không chung chung (`main.js`) và một dòng checksum. Đọc zip bằng crate `zip` đã có, tải bằng `curl` của bộ cài gói OHS: không thêm dependency.
+  - `data.json` của plugin chỉ ghi khi chưa có: `pkmPath` (binary đang chạy) và `graphDbPath` (index của mục MCP `pkm`).
+  - Snippet `e11-folder-grid.css` không cài nữa: CSS lưới thư mục nằm trong `styles.css` của plugin, và Dựng xưởng xoá snippet cũ. `setup.json` bỏ mục đó. Plugin `e11-table-zoom` cũng không cài (plugin `pkm` có nút phóng bảng).
+  - Theme Primary và plugin Style Settings: tải ghim, kiểm sha256 (xem mục "`pkm setup` tải theme ghim; bản B cần Claude Code, không cần Claude Desktop" bên dưới).
+  - Adapter ACP cài bằng `npm` vào `<thư mục pkm>/claude-agent-acp` (Python: `--acp`, mặc định `C:\tools\claude-agent-acp` hay `~/.local/share/pkm/claude-agent-acp`); không có `npm` thì in đúng lệnh cần chạy, không cài Node. Không có `claude` thì dừng (xem mục bên dưới). Bỏ phần WSL của Python (`pkm` Windows chạy thẳng trên Windows).
+  - Bước viết bài chạy `pairs --write`, `pairs` tập rộng (`.e11/similar-pairs.json`, như Python), `propose --create --similar`, `zones --apply --db <index của MCP>` chỉ khi gói OHS có và `ready` trong 60 giây; không thì bỏ qua kèm lý do. `normalize`, `migrate_v3`, `colours`, `graph` của Python không chuyển, in là bỏ qua.
+  - Lỗi ở một bước (tải sai sha256, `npm install`, `claude mcp add`, Claude Desktop đang chạy) dừng lệnh; bước trước đã ghi giữ nguyên, chạy lại tiếp từ đó.
+- **Lý do:** theo plan bước 4 và quyết định 2026-11-03 (cài đặt là `pkm setup`). Snippet lưới thư mục cài lại sẽ bị Dựng xưởng tắt ngay (`apps/obsidian-plugin/src/workshop/apply.ts`, `SUPERSEDED_SNIPPET`).
+- **Đổi ý khi:** user chọn tải ghim theme Primary và Style Settings; hoặc vỏ GUI cần cấu trúc JSON khác.
+- **Bằng chứng:** `setup::tests` (19 test: chạy thử không ghi, cài rồi chạy lại không đổi, sai sha256 không ghi, plugin khác bản chỉ báo, zip kiểm theo `checksums.txt`, file đã sửa giữ khi chạy lại và khi gỡ, thiếu `claude`/`npm`, bước viết bài chỉ khi OHS sẵn sàng, gỡ trả cấu hình, đọc manifest của Python), `crates/pkm/tests/cli_setup.rs` (binary thật trên vault tạm, PATH rỗng); `release-assets.yml` chạy thử `pkm setup --json` với zip vừa dựng.
+
+## `pkm setup` tải theme ghim; bản B cần Claude Code, không cần Claude Desktop
+- **Ngày:** 2026-11-04
+- **Lựa chọn:**
+  - Theme Primary 2.10.0 và plugin Style Settings 1.0.9 tải ghim, kiểm sha256 như ba plugin kia. Style Settings là một mục của `plugins` trong `presets/b/setup.json`. Primary không có file trong Release nên tải từ `raw.githubusercontent.com/primary-theme/obsidian/v.2.10.0/` (cách Obsidian lấy theme), vào `.obsidian/themes/Primary/`, rồi đặt `cssTheme` trong `appearance.json`. Gỡ trả `cssTheme` cũ khi người dùng chưa đổi, xoá file theme setup đã tải. Theme hay plugin có sẵn khác phiên bản chỉ báo, không thay.
+  - Bản B cần Claude Code: thiếu lệnh `claude` thì `--apply` dừng ở bước `agent` với cách cài (chạy thử chỉ cảnh báo).
+  - Claude Desktop không bắt buộc. Máy không có thư mục nào của Claude Desktop và không có `--config` thì bước `mcp` chỉ cài gói OHS, dựng index, làm ấm OHS (`install::index_only`), rồi bắt tay server `pkm` như Claude Code sẽ chạy; không ghi cấu hình Claude Desktop. Có nhiều file hay thư mục Claude Desktop vẫn là lỗi, như `pkm mcp install` (`config::find`).
+  - `pkm doctor` trên máy không có Claude Desktop: `claude_config` là `warn` (không còn `fail`), `kg_entry` bỏ qua, và chỉ cách kiểm bằng `claude mcp get pkm` trong thư mục vault. Doctor chưa đọc mục `pkm` của Claude Code nên không kiểm index qua mục đó.
+  - Không đưa plugin `pkm` lên kho plugin cộng đồng của Obsidian: sản phẩm triển khai riêng cho khách; plugin đi trong Release và `pkm setup` cài.
+- **Lý do:** user chọn (2026-11-04): tải ghim theme; người dùng bản B chỉ cần Claude (Claude Code), không cần Claude Desktop.
+- **Đổi ý khi:** cần hỗ trợ khách chỉ có Claude Desktop; hoặc license của theme/plugin ghim không hợp khi bán (xem `plans/reports/researcher-261104-1416-license-review.md`).
+- **Bằng chứng:** `setup::tests` (theme tải và chọn, gỡ trả lại; thiếu `claude` thì dừng trước bước `mcp`), `cli_setup.rs` (`setup_without_claude_desktop_builds_the_index_for_claude_code`: không `--config`, HOME rỗng, index dựng, không có file cấu hình Desktop), `install::config::tests::find_is_none_only_when_no_claude_desktop_dir_exists`.
+
+## Sản phẩm là bộ cài; chỉ chịu giấy phép cho thứ mình phát hành
+- **Ngày:** 2026-11-04
+- **Lựa chọn:** sản phẩm bán cho khách là bộ cài (`pkm`, `pkm setup`, plugin `pkm`, gói OHS) dựng bản B trên máy khách. Plugin, theme, adapter ACP của bên thứ ba được `pkm setup` tải từ nơi phát hành chính thức (GitHub, npm), giữ nguyên, không sửa; Obsidian và Claude Code khách tự cài và đăng nhập bằng tài khoản Claude của họ. Mình không phân phối lại các thành phần đó, nên không kèm giấy phép của chúng. Mình chịu giấy phép cho: binary `pkm` (crate Rust, font OFL nhúng trong snippet), plugin `pkm`, gói OHS (Node.js, 181 gói npm, gói tiếng Việt).
+- **Lý do:** user chốt (2026-11-04): "chỉ là tạo bộ cài đặt giúp khách hàng".
+- **Đổi ý khi:** mình bắt đầu sửa, đóng gói lại hay tự host một thành phần bên thứ ba (ví dụ chép plugin vào Release thay vì tải từ GitHub); khi đó phải kèm giấy phép của nó, với GPL/AGPL thì kèm cả mã nguồn.
+- **Quản lý tiếp:** [LICENSING.md](LICENSING.md) (giấy phép cho mã của mình, thứ phải kèm, việc còn làm).
+- **Bằng chứng:** `plans/reports/researcher-261104-1416-license-review.md`, mục "Bổ sung": gói OHS `v0.17.2-vantt.4` không chứa model (model tải từ Hugging Face lúc chạy), đã có `LICENSES/` cho 171 gói, còn thiếu văn bản giấy phép cho khoảng 16 gói chỉ khai trong `package.json` và cho libvips (LGPL-3.0-or-later, qua `sharp`).
+
+## Giấy phép đóng + EULA; repo công khai tới khi có self-hosted runner
+- **Ngày:** 2026-11-04
+- **Lựa chọn:** mô hình bán là website: khách trả tiền, đăng nhập rồi mới tải bộ cài; tiền nằm ở phần tuỳ biến (preset, plugin `pkm`, `pkm`), không ở phần mềm bên thứ ba bộ cài tải về. Mã của repo này theo giấy phép đóng ([`LICENSE`](../LICENSE): giữ mọi quyền, Van Tran), quyền dùng chỉ cấp qua EULA khách đồng ý khi mua. `Cargo.toml` khai `license-file`, hai `package.json` khai `UNLICENSED`. Repo giữ công khai trong lúc phát triển, chuyển private sau khi có self-hosted runner cho CI; các bản rc trên Release công khai tạm giữ tới lúc đó.
+- **Lý do:** user chốt (2026-11-04). FSL hay MIT/Apache cho phép khách đã mua chép bộ cài cho người khác dùng hợp pháp, làm mất tác dụng của việc trả tiền mới tải. Mọi crate trong binary và font OFL cho phép dùng trong phần mềm đóng; các bản rc chưa có giấy phép nên không có quyền nào phải thu hồi. Chi tiết và các phương án: [LICENSING.md](LICENSING.md).
+- **Đổi ý khi:** thêm bản miễn phí, bán theo cách khác, hay muốn mở mã (mở dần được, đóng lại thì không).
+- **Còn mở:** giấy phép của `ohs-lang-vi` (đề xuất đóng); EULA do luật sư soạn; phát hành qua website (plan riêng).

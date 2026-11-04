@@ -59,6 +59,19 @@ winget install --id Microsoft.VCRedist.2015+.x64
 `pkm.exe` chưa ký mã. Cài bằng bộ cài ở trên thì không bị chặn. Nếu tự tải file bằng trình duyệt và Windows báo "Windows protected your PC", bấm **More info → Run anyway**, hoặc chạy `Unblock-File .\pkm.exe` sau khi đã so sha256 với `checksums.txt` (`Get-FileHash .\pkm.exe`).
 </details>
 
+## Dựng bản B
+
+Sau khi cài `pkm`, đóng vault trong Obsidian rồi chạy:
+
+```sh
+pkm setup "D:\Ghi chú"            # chạy thử: in từng bước sẽ làm, không ghi gì
+pkm setup "D:\Ghi chú" --apply    # làm thật
+```
+
+Cần Claude Code (lệnh `claude`, đã đăng nhập); Claude Desktop không bắt buộc. `pkm setup` cài plugin Homepage, Templater, Agent Client, Style Settings và theme Primary (phiên bản ghim, kiểm sha256) và plugin `pkm` cùng phiên bản với binary (tải từ Release, kiểm theo `checksums.txt`), bật Bases, chép theme, ghi hướng dẫn cho chat trong Obsidian (`.claude/CLAUDE.md`), thêm MCP `pkm` cho Claude Code và cho Claude Desktop nếu máy có, dựng index, cài gói OHS, rồi khi OHS sẵn sàng thì tính cặp note gần nghĩa, đề xuất và vùng gợi ý bài viết. Chạy lại an toàn: bước nào xong thì bỏ qua, file bạn đã sửa giữ nguyên. Thiếu Claude Code thì `--apply` dừng ở bước `agent` và in cách cài. Xong thì mở vault, Ctrl+P, chạy **PKM: Dựng xưởng**.
+
+Cờ hay dùng: `--remove [--apply]` gỡ những gì setup đã thêm (ghi trong `_E11/setup-manifest.json`), `--json` in báo cáo JSON, `--ohs DIR` dùng gói OHS có sẵn, `--no-ohs`, `--config FILE` (cấu hình Claude Desktop), `--plugin-dir DIR` (plugin dựng tại máy). Đủ cờ: `pkm setup --help`. Dữ liệu preset: [presets/b](presets/b/README.md).
+
 Hướng dẫn dùng bản B (vault xưởng: lưu, trang xưởng, đề xuất, hỏi Claude, viết bài): [docs/user-guide](docs/user-guide/README.md).
 
 ## Cho người phát triển

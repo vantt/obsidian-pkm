@@ -1,0 +1,2 @@
+# Preset bản B được nhúng vào binary và kiểm sha256: giữ nguyên byte, không đổi xuống dòng khi checkout trên Windows.
+presets/** -text
