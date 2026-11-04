@@ -1,7 +1,7 @@
 //! `pkm setup` như người dùng gọi, trên vault tạm: plugin `pkm` từ một bản dựng giả (`--plugin-dir`), không OHS,
-//! cấu hình Claude Desktop là file tạm, thư mục dữ liệu của pkm và HOME là thư mục tạm, PATH rỗng (không `claude`,
-//! không `npm`: không bao giờ chạm cấu hình thật của người dùng). Ba plugin cộng đồng có sẵn đúng bản ghim nên không
-//! tải gì từ mạng.
+//! cấu hình Claude Desktop là file tạm, thư mục dữ liệu của pkm và HOME là thư mục tạm. PATH chỉ có một `claude` giả
+//! luôn thành công (không `npm`): không bao giờ chạm cấu hình thật của người dùng. Bốn plugin cộng đồng và theme
+//! Primary có sẵn đúng bản ghim nên không tải gì từ mạng.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -29,6 +29,7 @@ fn env() -> Env {
         ("homepage", "4.2.2"),
         ("templater-obsidian", "2.26.0"),
         ("agent-client", "0.13.0"),
+        ("obsidian-style-settings", "1.0.9"),
     ] {
         let d = obs.join("plugins").join(id);
         fs::create_dir_all(&d).unwrap();
@@ -38,6 +39,13 @@ fn env() -> Env {
         )
         .unwrap();
     }
+    let theme = obs.join("themes").join("Primary");
+    fs::create_dir_all(&theme).unwrap();
+    fs::write(
+        theme.join("manifest.json"),
+        json!({"name": "Primary", "version": "2.10.0"}).to_string(),
+    )
+    .unwrap();
     fs::write(obs.join("community-plugins.json"), r#"["dataview"]"#).unwrap();
     let plugin = tmp.path().join("plugin-build");
     fs::create_dir_all(&plugin).unwrap();
@@ -48,9 +56,10 @@ fn env() -> Env {
         json!({"id": "pkm", "version": VERSION}).to_string(),
     )
     .unwrap();
-    for d in ["home", "empty-path", "claude"] {
+    for d in ["home", "path", "claude"] {
         fs::create_dir_all(tmp.path().join(d)).unwrap();
     }
+    fake_claude(&tmp.path().join("path"));
     Env {
         config: tmp.path().join("claude").join("claude_desktop_config.json"),
         vault,
@@ -59,21 +68,43 @@ fn env() -> Env {
     }
 }
 
+/// `claude` giả trong `dir`: mọi lệnh (`mcp add`, `mcp remove`) thành công, không làm gì.
+fn fake_claude(dir: &Path) {
+    if cfg!(windows) {
+        fs::write(dir.join("claude.cmd"), "@exit /b 0\r\n").unwrap();
+    } else {
+        let p = dir.join("claude");
+        fs::write(&p, "#!/bin/sh\nexit 0\n").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&p, fs::Permissions::from_mode(0o755)).unwrap();
+        }
+    }
+}
+
 impl Env {
     fn setup(&self, extra: &[&str]) -> Output {
+        self.setup_with(Some(&self.config), extra)
+    }
+
+    /// Như [`Env::setup`]; `config` `None` là máy không có Claude Desktop (không có `--config`, HOME tạm rỗng).
+    fn setup_with(&self, config: Option<&Path>, extra: &[&str]) -> Output {
         let home = self.tmp.path().join("home");
         let mut cmd = Command::new(env!("CARGO_BIN_EXE_pkm"));
         cmd.arg("setup")
             .arg(&self.vault)
             .arg("--plugin-dir")
-            .arg(&self.plugin)
-            .arg("--config")
-            .arg(&self.config)
-            .args(["--no-ohs", "--force", "--allow-any-location"])
+            .arg(&self.plugin);
+        if let Some(c) = config {
+            cmd.arg("--config").arg(c);
+        }
+        cmd.args(["--no-ohs", "--force", "--allow-any-location"])
             .args(extra)
-            .env("PATH", self.tmp.path().join("empty-path"))
+            .env("PATH", self.tmp.path().join("path"))
             .env("HOME", &home)
             .env("USERPROFILE", &home)
+            .env("XDG_CONFIG_HOME", home.join("config"))
             .env("XDG_CACHE_HOME", home.join("cache"))
             .env("LOCALAPPDATA", home.join("local"))
             .env("APPDATA", home.join("roaming"))
@@ -84,7 +115,10 @@ impl Env {
     }
 
     fn ok(&self, extra: &[&str]) -> String {
-        let o = self.setup(extra);
+        Self::check(self.setup(extra), extra)
+    }
+
+    fn check(o: Output, extra: &[&str]) -> String {
         let out = String::from_utf8_lossy(&o.stdout).into_owned();
         assert!(
             o.status.success(),
@@ -140,7 +174,7 @@ fn setup_dry_run_apply_rerun_and_remove() {
 
     // Làm thật.
     let out = e.ok(&["--apply"]);
-    assert!(out.contains("không thấy Claude Code"), "{out}");
+    assert!(out.contains("MCP pkm cho Claude Code"), "{out}");
     let p = e.vault.join(".obsidian/plugins/pkm");
     assert_eq!(
         fs::read_to_string(p.join("main.js")).unwrap(),
@@ -169,6 +203,7 @@ fn setup_dry_run_apply_rerun_and_remove() {
             "homepage",
             "templater-obsidian",
             "agent-client",
+            "obsidian-style-settings",
             "pkm"
         ])
     );
@@ -178,7 +213,7 @@ fn setup_dry_run_apply_rerun_and_remove() {
     );
     assert_eq!(
         e.json(".obsidian/appearance.json"),
-        json!({"enabledCssSnippets": ["e11-theme"], "baseFontSize": 19})
+        json!({"cssTheme": "Primary", "enabledCssSnippets": ["e11-theme"], "baseFontSize": 19})
     );
     assert!(e.vault.join(".obsidian/snippets/e11-theme.css").is_file());
     assert!(e.vault.join(".claude/CLAUDE.md").is_file());
@@ -227,7 +262,22 @@ fn setup_dry_run_apply_rerun_and_remove() {
     assert_eq!(e.json(".obsidian/core-plugins.json"), json!({}));
     let cfg: Value = serde_json::from_str(&fs::read_to_string(&e.config).unwrap()).unwrap();
     assert!(cfg["mcpServers"].get("pkm").is_none());
-    for id in ["homepage", "templater-obsidian", "agent-client"] {
+    assert_eq!(
+        e.json(".obsidian/appearance.json"),
+        json!({"enabledCssSnippets": []})
+    );
+    assert!(
+        e.vault
+            .join(".obsidian/themes/Primary/manifest.json")
+            .is_file(),
+        "theme có từ trước được giữ"
+    );
+    for id in [
+        "homepage",
+        "templater-obsidian",
+        "agent-client",
+        "obsidian-style-settings",
+    ] {
         assert!(
             e.vault
                 .join(".obsidian/plugins")
@@ -237,6 +287,45 @@ fn setup_dry_run_apply_rerun_and_remove() {
             "plugin {id} có từ trước được giữ"
         );
     }
+}
+
+#[test]
+fn setup_without_claude_desktop_builds_the_index_for_claude_code() {
+    let e = env();
+    let out = Env::check(e.setup_with(None, &["--apply"]), &["--apply"]);
+    assert!(out.contains("không thấy Claude Desktop"), "{out}");
+    assert!(out.contains("server trả lời"), "{out}");
+    let data = e.json(".obsidian/plugins/pkm/data.json");
+    assert!(
+        PathBuf::from(data["graphDbPath"].as_str().unwrap()).is_file(),
+        "index đã dựng"
+    );
+    assert!(!e.config.exists());
+    let m = e.json("_E11/setup-manifest.json");
+    assert!(m.get("desktop_config").is_none(), "{m}");
+    assert_eq!(m["mcp"], json!(["pkm"]));
+
+    // doctor: thiếu Claude Desktop chỉ là cảnh báo.
+    let home = e.tmp.path().join("home");
+    let o = Command::new(env!("CARGO_BIN_EXE_pkm"))
+        .args(["doctor", "--json"])
+        .env("PATH", e.tmp.path().join("path"))
+        .env("HOME", &home)
+        .env("USERPROFILE", &home)
+        .env("XDG_CONFIG_HOME", home.join("config"))
+        .env("XDG_CACHE_HOME", home.join("cache"))
+        .env("LOCALAPPDATA", home.join("local"))
+        .env("APPDATA", home.join("roaming"))
+        .output()
+        .unwrap();
+    let report: Value = serde_json::from_slice(&o.stdout).unwrap();
+    let config = report["data"]["checks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["id"] == "claude_config")
+        .unwrap();
+    assert_eq!(config["status"], json!("warn"), "{report}");
 }
 
 #[test]

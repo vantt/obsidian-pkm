@@ -3,13 +3,14 @@
 //! [`files::MANIFEST`]); `--json` in một báo cáo JSON cho vỏ GUI.
 //!
 //! Các bước, theo thứ tự, bước nào đã xong thì bỏ qua nên chạy lại an toàn:
-//! 1. `plugins`: Homepage, Templater, Agent Client ghim phiên bản (sha256), bật trong `community-plugins.json`; core
+//! 1. `plugins`: Homepage, Templater, Agent Client, Style Settings ghim phiên bản (sha256), bật trong `community-plugins.json`; core
 //!    plugin Bases bật trong `core-plugins.json`. Thư mục plugin có sẵn (khác phiên bản) chỉ báo, không thay.
 //! 2. `pkm-plugin`: plugin `pkm` của repo này, cùng tag với binary đang chạy (asset [`PLUGIN_ASSET`] kiểm theo
 //!    `checksums.txt` của Release), hoặc từ bản dựng ở `--plugin-dir`; `data.json` (đường dẫn `pkm`, index) chỉ ghi khi
 //!    chưa có.
-//! 3. `theme`: snippet theme vào `.obsidian/snippets/`, bật trong `appearance.json`, cỡ chữ thân, tắt plugin ghi đè
-//!    cỡ chữ. Theme Primary và plugin Style Settings không cài, chỉ cảnh báo khi thiếu. CSS lưới thư mục và nút phóng
+//! 3. `theme`: theme Primary ghim (sha256) vào `.obsidian/themes/` và chọn nó, snippet theme vào
+//!    `.obsidian/snippets/`, bật trong `appearance.json`, cỡ chữ thân, tắt plugin ghi đè cỡ chữ. Style Settings (chọn
+//!    font đọc) là một plugin ghim của bước 1. CSS lưới thư mục và nút phóng
 //!    bảng nằm trong `styles.css` của plugin `pkm`, không còn là snippet hay plugin riêng.
 //! 4. `agent`: chat trong Obsidian qua Agent Client: `.claude/CLAUDE.md`, `.claude/settings.local.json`, MCP `pkm` cho
 //!    Claude Code (scope local), adapter ACP (npm, ghim phiên bản) và preset Claude Code của Agent Client.
@@ -104,6 +105,11 @@ pub trait SetupHooks: Hooks {
     /// stderr được giữ lại: trả về khi thành công, nằm trong lỗi khi thất bại.
     fn run(&self, program: &Path, args: &[OsString], cwd: Option<&Path>) -> Result<String, String> {
         run_program(program, args, cwd)
+    }
+
+    /// File cấu hình Claude Desktop (`explicit` hay tự tìm); `None` khi máy không có Claude Desktop.
+    fn desktop_config(&self, explicit: Option<&Path>) -> Result<Option<PathBuf>, String> {
+        config::find(explicit)
     }
 }
 
@@ -450,7 +456,7 @@ impl<'a> Ctx<'a> {
         log.step("agent", "Chat trong Obsidian (Agent Client, Claude Code)")?;
         self.agent_step(log, &mut m)?;
         self.save(&m)?;
-        log.step("mcp", "Index, gói OHS, MCP pkm cho Claude Desktop")?;
+        log.step("mcp", "Index, gói OHS, MCP pkm cho Claude Desktop (nếu có)")?;
         self.mcp_step(log, &mut m)?;
         self.save(&m)?;
         log.step(
@@ -486,7 +492,7 @@ impl<'a> Ctx<'a> {
         log.add(
             Status::Info,
             if self.apply {
-                "xong; kiểm máy bằng `pkm doctor`"
+                "xong; kiểm máy bằng `pkm doctor`, và `claude mcp get pkm` trong thư mục vault"
             } else {
                 "chạy thử xong; thêm --apply để làm"
             },
@@ -497,42 +503,52 @@ impl<'a> Ctx<'a> {
 
     fn plugins_step(&self, log: &mut Log, m: &mut Manifest) -> Result<(), String> {
         for p in &self.preset.plugins {
-            let dir = self.obs.join("plugins").join(&p.id);
-            match files::plugin_version(&dir) {
-                Some(v) if v == p.version => log.add(Status::Ok, format!("{} {v} đã có", p.id))?,
-                Some(v) => log.add(
-                    Status::Warn,
-                    format!(
-                        "{} {v} đã có, khác bản ghim {}; giữ nguyên (muốn bản ghim thì xoá thư mục \
-                         .obsidian/plugins/{} rồi chạy lại)",
-                        p.id, p.version, p.id
-                    ),
-                )?,
-                None if dir.exists() => log.add(
-                    Status::Warn,
-                    format!(
-                        "thư mục .obsidian/plugins/{} có sẵn nhưng không đọc được phiên bản; giữ nguyên",
-                        p.id
-                    ),
-                )?,
-                None => {
-                    log.add(
-                        self.act(),
-                        format!(
-                            "{} {}: tải từ github.com/{}, kiểm sha256 ghim",
-                            p.id, p.version, p.repo
-                        ),
-                    )?;
-                    if self.apply {
-                        self.download_pinned(p, &dir)?;
-                        m.add("plugins", std::slice::from_ref(&p.id));
-                    }
-                }
-            }
+            self.install_pinned(log, m, p, "plugins")?;
         }
         let ids: Vec<String> = self.preset.plugins.iter().map(|p| p.id.clone()).collect();
         self.enable_plugins(log, m, &ids)?;
         self.enable_core(log, m)
+    }
+
+    /// Cài `p` vào `.obsidian/<kind>/<id>/` (`kind` là `plugins` hay `themes`, cũng là khoá manifest) khi chưa có.
+    /// Thư mục có sẵn (khác phiên bản) chỉ báo, không thay.
+    fn install_pinned(
+        &self,
+        log: &mut Log,
+        m: &mut Manifest,
+        p: &PinnedPlugin,
+        kind: &str,
+    ) -> Result<(), String> {
+        let rel = format!(".obsidian/{kind}/{}", p.id);
+        let dir = self.obs.join(kind).join(&p.id);
+        match files::plugin_version(&dir) {
+            Some(v) if v == p.version => log.add(Status::Ok, format!("{} {v} đã có", p.id)),
+            Some(v) => log.add(
+                Status::Warn,
+                format!(
+                    "{} {v} đã có, khác bản ghim {}; giữ nguyên (muốn bản ghim thì xoá thư mục {rel} rồi chạy lại)",
+                    p.id, p.version
+                ),
+            ),
+            None if dir.exists() => log.add(
+                Status::Warn,
+                format!("thư mục {rel} có sẵn nhưng không đọc được phiên bản; giữ nguyên"),
+            ),
+            None => {
+                log.add(
+                    self.act(),
+                    format!(
+                        "{} {}: tải từ github.com/{}, kiểm sha256 ghim",
+                        p.id, p.version, p.repo
+                    ),
+                )?;
+                if self.apply {
+                    self.download_pinned(p, &dir)?;
+                    m.add(kind, std::slice::from_ref(&p.id));
+                }
+                Ok(())
+            }
+        }
     }
 
     /// Tải đủ file của `p` vào thư mục tạm, kiểm sha256 từng file, rồi đổi tên thành `dir`. Sai một file thì không
@@ -552,6 +568,10 @@ impl<'a> Ctx<'a> {
                         p.id
                     ));
                 }
+            }
+            if let Some(parent) = dir.parent() {
+                std::fs::create_dir_all(parent)
+                    .map_err(|e| format!("tạo {}: {e}", parent.display()))?;
             }
             std::fs::rename(&staging, dir).map_err(|e| format!("ghi {}: {e}", dir.display()))
         })();
@@ -814,6 +834,7 @@ impl<'a> Ctx<'a> {
 
     fn theme_step(&self, log: &mut Log, m: &mut Manifest) -> Result<(), String> {
         let p = self.preset;
+        self.install_pinned(log, m, &p.css_theme, "themes")?;
         for (name, bytes) in &p.snippets {
             let rel = format!(".obsidian/snippets/{name}.css");
             match put_owned(&self.vault, &rel, bytes, m, self.apply, false)? {
@@ -854,6 +875,27 @@ impl<'a> Ctx<'a> {
             enabled.extend(add.iter().cloned().map(Value::String));
             cfg.insert("enabledCssSnippets".to_owned(), Value::Array(enabled));
             m.add("snippets_on", &add);
+            changed = true;
+        }
+        let name = &p.css_theme.id;
+        let old = cfg.get("cssTheme").cloned();
+        if old.as_ref().and_then(Value::as_str) == Some(name.as_str()) {
+            log.add(Status::Ok, format!("theme {name} đã được chọn"))?;
+        } else {
+            log.add(
+                self.act(),
+                format!(
+                    "appearance.json: dùng theme {name} (đang dùng {})",
+                    match old.as_ref().and_then(Value::as_str) {
+                        None | Some("") => "theme mặc định",
+                        Some(t) => t,
+                    }
+                ),
+            )?;
+            if m.get("css_theme").is_none() {
+                m.set("css_theme", old.unwrap_or(Value::Null));
+            }
+            cfg.insert("cssTheme".to_owned(), Value::String(name.clone()));
             changed = true;
         }
         let size = Value::from(p.base_font_size);
@@ -898,35 +940,6 @@ impl<'a> Ctx<'a> {
                 m.add("plugins_off", &off);
             }
         }
-        let theme = cfg.get("cssTheme").and_then(Value::as_str).unwrap_or("");
-        let theme_dir = self.obs.join("themes").join(&p.css_theme);
-        if theme != p.css_theme || !theme_dir.is_dir() {
-            log.add(
-                Status::Warn,
-                format!(
-                    "snippet viết cho theme {} {}, vault đang dùng {}. Cài và chọn theme đó: Cài đặt > Giao diện > \
-                     Theme > Quản lý > tìm \"{}\" > Cài đặt và dùng",
-                    p.css_theme,
-                    p.css_theme_version,
-                    if theme.is_empty() {
-                        "theme mặc định"
-                    } else {
-                        theme
-                    },
-                    p.css_theme
-                ),
-            )?;
-        }
-        if !self.obs.join("plugins").join(&p.style_settings).is_dir() {
-            log.add(
-                Status::Warn,
-                format!(
-                    "chưa có plugin Style Settings ({}): cần để chọn font đọc của theme. Cài: Cài đặt > Plugin cộng \
-                     đồng > Duyệt > tìm \"Style Settings\" > Cài đặt > Bật",
-                    p.style_settings
-                ),
-            )?;
-        }
         Ok(())
     }
 
@@ -944,10 +957,15 @@ impl<'a> Ctx<'a> {
         }
         self.allow_tools(log, m)?;
         let Some(claude) = self.hooks.which("claude") else {
+            // Bản B cần Claude Code (chat trong Obsidian, viết bài); Claude Desktop thì không bắt buộc.
+            const NEED: &str = "không thấy Claude Code (lệnh claude): bản B cần Claude Code. Cài Claude Code \
+                                (https://claude.com/claude-code), đăng nhập bằng tài khoản Claude của bạn, rồi chạy lại";
+            if self.apply {
+                return Err(format!("{NEED}; các bước trước giữ nguyên"));
+            }
             return log.add(
-                Status::Skip,
-                "không thấy Claude Code (lệnh claude): cài Claude Code, đăng nhập, rồi chạy lại để thêm MCP pkm cho \
-                 Claude Code và chat trong Obsidian",
+                Status::Warn,
+                format!("{NEED}; chạy với --apply sẽ dừng ở đây"),
             );
         };
         self.claude_mcp(log, m, &claude)?;
@@ -1301,7 +1319,33 @@ impl<'a> Ctx<'a> {
 
     fn mcp_step(&self, log: &mut Log, m: &mut Manifest) -> Result<(), String> {
         let a = self.install_args()?;
-        let path = config::locate(a.config.as_deref())?;
+        let Some(path) = self.hooks.desktop_config(a.config.as_deref())? else {
+            log.add(
+                Status::Info,
+                "không thấy Claude Desktop: chỉ dựng index và gói OHS; MCP pkm do Claude Code chạy (bước agent). \
+                 Cài Claude Desktop sau thì chạy lại để thêm pkm cho nó",
+            )?;
+            let hooks: &dyn Hooks = self.hooks;
+            install::index_only(self.inst, &a, hooks, log)?;
+            if self.apply {
+                let entry = self.pkm_entry()?;
+                let hs = hooks
+                    .handshake(&entry, Duration::from_secs(a.timeout))
+                    .map_err(|e| {
+                        format!("index đã dựng nhưng server pkm không bắt tay được: {e}")
+                    })?;
+                log.add(
+                    Status::Ok,
+                    format!(
+                        "server trả lời: {} {}, {} tool",
+                        hs.server_name,
+                        hs.server_version,
+                        hs.tools.len()
+                    ),
+                )?;
+            }
+            return Ok(());
+        };
         let had_entry = ConfigDoc::load(&path)?.server(SERVER_NAME).is_some();
         let hooks: &dyn Hooks = self.hooks;
         install::run_with(self.inst, &a, hooks, log)?;
@@ -1720,10 +1764,11 @@ impl<'a> Ctx<'a> {
         let path = self.obs.join("appearance.json");
         let snippets = m.list("snippets_on");
         let font = m.get("font_size").cloned();
-        if (!snippets.is_empty() || font.is_some()) && path.exists() {
+        let theme = m.get("css_theme").cloned();
+        if (!snippets.is_empty() || font.is_some() || theme.is_some()) && path.exists() {
             log.add(
                 self.act(),
-                "appearance.json: tắt snippet đã bật, trả cỡ chữ về như trước",
+                "appearance.json: tắt snippet đã bật, trả theme và cỡ chữ về như trước",
             )?;
             if self.apply
                 && let Some(Value::Object(mut cfg)) = read_json(&path)?
@@ -1747,7 +1792,40 @@ impl<'a> Ctx<'a> {
                         }
                     }
                 }
+                // Theme cũng vậy: chỉ trả lại khi vẫn là theme setup chọn.
+                let name = &self.preset.css_theme.id;
+                if let Some(old) = theme
+                    && cfg.get("cssTheme").and_then(Value::as_str) == Some(name.as_str())
+                {
+                    match old {
+                        Value::Null => {
+                            cfg.remove("cssTheme");
+                        }
+                        v => {
+                            cfg.insert("cssTheme".to_owned(), v);
+                        }
+                    }
+                }
                 write_json(&path, &Value::Object(cfg))?;
+            }
+        }
+        for id in m.list("themes") {
+            let dir = self.obs.join("themes").join(&id);
+            log.add(self.act(), format!("gỡ theme {id}"))?;
+            if self.apply {
+                let t = &self.preset.css_theme;
+                if t.id == id {
+                    for (n, _) in &t.files {
+                        let _ = std::fs::remove_file(dir.join(n));
+                    }
+                }
+                let rest = files::remove_dir_if_empty(&dir);
+                if !rest.is_empty() {
+                    log.add(
+                        Status::Info,
+                        format!("giữ .obsidian/themes/{id}/ ({})", rest.join(", ")),
+                    )?;
+                }
             }
         }
         let off = m.list("plugins_off");

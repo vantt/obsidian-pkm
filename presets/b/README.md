@@ -30,7 +30,7 @@ Phải dựng lại mỗi khi sửa `e11-theme.src.css` hay `fonts/`, trong cùn
 | `agent` | Adapter ACP cho chat trong Obsidian (gói npm và phiên bản), preset Claude Code của Agent Client, mẫu `CLAUDE.md` và tool được dùng không hỏi (`.claude/settings.local.json`, mọi tool của `pkm` chỉ đọc) | `ACP`, `PRESET`, `PRESET_DEFAULT`, `AGENT_GUIDE`, `ALLOW` |
 | `mcp` | Tên server MCP, các mục cũ nó thay, cờ đọc vault của bản B, câu mô tả vault (`--about`). Câu `about` là mặc định cho vault chuyển từ Evernote; khách nên sửa cho đúng vault của mình | `OLD_SERVERS`, `pkm_server()`, `ABOUT` |
 | `snippets` | Tên snippet trong `.obsidian/snippets/` và file preset tương ứng (file phải được nhúng trong `crates/pkm/src/setup/preset.rs`) | `SNIPPET` của `theme.mjs` |
-| `theme` | Snippet viết cho theme Primary 2.10.0; cỡ chữ thân đặt khi cài (`baseFontSize` của `appearance.json`); plugin phải tắt vì ghi đè cỡ chữ; id plugin Style Settings mà `pkm setup` kiểm để cảnh báo | `THEME`, `FONT_SIZE`, `CONFLICTS` của `theme.mjs`; phiên bản Primary ghi ở đầu `e11-theme.src.css` |
+| `theme` | Theme Primary 2.10.0 mà snippet viết cho: repo, tag (`v.2.10.0`), sha256 của `manifest.json` và `theme.css`. Release của Primary không có file nên tải như Obsidian, từ `https://raw.githubusercontent.com/<repo>/<ref>/<file>`; `pkm setup` cài vào `.obsidian/themes/Primary/` và chọn nó. Cỡ chữ thân đặt khi cài (`baseFontSize` của `appearance.json`); plugin phải tắt vì ghi đè cỡ chữ. Style Settings 1.0.9 (chọn font đọc) là một mục của `plugins` | `THEME`, `FONT_SIZE`, `CONFLICTS` của `theme.mjs`; phiên bản Primary ghi ở đầu `e11-theme.src.css` |
 
 ## Schema
 
@@ -46,5 +46,4 @@ Không có dữ liệu riêng. Adapter bản B (cạnh thư mục, đề xuất,
 |---|---|---|
 | Trang chủ, `_Xưởng/Xưởng.base`, `_Xưởng/Chủ đề.base`, trang chủ đề, 8 mẫu note trong `_Templates/`, cấu hình Homepage và Templater | Chuỗi trong mã `scripts/e11/workshop_ui.py` (`TEMPLATES`, `BODIES`, `PROPS`, `QUICK`, `workshop_base()`, `topic_base()`, `homepage_config()`), không phải file | Plugin chuyển cả `workshop_ui` sang TS; mẫu và trang tĩnh ra file ở bước đó |
 | Plugin `e11-review-log` (ghi lần mở note, lần đổi trạng thái đề xuất) và `e11-table-zoom` (nút phóng bảng) | `scripts/e11/review-log-plugin/`, `scripts/e11/table-zoom-plugin/` | Là mã JS, gộp vào plugin Obsidian của sản phẩm |
-| Theme Primary và plugin Style Settings | Không script nào cài; vault của user có sẵn | Snippet chỉ đúng trên Primary; chọn font đọc cần Style Settings. `pkm setup` chỉ cảnh báo kèm cách cài, chờ user quyết có tải ghim không (docs/DECISIONS.md, 2026-11-04) |
 | `normalize`, `migrate_v3`, `highlight_colours`, `selection_signals` | `scripts/e11/` | Chỉ dành cho vault chuyển từ Evernote, đóng băng (docs/DECISIONS.md, 2026-11-03) |

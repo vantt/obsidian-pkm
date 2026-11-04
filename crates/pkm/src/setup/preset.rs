@@ -18,22 +18,57 @@ const EMBEDDED: [(&str, &[u8]); 2] = [
     ),
 ];
 
-/// Plugin cộng đồng ghim phiên bản: tải từ `https://github.com/<repo>/releases/download/<version>/<file>`.
+/// Plugin cộng đồng hay theme ghim phiên bản, mỗi file kiểm sha256. Plugin tải từ
+/// `https://github.com/<repo>/releases/download/<version>/<file>`; theme (Release không có file) tải từ
+/// `https://raw.githubusercontent.com/<repo>/<ref>/<file>`, như Obsidian lấy theme từ repo.
 #[derive(Debug, Clone)]
 pub struct PinnedPlugin {
+    /// Id plugin, hay tên theme (thư mục trong `.obsidian/themes/`, giá trị `cssTheme`).
     pub id: String,
     pub repo: String,
     pub version: String,
     /// `(tên file, sha256 hex)` theo thứ tự trong `setup.json`.
     pub files: Vec<(String, String)>,
+    /// Đầu URL, trước `/<file>`.
+    pub base: String,
 }
 
 impl PinnedPlugin {
     pub fn url(&self, file: &str) -> String {
-        format!(
-            "https://github.com/{}/releases/download/{}/{file}",
-            self.repo, self.version
-        )
+        format!("{}/{file}", self.base)
+    }
+
+    fn parse(id: String, p: &Value, theme: bool) -> Result<Self, String> {
+        let files = p
+            .get("sha256")
+            .and_then(Value::as_object)
+            .ok_or_else(|| format!("setup.json: thiếu object `sha256` của {id}"))?
+            .iter()
+            .map(|(name, sha)| {
+                let sha = sha
+                    .as_str()
+                    .filter(|s| s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit()))
+                    .ok_or_else(|| format!("setup.json: sha256 của {id}/{name} không hợp lệ"))?;
+                Ok((name.clone(), sha.to_ascii_lowercase()))
+            })
+            .collect::<Result<Vec<_>, String>>()?;
+        let repo = string(p, "repo")?;
+        let version = string(p, "version")?;
+        let base = if theme {
+            format!(
+                "https://raw.githubusercontent.com/{repo}/{}",
+                string(p, "ref")?
+            )
+        } else {
+            format!("https://github.com/{repo}/releases/download/{version}")
+        };
+        Ok(Self {
+            id,
+            repo,
+            version,
+            files,
+            base,
+        })
     }
 }
 
@@ -61,13 +96,11 @@ pub struct Preset {
     pub about: String,
     /// `(tên snippet, nội dung)`: ghi vào `.obsidian/snippets/<tên>.css`.
     pub snippets: Vec<(String, &'static [u8])>,
-    pub css_theme: String,
-    pub css_theme_version: String,
+    /// Theme mà snippet viết cho; tải ghim vào `.obsidian/themes/<id>/` và chọn trong `appearance.json`.
+    pub css_theme: PinnedPlugin,
     pub base_font_size: u64,
     /// Plugin phải tắt vì ghi đè cỡ chữ.
     pub disable_plugins: Vec<String>,
-    /// Plugin Style Settings mà snippet cần để chọn font.
-    pub style_settings: String,
 }
 
 impl Preset {
@@ -90,25 +123,10 @@ impl Preset {
         let theme = Value::Object(obj(&root, "theme")?);
         let mut plugins = Vec::new();
         for (id, p) in obj(&root, "plugins")? {
-            let files = obj(&p, "sha256")?
-                .into_iter()
-                .map(|(name, sha)| {
-                    let sha = sha
-                        .as_str()
-                        .filter(|s| s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit()))
-                        .ok_or_else(|| {
-                            format!("setup.json: sha256 của {id}/{name} không hợp lệ")
-                        })?;
-                    Ok((name, sha.to_ascii_lowercase()))
-                })
-                .collect::<Result<Vec<_>, String>>()?;
-            plugins.push(PinnedPlugin {
-                repo: string(&p, "repo")?,
-                version: string(&p, "version")?,
-                id,
-                files,
-            });
+            plugins.push(PinnedPlugin::parse(id, &p, false)?);
         }
+        let css_theme = Value::Object(obj(&theme, "css_theme")?);
+        let css_theme = PinnedPlugin::parse(string(&css_theme, "name")?, &css_theme, true)?;
         let guide = obj(&agent, "guide")?;
         let guide = Value::Object(guide);
         let snippets = obj(&root, "snippets")?
@@ -135,14 +153,12 @@ impl Preset {
             mcp_flags: strings(&mcp, "flags")?,
             about: string(&mcp, "about")?,
             snippets,
-            css_theme: string(&theme, "css_theme")?,
-            css_theme_version: string(&theme, "css_theme_version")?,
+            css_theme,
             base_font_size: theme
                 .get("base_font_size")
                 .and_then(Value::as_u64)
                 .ok_or("setup.json: thiếu theme.base_font_size")?,
             disable_plugins: strings(&theme, "disable_plugins")?,
-            style_settings: string(&theme, "style_settings_plugin")?,
         })
     }
 }

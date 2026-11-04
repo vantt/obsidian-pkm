@@ -83,6 +83,10 @@ impl Hooks for Fake {
 }
 
 impl SetupHooks for Fake {
+    fn desktop_config(&self, explicit: Option<&Path>) -> Result<Option<PathBuf>, String> {
+        Ok(explicit.map(Path::to_path_buf))
+    }
+
     fn which(&self, name: &str) -> Option<PathBuf> {
         self.programs
             .iter()
@@ -150,11 +154,36 @@ fn fake_plugin(id: &str, version: &str) -> (PinnedPlugin, Vec<(String, Vec<u8>)>
         repo: format!("owner/{id}"),
         version: version.to_owned(),
         files,
+        base: format!("https://github.com/owner/{id}/releases/download/{version}"),
     };
     let served = served
         .into_iter()
         .map(|(name, body)| (p.url(&name), body))
         .collect();
+    (p, served)
+}
+
+/// Theme giả (`manifest.json`, `theme.css`) như theme Primary ghim của preset.
+fn fake_theme(name: &str, version: &str) -> (PinnedPlugin, Vec<(String, Vec<u8>)>) {
+    let mut p = PinnedPlugin {
+        id: name.to_owned(),
+        repo: "owner/theme".to_owned(),
+        version: version.to_owned(),
+        files: Vec::new(),
+        base: "https://raw.githubusercontent.com/owner/theme/v1".to_owned(),
+    };
+    let mut served = Vec::new();
+    for (file, body) in [
+        (
+            "manifest.json",
+            format!(r#"{{"name":"{name}","version":"{version}"}}"#),
+        ),
+        ("theme.css", format!("/* {name} */")),
+    ] {
+        p.files
+            .push((file.to_owned(), files::sha256_hex(body.as_bytes())));
+        served.push((p.url(file), body.into_bytes()));
+    }
     (p, served)
 }
 
@@ -202,10 +231,14 @@ fn t() -> (T, Fake) {
         ohs_source: None,
     };
     let (p, served) = fake_plugin("homepage", "4.2.2");
+    let (theme, theme_files) = fake_theme("Primary", "2.10.0");
     let mut preset = Preset::embedded();
     preset.plugins = vec![p];
+    preset.css_theme = theme;
     let mut fake = Fake::new();
-    fake.served = served;
+    fake.served = [served, theme_files].concat();
+    // Bản B cần Claude Code: có sẵn, trừ test bỏ nó đi.
+    fake.programs = vec![("claude", PathBuf::from("/x/claude"))];
     let config = tmp.path().join("claude_desktop_config.json");
     (
         T {
@@ -296,8 +329,30 @@ fn has(items: &[(String, Status, String)], step: &str, status: Status, text: &st
 fn embedded_preset_parses_and_matches_its_readme() {
     let p = Preset::embedded();
     let ids: Vec<&str> = p.plugins.iter().map(|p| p.id.as_str()).collect();
-    assert_eq!(ids, ["homepage", "templater-obsidian", "agent-client"]);
+    assert_eq!(
+        ids,
+        [
+            "homepage",
+            "templater-obsidian",
+            "agent-client",
+            "obsidian-style-settings"
+        ]
+    );
     assert!(p.plugins.iter().all(|p| p.files.len() == 3));
+    assert_eq!(
+        p.plugins[3].url("main.js"),
+        "https://github.com/mgmeyers/obsidian-style-settings/releases/download/1.0.9/main.js"
+    );
+    let theme = &p.css_theme;
+    assert_eq!(
+        (theme.id.as_str(), theme.version.as_str()),
+        ("Primary", "2.10.0")
+    );
+    assert_eq!(theme.files.len(), 2);
+    assert_eq!(
+        theme.url("theme.css"),
+        "https://raw.githubusercontent.com/primary-theme/obsidian/v.2.10.0/theme.css"
+    );
     assert_eq!(p.core_plugins, ["bases"]);
     assert_eq!(p.guide_target, ".claude/CLAUDE.md");
     assert_eq!(p.mcp_name, SERVER_NAME);
@@ -397,8 +452,12 @@ fn apply_sets_up_the_vault_and_a_second_run_changes_nothing() {
     let look = t.json(".obsidian/appearance.json");
     assert_eq!(look["enabledCssSnippets"], json!(["e11-theme"]));
     assert_eq!(look["baseFontSize"], json!(19));
-    assert!(has(&items, "theme", Status::Warn, "Primary"));
-    assert!(has(&items, "theme", Status::Warn, "Style Settings"));
+    assert!(has(&items, "theme", Status::Done, "Primary 2.10.0"));
+    assert_eq!(
+        t.read(".obsidian/themes/Primary/theme.css"),
+        "/* Primary */"
+    );
+    assert_eq!(look["cssTheme"], json!("Primary"));
     assert_eq!(t.read(".claude/CLAUDE.md").as_bytes(), t.preset.guide);
     assert_eq!(
         t.json(".claude/settings.local.json"),
@@ -453,6 +512,7 @@ fn apply_sets_up_the_vault_and_a_second_run_changes_nothing() {
     assert_eq!(*fake.builds.borrow(), 1);
     let m = Manifest::load(&t.vault).unwrap().unwrap();
     assert_eq!(m.list("plugins"), ["homepage"]);
+    assert_eq!(m.list("themes"), ["Primary"]);
     assert_eq!(m.list("mcp"), ["pkm"]);
     assert_eq!(
         m.get("desktop_config"),
@@ -603,10 +663,17 @@ fn newer_plugin_build_replaces_files_setup_wrote() {
 }
 
 #[test]
-fn without_claude_or_npm_the_agent_parts_are_skipped_with_the_command() {
+fn without_claude_setup_stops_at_the_agent_step_and_without_npm_the_adapter_is_skipped() {
     let (t, mut fake) = t();
-    let items = t.ok(&t.apply(), &fake);
-    assert!(has(&items, "agent", Status::Skip, "không thấy Claude Code"));
+    fake.programs.clear();
+    let items = t.ok(&t.args(), &fake);
+    assert!(has(&items, "agent", Status::Warn, "bản B cần Claude Code"));
+    let (r, items) = t.run(&t.apply(), &fake);
+    assert!(r.unwrap_err().contains("bản B cần Claude Code"));
+    assert!(
+        !items.iter().any(|(s, _, _)| s == "mcp"),
+        "dừng trước bước mcp"
+    );
     assert!(t.vault.join(".claude/CLAUDE.md").exists());
     assert!(fake.runs().is_empty());
 
@@ -674,11 +741,19 @@ fn writing_helpers_run_only_when_ohs_is_ready() {
     };
     let items = t.ok(&args, &fake);
     assert!(has(&items, "writing", Status::Skip, "OHS chưa sẵn sàng"));
-    assert!(fake.runs().is_empty());
+    let pkm_runs = || -> Vec<Vec<String>> {
+        fake.runs
+            .borrow()
+            .iter()
+            .filter(|(p, _, _)| *p == t.inst.exe)
+            .map(|(_, a, _)| a.clone())
+            .collect()
+    };
+    assert!(pkm_runs().is_empty());
 
     fake.ohs_state = OhsState::Ready;
     let items = t.ok(&args, &fake);
-    let runs = fake.runs();
+    let runs = pkm_runs();
     let ops: Vec<&str> = runs.iter().map(|a| a[1].as_str()).collect();
     assert_eq!(ops, ["pairs", "pairs", "propose", "zones"]);
     assert_eq!(runs[0][2], "--write");
@@ -699,7 +774,7 @@ fn writing_helpers_run_only_when_ohs_is_ready() {
     fs::write(t.vault.join(pkm_core::zones::PAGE), "Chấm").unwrap();
     fake.runs.borrow_mut().clear();
     t.ok(&args, &fake);
-    let ops: Vec<String> = fake.runs().iter().map(|a| a[1].clone()).collect();
+    let ops: Vec<String> = pkm_runs().iter().map(|a| a[1].clone()).collect();
     assert_eq!(ops, ["propose"]);
 }
 
@@ -755,6 +830,7 @@ fn remove_undoes_setup_and_restores_settings() {
     for gone in [
         ".obsidian/plugins/homepage",
         ".obsidian/plugins/pkm",
+        ".obsidian/themes/Primary",
         ".obsidian/plugins/agent-client/data.json",
         ".obsidian/snippets",
         ".claude/CLAUDE.md",
