@@ -877,7 +877,7 @@ pub fn proposal_note(p: &Proposal, today: &str) -> String {
         "**Bỏ** (đổi `status` thành `bỏ`): không đổi gì. Muốn máy học thì ghi vài chữ vào thuộc tính `reject_reason` \
          (Lý do bỏ); sổ ghi lại để chỉnh luật."
             .to_owned(),
-        "Sau khi chọn, chạy `propose.py --apply` (agent làm).".to_owned(),
+        "Sau khi chọn, chạy lệnh `Áp dụng đề xuất đã chọn` của plugin pkm (Ctrl+P).".to_owned(),
         String::new(),
     ];
     match &p.lines {

@@ -390,7 +390,7 @@ Không chuyển, để plugin làm: `--apply` (nhận, bỏ, sửa note nguồn,
 
 Hợp đồng JSON (`--json`): `{"total": số đề xuất tính được, "new": số đề xuất mới, "by_kind": {kiểu: số}, "proposals": [...], "written": [đường dẫn note đề xuất]}`; `written[i]` ứng với `proposals[i]`, rỗng khi không `--create`. Mỗi đề xuất có khoá và thứ tự như dict của Python: `kind`, `notes`, (`from_text`, `to` | `value` | `score`), `reason`, `on_accept`, (`lines`).
 
-Giữ nguyên có chủ ý: `extracted_by` vẫn là `propose.py <kiểu>@schema_v3` (tên luật, để đề xuất cũ và mới của cùng một luật gộp được khi đo); thân note vẫn dặn `propose.py --apply`, vì tới khi plugin có lệnh nhận/bỏ đó vẫn là đường áp dụng duy nhất (định dạng note không đổi nên bản Python đọc được).
+Giữ nguyên có chủ ý: `extracted_by` vẫn là `propose.py <kiểu>@schema_v3` (tên luật, để đề xuất cũ và mới của cùng một luật gộp được khi đo). Khác có chủ ý: dòng cuối thân note dặn chạy lệnh `Áp dụng đề xuất đã chọn` của plugin pkm thay cho `propose.py --apply` (plugin đã có nhận, bỏ, áp dụng, hoàn tác); `tests/propose/expected-notes.json` (sinh từ Python) đã sửa đúng dòng đó. Định dạng note không đổi nên bản Python vẫn đọc và áp dụng được.
 
 Chỗ cố ý khác:
 - **Thứ tự đi vault:** Rust đi theo đường dẫn đã sắp; Python theo `os.walk` (thứ tự của hệ thống file). Chỉ đổi thứ tự giữa các nhóm `duplicate` và giữa các nhóm `same-topic` khi có từ hai nhóm (và số ` 2`, ` 3` của tên file trùng); kiểu khác Python đã tự sắp.
