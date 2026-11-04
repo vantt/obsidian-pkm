@@ -155,6 +155,100 @@ fn read_reports_not_ready_while_indexing() {
     assert_eq!(e.as_object().unwrap().len(), 5, "{e}");
 }
 
+/// Ba note giả: `Đà Nẵng.md` và `Huế.md` gần nhau, `Xa.md` vuông góc với `Đà Nẵng.md`.
+fn vector_config() -> Value {
+    json!({"vectors": {"Huế.md": [3.0, 4.0], "Đà Nẵng.md": [1.0, 0.0], "Xa.md": [0.0, 2.0]}})
+}
+
+#[test]
+fn vectors_send_paths_and_options_and_return_meta_and_nfc_records() {
+    let f = Fixture::new(vector_config());
+    let ohs = f.start();
+    ready(&ohs);
+    let paths = vec!["Huế.md".to_owned(), "thiếu.md".to_owned()];
+    let r = ohs
+        .vectors(&paths, json!({"pooling": "max", "normalize": false}))
+        .unwrap();
+    assert_eq!(r.meta["note_count"], 2);
+    assert_eq!(r.meta["pooling"], "max");
+    assert_eq!(
+        r.meta["request"],
+        json!({"action": "vectors", "paths": ["Huế.md", "thiếu.md"], "pooling": "max", "normalize": false})
+    );
+    assert_eq!(
+        r.records,
+        vec![
+            json!({"path": "Huế.md", "dim": 2, "model": "fake:m", "chunks": 1, "vector": [3.0, 4.0]}),
+            json!({"path": "thiếu.md", "error": "note not found in the index"}),
+        ]
+    );
+    // Không có `paths`: mọi note, theo thứ tự đường dẫn; request không có khoá `paths`.
+    let r = ohs.vectors(&[], Value::Null).unwrap();
+    assert_eq!(r.meta["request"], json!({"action": "vectors"}));
+    let got: Vec<&str> = r
+        .records
+        .iter()
+        .map(|x| x["path"].as_str().unwrap())
+        .collect();
+    assert_eq!(got, ["Huế.md", "Xa.md", "Đà Nẵng.md"]);
+    assert_eq!(r.records[0]["vector"], json!([0.6, 0.8]));
+}
+
+#[test]
+fn neighbors_return_scores_in_order_with_nfc_paths() {
+    let f = Fixture::new(vector_config());
+    let ohs = f.start();
+    ready(&ohs);
+    let r = ohs
+        .neighbors(
+            &["Đà Nẵng.md".to_owned(), "thiếu.md".to_owned()],
+            json!({"k": 1, "minScore": 0.1, "excludeLinked": true}),
+        )
+        .unwrap();
+    assert_eq!(
+        r.meta["request"],
+        json!({"action": "neighbors", "paths": ["Đà Nẵng.md", "thiếu.md"], "k": 1, "minScore": 0.1,
+               "excludeLinked": true})
+    );
+    assert_eq!(r.records[0]["path"], "Đà Nẵng.md");
+    let n = &r.records[0]["neighbors"];
+    assert_eq!(n.as_array().unwrap().len(), 1);
+    assert_eq!(n[0]["path"], "Huế.md");
+    assert!((n[0]["score"].as_f64().unwrap() - 0.6).abs() < 1e-12, "{n}");
+    assert_eq!(r.records[1]["error"], "note not found in the index");
+    // Mọi note làm nguồn; `minScore` bỏ cặp vuông góc.
+    let r = ohs.neighbors(&[], json!({"minScore": 0.5})).unwrap();
+    assert_eq!(r.records.len(), 3);
+    let xa = r.records.iter().find(|x| x["path"] == "Xa.md").unwrap();
+    assert_eq!(xa["neighbors"][0]["path"], "Huế.md");
+    assert_eq!(xa["neighbors"].as_array().unwrap().len(), 1);
+}
+
+#[test]
+fn vectors_and_neighbors_report_not_ready_and_remote_errors() {
+    let f = Fixture::new(vector_config());
+    let ohs = f.start();
+    ready(&ohs);
+    f.configure(&json!({"vectors_error": "Embedding model is unknown for the stored vectors."}));
+    assert_eq!(
+        ohs.vectors(&[], Value::Null),
+        Err(OhsError::Remote(
+            "Embedding model is unknown for the stored vectors.".into()
+        ))
+    );
+    f.configure(&json!({"status": {"total": 10, "indexed": 3, "pending": 7,
+                                   "model": "local:m", "active_model": "local:m", "indexing_errors": []}}));
+    eventually("indexing", || ohs.state().name() == "indexing");
+    for err in [
+        ohs.vectors(&[], Value::Null).unwrap_err(),
+        ohs.neighbors(&["a.md".to_owned()], Value::Null)
+            .unwrap_err(),
+    ] {
+        let e = err.not_ready_error().expect("ohs_not_ready");
+        assert_eq!(e["state"], "indexing");
+    }
+}
+
 #[test]
 fn ohs_is_started_with_vault_db_and_clean_environment() {
     let f = Fixture::new(json!({}));

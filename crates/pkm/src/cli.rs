@@ -42,6 +42,9 @@ const USAGE: &str = "Cách gọi:
   pkm VAULT stats | validate | find | note | read | neighbors | reach | paths | loops | provenance | select | valid | related ...
   pkm VAULT mcp [--packs business] [--db PATH] ...       MCP server stdio (pkm VAULT mcp --help)
   pkm VAULT propose [--similar FILE] [--create] [--json]  đề xuất chờ duyệt; --create ghi note mới vào _Đề xuất/
+  pkm VAULT material DRAFT          nguyên liệu cho bản nháp (cần OHS; JSON)
+  pkm VAULT pairs [--write]           cặp note gần nghĩa (cần OHS; JSON)
+  pkm VAULT zones [--write] [--apply] vùng tri thức gợi ý bài viết (cần OHS; JSON)
   pkm mcp install VAULT [--dry-run] | --check | --remove  cài MCP `pkm` cho Claude Desktop (pkm mcp install --help)
   pkm doctor [--json] [--deep]                            chẩn đoán (chỉ đọc) cấu hình, index, gói OHS
 Chi tiết lệnh trên vault: pkm VAULT stats --help.";
@@ -234,6 +237,9 @@ pub fn run(argv: Vec<OsString>) -> ExitCode {
     if argv.is_empty() || flag(0) {
         Top::parse_from(with_name("pkm", &argv));
         return ExitCode::SUCCESS;
+    }
+    if word(1).is_some_and(|w| WRITING_OPS.contains(&w)) {
+        return writing::run(with_name("pkm", &argv));
     }
     let a = VaultArgs::parse_from(with_name("pkm", &argv));
     match vault_command(&a) {
@@ -673,6 +679,330 @@ fn propose_command(argv: &[OsString]) -> ExitCode {
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => fail(&format!("propose: {e}")),
+    }
+}
+
+/// Lệnh tính cho việc viết bài ([`writing`]); đi riêng khỏi [`VaultArgs`].
+const WRITING_OPS: [&str; 3] = ["material", "zones", "pairs"];
+
+/// `pkm VAULT material|zones|pairs ...`: tính bằng `pkm_core` (OHS qua một tiến trình `serve --stdio`), in JSON ra
+/// stdout. Phần giao diện (trang nguyên liệu, ô đã tích, ghi `uses`, màn hình vùng) thuộc plugin.
+mod writing {
+    use std::ffi::OsString;
+    use std::path::{Path, PathBuf};
+    use std::process::ExitCode;
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    use clap::Parser;
+    use pkm_core::adapter;
+    use pkm_core::index::{self, Build, Options};
+    use pkm_core::material;
+    use pkm_core::ohs::{Ohs, OhsError, OhsState};
+    use pkm_core::pairs::{self, PairOptions};
+    use pkm_core::query::Graph;
+    use pkm_core::zones;
+    use serde_json::{Value, json};
+
+    use super::{Failure, OHS_WAIT_SECS, WRITING_OPS, fail, print_json};
+    use crate::mcp::{self, pyjson};
+
+    const ABOUT: &str = "Tính cho việc viết bài, in JSON ra stdout (số đếm ra stderr). Cần OHS (gói qua --ohs, \
+PKM_OHS_DIR hoặc thư mục cài); OHS chưa sẵn sàng thì in lỗi ohs_not_ready và thoát 1, không có đường lùi.
+
+  pkm VAULT material \"Bài viết/X\" [--k 12] [--per-query 10] [--hits FILE]
+      nguyên liệu cho bản nháp: mỗi đoạn một câu tìm OHS, rồi đi graph (trừ cạnh thư mục)
+  pkm VAULT pairs [--min 0.85] [--max 60] [--per-note 2] [--min-words 40] [--write | --out FILE]
+      cặp note gần nghĩa ở hai nhóm thư mục khác nhau; --write ghi VAULT/_E11/similar-pairs.json
+  pkm VAULT zones [--k 15] [--min-words 8] [--max-size 60] [--min-size 5] [--write] [--apply [--top 20]]
+      vùng tri thức để gợi ý bài viết; --write ghi VAULT/.e11/zones.json, --apply ghi thêm trang
+      `_Xưởng/Gợi ý bài viết.md` khi trang chưa có (trang đã có giữ nguyên: nó giữ dòng chấm của người dùng)
+Tuỳ chọn chung: --db PATH (index graph, mặc định VAULT/.kg/graph.db, dựng bằng pkm VAULT build), --no-refresh
+(không build tăng dần trước khi tính), --ohs DIR, --ohs-wait GIÂY.
+Đầu ra nêu tên note thật của vault: chỉ in ra terminal, không dán vào repo nếu là vault thật.";
+
+    /// Cờ của `pkm VAULT material|zones|pairs`.
+    #[derive(Parser, Debug)]
+    #[command(name = "pkm", about = ABOUT, infer_long_args = true)]
+    struct Args {
+        vault: PathBuf,
+        #[arg(value_parser = WRITING_OPS)]
+        cmd: String,
+        /// `material`: bản nháp (đường dẫn trong vault, `.md` có thể bỏ).
+        args: Vec<String>,
+        /// Index graph (mặc định VAULT/.kg/graph.db).
+        #[arg(long)]
+        db: Option<PathBuf>,
+        /// Không build tăng dần index graph trước khi tính.
+        #[arg(long)]
+        no_refresh: bool,
+        /// Thư mục gói OHS (mặc định biến PKM_OHS_DIR, rồi gói mà `pkm mcp install` cài).
+        #[arg(long)]
+        ohs: Option<PathBuf>,
+        /// Chờ OHS sẵn sàng tối đa chừng này giây.
+        #[arg(long, default_value_t = OHS_WAIT_SECS)]
+        ohs_wait: u64,
+        /// `material`: số note mỗi danh sách (12); `zones`: số láng giềng của mỗi note (15).
+        #[arg(long)]
+        k: Option<usize>,
+        /// `material`: số hit mỗi câu tìm.
+        #[arg(long, default_value_t = 10)]
+        per_query: usize,
+        /// `material`: file JSON hit OHS có sẵn (`[{path, score}]` hoặc `{results: [...]}`), thêm làm hạt giống.
+        #[arg(long)]
+        hits: Option<PathBuf>,
+        /// `pairs`, `zones`: số từ tối thiểu của thân note (40 với `pairs`, 8 với `zones`).
+        #[arg(long)]
+        min_words: Option<usize>,
+        /// `pairs`: cosine tối thiểu.
+        #[arg(long, default_value_t = 0.85, allow_negative_numbers = true)]
+        min: f64,
+        /// `pairs`: số cặp tối đa.
+        #[arg(long, default_value_t = 60)]
+        max: usize,
+        /// `pairs`: số cặp tối đa của mỗi note.
+        #[arg(long, default_value_t = 2)]
+        per_note: usize,
+        /// `pairs`: ghi kết quả vào file này.
+        #[arg(long)]
+        out: Option<PathBuf>,
+        /// `pairs`: ghi VAULT/_E11/similar-pairs.json; `zones`: ghi VAULT/.e11/zones.json.
+        #[arg(long)]
+        write: bool,
+        /// `zones`: như --write, và ghi trang gợi ý khi trang chưa có.
+        #[arg(long)]
+        apply: bool,
+        /// `zones`: số vùng trên trang.
+        #[arg(long, default_value_t = 20)]
+        top: usize,
+        /// `zones`: vùng lớn hơn chừng này note thì chia tiếp.
+        #[arg(long, default_value_t = 60)]
+        max_size: usize,
+        /// `zones`: bỏ vùng nhỏ hơn chừng này note.
+        #[arg(long, default_value_t = 5)]
+        min_size: usize,
+    }
+
+    pub(super) fn run(argv: Vec<OsString>) -> ExitCode {
+        let a = Args::parse_from(argv);
+        let result = match a.cmd.as_str() {
+            "material" => material_cmd(&a),
+            "zones" => zones_cmd(&a),
+            _ => pairs_cmd(&a),
+        };
+        match result {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(Failure::Message(m)) => fail(&format!("{}: {m}", a.cmd)),
+            Err(Failure::Exit(code, m)) => {
+                eprintln!("{m}");
+                ExitCode::from(code)
+            }
+        }
+    }
+
+    /// OHS cho lần chạy này, đã chờ sẵn sàng tối đa `--ohs-wait` giây. `PKM_NO_OHS=1` thì OHS ở trạng thái `broken`.
+    fn launch(a: &Args) -> Arc<Ohs> {
+        let ohs = mcp::launch_ohs(&a.vault, a.ohs.as_deref(), None).unwrap_or_else(|| {
+            Arc::new(Ohs::unavailable(OhsState::Broken {
+                action: format!(
+                    "{}=1: pkm không chạy OHS. Bỏ biến này để dùng lệnh cần OHS.",
+                    mcp::NO_OHS_ENV
+                ),
+            }))
+        });
+        ohs.wait_ready(Duration::from_secs(a.ohs_wait));
+        ohs
+    }
+
+    /// Lỗi OHS thành JSON ra stdout (như kết quả tool: `ohs_not_ready` đủ năm khoá, hoặc `ohs_error`) và thoát 1.
+    fn ohs_failure(cmd: &str, e: &OhsError) -> Failure {
+        let v = e
+            .not_ready_error()
+            .unwrap_or_else(|| json!({"error": "ohs_error", "detail": e.to_string()}));
+        if let Err(f) = print_json(&v) {
+            return f;
+        }
+        Failure::Exit(1, format!("{cmd}: {}", mcp::py_str(v.get("error"))))
+    }
+
+    /// Index graph sẵn để đọc: build tăng dần với gói, adapter, cách đọc của lần build trước (trừ `--no-refresh`).
+    fn graph(a: &Args) -> Result<Graph, Failure> {
+        let db =
+            a.db.clone()
+                .unwrap_or_else(|| a.vault.join(".kg").join("graph.db"));
+        if !db.exists() {
+            return Err(Failure::Message(format!(
+                "chưa có index graph ở {}: dựng trước bằng pkm VAULT build (bản B: --adapter e11 --packs capture \
+                 --no-aliases --edge-keys links --body-edges)",
+                db.display()
+            )));
+        }
+        if !a.no_refresh {
+            let spec = index::previous(&db, "adapter_spec", "");
+            let adapter = adapter::load(&spec)?;
+            let packs = index::previous(&db, "packs", "");
+            index::build(
+                &a.vault,
+                &db,
+                &Build {
+                    packs: packs
+                        .split(',')
+                        .filter(|p| !p.is_empty())
+                        .map(str::to_owned)
+                        .collect(),
+                    opts: Options::pick(false, None, false, Some(&db)),
+                    adapter: adapter.as_deref(),
+                    ..Build::default()
+                },
+            )?;
+        }
+        Ok(Graph::open(&db)?)
+    }
+
+    fn material_cmd(a: &Args) -> Result<(), Failure> {
+        let [raw] = &a.args[..] else {
+            return Err(Failure::Message(
+                "cần đúng một bản nháp (pkm VAULT material \"Bài viết/X\")".into(),
+            ));
+        };
+        let draft =
+            material::resolve_draft(&a.vault, raw).map_err(|e| Failure::Exit(1, e.to_string()))?;
+        let extra = match &a.hits {
+            Some(f) => {
+                let text = std::fs::read_to_string(f).map_err(|e| {
+                    Failure::Message(format!("không đọc được {}: {e}", f.display()))
+                })?;
+                let v: Value = serde_json::from_str(&text).map_err(|e| {
+                    Failure::Message(format!("{} không phải JSON: {e}", f.display()))
+                })?;
+                material::hits_from_value(&v).map_err(Failure::Message)?
+            }
+            None => Vec::new(),
+        };
+        let g = graph(a)?;
+        let o = material::Options {
+            k: a.k.unwrap_or(material::Options::default().k),
+            per_query: a.per_query,
+        };
+        // OHS chỉ chạy khi bản nháp có chữ để tìm.
+        let needs_ohs = !material::draft_queries(&a.vault, &draft)
+            .map_err(|e| Failure::Message(e.to_string()))?
+            .is_empty();
+        let ohs = needs_ohs.then(|| launch(a));
+        let search = |q: &str, limit: usize| match &ohs {
+            Some(o) => material::ohs_search(o, q, limit),
+            None => Ok(Vec::new()),
+        };
+        let r = material::gather(&g, &a.vault, &draft, &o, &extra, &search);
+        drop(ohs);
+        match r {
+            Ok(v) => print_json(&v),
+            Err(material::Error::Ohs(e)) => Err(ohs_failure("material", &e)),
+            Err(e) => Err(Failure::Message(e.to_string())),
+        }
+    }
+
+    /// Vector note từ OHS, đã lọc; OHS tắt ngay sau khi lấy xong.
+    fn note_vectors(a: &Args, cmd: &str, min_words: usize) -> Result<pairs::NoteVectors, Failure> {
+        let ohs = launch(a);
+        let r = pairs::fetch(&ohs, &a.vault, min_words);
+        drop(ohs);
+        match r {
+            Ok(v) => Ok(v),
+            Err(pairs::FetchError::Ohs(e)) => Err(ohs_failure(cmd, &e)),
+            Err(pairs::FetchError::Other(m)) => Err(Failure::Message(m)),
+        }
+    }
+
+    /// Ghi `text` vào `path`, tạo thư mục cha.
+    fn write_file(path: &Path, text: &str) -> Result<(), Failure> {
+        if let Some(dir) = path.parent() {
+            std::fs::create_dir_all(dir)?;
+        }
+        std::fs::write(path, text)
+            .map_err(|e| Failure::Message(format!("không ghi được {}: {e}", path.display())))
+    }
+
+    fn pairs_cmd(a: &Args) -> Result<(), Failure> {
+        let o = PairOptions {
+            min: a.min,
+            max: a.max,
+            per_note: a.per_note,
+            min_words: a.min_words.unwrap_or(PairOptions::default().min_words),
+        };
+        let v = note_vectors(a, "pairs", o.min_words)?;
+        let p = pairs::similar_pairs(&v, &o);
+        let picked = p.picked.len();
+        let list = Value::Array(p.picked);
+        let out = a.out.clone().or_else(|| {
+            a.write
+                .then(|| a.vault.join("_E11").join("similar-pairs.json"))
+        });
+        if let Some(path) = &out {
+            write_file(path, &pyjson::dumps(&list, pyjson::INDENT1))?;
+        }
+        eprintln!(
+            "notes {}, pairs >= {}: {}, picked {picked}{}",
+            p.notes,
+            o.min,
+            p.candidates,
+            out.map(|p| format!(" -> {}", p.display()))
+                .unwrap_or_default()
+        );
+        print_json(&list)
+    }
+
+    fn zones_cmd(a: &Args) -> Result<(), Failure> {
+        let g = graph(a)?;
+        let v = note_vectors(a, "zones", a.min_words.unwrap_or(8))?;
+        let knn = pairs::knn(&v, a.k.unwrap_or(15));
+        let o = zones::Options {
+            max_size: a.max_size,
+            min_size: a.min_size,
+        };
+        let z = zones::zones(&a.vault, &g, &knn, &o)?;
+        let stamp = chrono::Local::now().date_naive().to_string();
+        let file = json!({"generated": stamp, "zones": z.zones});
+        if a.write || a.apply {
+            write_file(
+                &a.vault.join(zones::OUT),
+                &pyjson::dumps(&file, pyjson::INDENT1),
+            )?;
+        }
+        let s = &z.stats;
+        eprintln!(
+            "notes in graph {} (knn {}, hand edges {}), zones {}, covered {}, size min/median/max {}/{}/{}, \
+             with posts {}, single-folder {}",
+            s["notes"],
+            s["knn"],
+            s["hand_edges"],
+            s["zones"],
+            s["covered"],
+            s["size_min"],
+            s["size_median"],
+            s["size_max"],
+            s["with_posts"],
+            s["single_folder"]
+        );
+        if a.apply {
+            let abs = mcp::abspath(&a.vault);
+            let name = abs
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            let text = zones::page(&z.zones, &name, &stamp, a.top);
+            if zones::write_page_if_absent(&a.vault, &text)? {
+                eprintln!("wrote {}", zones::PAGE);
+            } else {
+                eprintln!(
+                    "giữ nguyên {} (đã có; xoá trang nếu muốn dựng lại)",
+                    zones::PAGE
+                );
+            }
+        }
+        let mut out = file;
+        out["stats"] = z.stats;
+        print_json(&out)
     }
 }
 

@@ -1,9 +1,9 @@
 //! Module OHS duy nhất của `pkm` (D6, PRD mục 9): giữ một tiến trình `ohs serve --stdio` sống lâu, gửi request có `id`
 //! đồng thời từ nhiều luồng, khởi động lại có giới hạn khi OHS chết, và báo trạng thái theo D7.
 //!
-//! Dùng: [`Ohs::launch`] khi `pkm` khởi động (không chặn: OHS khởi động ở luồng nền), [`Ohs::search`] và
-//! [`Ohs::read`] trong tool cần OHS, [`Ohs::state`] để báo trạng thái. Khi OHS chưa sẵn sàng, hai hàm đó trả
-//! [`OhsError::NotReady`] và tool
+//! Dùng: [`Ohs::launch`] khi `pkm` khởi động (không chặn: OHS khởi động ở luồng nền), [`Ohs::search`],
+//! [`Ohs::read`], [`Ohs::vectors`] và [`Ohs::neighbors`] trong tool cần OHS, [`Ohs::state`] để báo trạng thái. Khi OHS
+//! chưa sẵn sàng, các hàm đó trả [`OhsError::NotReady`] và tool
 //! trả [`OhsError::not_ready_error`] cho agent; không có đường lùi cho ra kết quả kém (D7). Bỏ [`Ohs`] (hoặc gọi
 //! [`Ohs::shutdown`]) thì đóng stdin của OHS, chờ có giới hạn rồi kill: không để lại tiến trình `node` nào.
 //!
@@ -428,15 +428,7 @@ impl Ohs {
         if paths.iter().any(|p| p.trim().is_empty()) {
             return Err(OhsError::Invalid("paths có đường dẫn rỗng".into()));
         }
-        let options = options_object(options)?;
-        if let Some(key) = ["id", "action", "paths"]
-            .into_iter()
-            .find(|k| options.contains_key(*k))
-        {
-            return Err(OhsError::Invalid(format!(
-                "options của read không được có khoá {key}"
-            )));
-        }
+        let options = request_options("read", options)?;
         let mut req = Map::new();
         req.insert("action".into(), "read".into());
         req.insert("paths".into(), paths.into());
@@ -444,36 +436,93 @@ impl Ohs {
         self.request(req, "notes")
     }
 
+    /// Vector của từng note bằng action `vectors` của fork (bản vá `vector-export`): mỗi note một vector gộp từ vector
+    /// các đoạn đã lưu. `paths` rỗng là mọi note có vector (theo thứ tự đường dẫn của OHS). `options` là `pooling`
+    /// (`mean` mặc định, hoặc `max`) và `normalize` (mặc định `true`, chuẩn hoá L2), hoặc `null`.
+    ///
+    /// Bản ghi là `{path, dim, model, chunks, vector}`, hoặc `{path, error}` với note được hỏi mà OHS không có vector
+    /// (`note not found in the index`, `note has no stored embeddings`); OHS không bịa vector. Model không rõ hay số
+    /// chiều lệch là [`OhsError::Remote`]. Chỉ hỏi khi OHS `ready`, như [`Ohs::search`].
+    pub fn vectors(&self, paths: &[String], options: Value) -> Result<VectorReply, OhsError> {
+        self.vector_request("vectors", paths, options)
+    }
+
+    /// K note gần nghĩa nhất của từng note bằng action `neighbors` của fork: cosine trên vector note đã gộp và chuẩn
+    /// hoá, điểm giảm dần, hoà thì giữ thứ tự đường dẫn; note nguồn không bao giờ là láng giềng của chính nó. `paths`
+    /// rỗng là mọi note có vector làm nguồn. `options`: `k` (mặc định 10), `minScore` (trong [-1, 1]),
+    /// `excludeLinked`, `scope` (cú pháp `scope` của tìm kiếm, chỉ giới hạn ứng viên), `pooling`, hoặc `null`.
+    ///
+    /// Bản ghi là `{path, neighbors: [{path, score}]}` hoặc `{path, error}` như [`Ohs::vectors`].
+    pub fn neighbors(&self, paths: &[String], options: Value) -> Result<VectorReply, OhsError> {
+        self.vector_request("neighbors", paths, options)
+    }
+
+    fn vector_request(
+        &self,
+        action: &str,
+        paths: &[String],
+        options: Value,
+    ) -> Result<VectorReply, OhsError> {
+        if paths.iter().any(|p| p.trim().is_empty()) {
+            return Err(OhsError::Invalid("paths có đường dẫn rỗng".into()));
+        }
+        let options = request_options(action, options)?;
+        let mut req = Map::new();
+        req.insert("action".into(), action.into());
+        if !paths.is_empty() {
+            req.insert("paths".into(), paths.into());
+        }
+        req.extend(options);
+        let mut body = self.call_ready(req)?;
+        let meta = match body.remove("meta") {
+            Some(Value::Object(m)) => m,
+            other => {
+                return Err(OhsError::Protocol(format!(
+                    "phản hồi {action} không có object meta: {other:?}"
+                )));
+            }
+        };
+        let mut records = take_array(&mut body, "records")?;
+        if let Some(bad) = records
+            .iter()
+            .find(|r| !r.get("path").is_some_and(Value::is_string))
+        {
+            return Err(OhsError::Protocol(format!(
+                "bản ghi {action} không có path: {bad}"
+            )));
+        }
+        normalize_result_paths(&mut records);
+        for r in &mut records {
+            if let Some(Value::Array(list)) = r.get_mut("neighbors") {
+                normalize_result_paths(list);
+            }
+        }
+        Ok(VectorReply { meta, records })
+    }
+
     /// Gửi `req` khi OHS `ready` và lấy mảng `field` của phản hồi, đường dẫn đã chuẩn hoá NFC.
     fn request(&self, req: Map<String, Value>, field: &str) -> Result<Vec<Value>, OhsError> {
+        let mut items = take_array(&mut self.call_ready(req)?, field)?;
+        normalize_result_paths(&mut items);
+        Ok(items)
+    }
+
+    /// Gửi `req` khi OHS `ready`; trả object phản hồi.
+    fn call_ready(&self, req: Map<String, Value>) -> Result<Map<String, Value>, OhsError> {
         let proc = self.shared.running().map_err(OhsError::NotReady)?;
         let state = self.shared.current(&proc);
         if !state.is_ready() {
             return Err(OhsError::NotReady(state));
         }
-        let body = match proc.call(req, self.request_timeout) {
-            Ok(body) => body,
-            Err(CallError::Disconnected) => return Err(OhsError::NotReady(self.state())),
-            Err(CallError::Timeout(d)) => return Err(OhsError::Timeout(d)),
-            Err(CallError::Remote(m)) => return Err(OhsError::Remote(m)),
-        };
-        let mut items = match body {
-            Value::Object(mut m) => match m.remove(field) {
-                Some(Value::Array(a)) => a,
-                other => {
-                    return Err(OhsError::Protocol(format!(
-                        "phản hồi không có mảng {field}: {other:?}"
-                    )));
-                }
-            },
-            other => {
-                return Err(OhsError::Protocol(format!(
-                    "phản hồi không phải object: {other}"
-                )));
-            }
-        };
-        normalize_result_paths(&mut items);
-        Ok(items)
+        match proc.call(req, self.request_timeout) {
+            Ok(Value::Object(m)) => Ok(m),
+            Ok(other) => Err(OhsError::Protocol(format!(
+                "phản hồi không phải object: {other}"
+            ))),
+            Err(CallError::Disconnected) => Err(OhsError::NotReady(self.state())),
+            Err(CallError::Timeout(d)) => Err(OhsError::Timeout(d)),
+            Err(CallError::Remote(m)) => Err(OhsError::Remote(m)),
+        }
     }
 
     /// PID của tiến trình OHS hiện tại, nếu có (để chẩn đoán và kiểm không mồ côi).
@@ -539,6 +588,39 @@ fn options_object(options: Value) -> Result<Map<String, Value>, OhsError> {
             "options phải là object, nhận {other}"
         ))),
     }
+}
+
+/// Tuỳ chọn của một action có `paths` ([`options_object`]), không được đè khoá của chính request.
+fn request_options(action: &str, options: Value) -> Result<Map<String, Value>, OhsError> {
+    let options = options_object(options)?;
+    match ["id", "action", "paths"]
+        .into_iter()
+        .find(|k| options.contains_key(*k))
+    {
+        Some(key) => Err(OhsError::Invalid(format!(
+            "options của {action} không được có khoá {key}"
+        ))),
+        None => Ok(options),
+    }
+}
+
+/// Lấy mảng `field` của object phản hồi.
+fn take_array(body: &mut Map<String, Value>, field: &str) -> Result<Vec<Value>, OhsError> {
+    match body.remove(field) {
+        Some(Value::Array(a)) => Ok(a),
+        other => Err(OhsError::Protocol(format!(
+            "phản hồi không có mảng {field}: {other:?}"
+        ))),
+    }
+}
+
+/// Phản hồi của action `vectors` hoặc `neighbors`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct VectorReply {
+    /// `{model, dim, pooling, note_count, ohs_version}` như dòng `meta` của `ohs vectors`/`ohs neighbors`.
+    pub meta: Map<String, Value>,
+    /// Bản ghi theo thứ tự OHS trả; mọi đường dẫn (`path`, `neighbors[].path`) đã chuẩn hoá NFC.
+    pub records: Vec<Value>,
 }
 
 /// Khoá chứa danh sách đường dẫn note trong kết quả `search` và `read` của OHS.
@@ -832,6 +914,41 @@ mod tests {
         }
         let err = ohs.read(&one, json!({"related": false})).unwrap_err();
         assert_eq!(err.not_ready_error().unwrap()["state"], "broken");
+    }
+
+    #[test]
+    fn invalid_vector_input_is_rejected_before_anything_is_sent() {
+        let ohs = Ohs::unavailable(OhsState::Starting);
+        let one = vec!["a.md".to_owned()];
+        for (paths, options) in [
+            (vec![" ".to_owned()], Value::Null),
+            (one.clone(), json!("x")),
+            (one.clone(), json!({"paths": ["b.md"]})),
+            (one.clone(), json!({"action": "search"})),
+            (one.clone(), json!({"id": "r1"})),
+        ] {
+            assert!(
+                matches!(
+                    ohs.vectors(&paths, options.clone()),
+                    Err(OhsError::Invalid(_))
+                ),
+                "{paths:?} {options}"
+            );
+            assert!(
+                matches!(
+                    ohs.neighbors(&paths, options.clone()),
+                    Err(OhsError::Invalid(_))
+                ),
+                "{paths:?} {options}"
+            );
+        }
+        // Không có `paths` là mọi note: hợp lệ, nên tới bước kiểm trạng thái.
+        for err in [
+            ohs.vectors(&[], Value::Null).unwrap_err(),
+            ohs.neighbors(&[], json!({"k": 3})).unwrap_err(),
+        ] {
+            assert_eq!(err.not_ready_error().unwrap()["state"], "broken");
+        }
     }
 
     #[test]
