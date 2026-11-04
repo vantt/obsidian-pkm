@@ -1,7 +1,7 @@
 ---
 title: "Repo sản phẩm: preset bản B, bố cục apps/packages, pkm setup, plugin"
 description: "Biến obsidian-pkm thành repo sản phẩm đủ đồ để dựng bản B trên máy khách: chuyển preset và hướng dẫn, đổi crates/ sang apps/packages, pkm setup, khung plugin, chuyển phần tính E11 vào pkm-core."
-status: pending
+status: in-progress
 priority: P1
 effort: "khoảng 15-18 ngày công (ước theo E12.7 mục 3 của repo nghiên cứu, chưa đo)"
 branch: main
@@ -17,9 +17,27 @@ created: 2026-11-03
 
 Quyết định ở [docs/DECISIONS.md](../../docs/DECISIONS.md), ba mục ngày 2026-11-03 (tách vai hai repo; cài đặt là `pkm setup`; bố cục `apps/` + `packages/`). Plan này chỉ xếp việc; lý do nằm ở đó, không chép lại.
 
-Trạng thái: chưa bắt đầu. Bước 1 (ghi quyết định) xong cùng plan này. Bước 2, 4, 5, 6 làm được khi user giao. Riêng bước 3 (đổi thư mục) đợi `phase-17-one-door` merge vào `main`. Tuần chạy song song (phase 16 của [kế hoạch tổng](../261102-0535-rust-core-port-master/plan.md)) vẫn chạy để user duyệt trước `v0.1.0`; plan này không chặn nó.
+Trạng thái (2026-11-04): user giao làm mọi bước làm được ngay. Bước 1, 2 xong; bước 4, 5, 6 đang làm (xem "Thực hiện" dưới). Riêng bước 3 (đổi thư mục) đợi `phase-17-one-door` merge vào `main`. Tuần chạy song song (phase 16 của [kế hoạch tổng](../261102-0535-rust-core-port-master/plan.md)) vẫn chạy để user duyệt trước `v0.1.0`; plan này không chặn nó.
 
 Từ 2026-11-03 repo này là nguồn sự thật của lõi; spec ghim `da62ecb` là lần cuối. Script Python của repo nghiên cứu chạy nguyên trạng cho bản B tới khi được chuyển. Muốn đổi hành vi script nào thì chuyển nó sang đây trước.
+
+## Thực hiện (2026-11-04)
+
+Nguồn chuyển: repo nghiên cứu `vantt/obsidian-pkm-automation` ở `9061581` (`scripts/e11/`, bảng việc ở `docs/plans/E12.7-port-rust-js.md` mục 3), fork OHS `vantt/obsidian-hybrid-search` ở `327c995` (đặc tả bản vá `vantt/patches/0003-vector-export.spec.md`, `0004-stdio-parity.spec.md` cho `vectors`, `neighbors`). Gói OHS ghim vẫn là `vantt.4` (đã có P03, P04).
+
+Thứ tự đổi so với bảng phase: bước 4, 5, 6 không đợi bước 3. Chúng viết ở bố cục hiện tại (`crates/`, plugin ở `apps/obsidian-plugin/` là thư mục mới) trên nhánh `product-b`, nhánh này xếp chồng trên `phase-17-one-door` vì cần MCP một cửa, `search` và bộ cài mới. Bước 3 (đổi `crates/` sang `apps/` + `packages/`) vẫn đợi `phase-17-one-door` merge như quyết định 2026-11-03; `git mv` mang theo mã mới. Bước 2 không đụng `crates/` nên làm thẳng trên `main`.
+
+| Bước | Nhánh | Đợt | Trạng thái |
+|---|---|---|---|
+| 2 preset bản B, hướng dẫn người dùng | `main` | 1 | xong (`6b7e48e`, `3c7dbf8`) |
+| 6a `propose` vào `pkm-core` | `product-b` | 1 | đang làm |
+| 6b `material`, `zones`, cặp note giống nhau (thay `note_knn.mjs`, `similar_pairs.mjs`) qua `vectors`, `neighbors` của OHS | `product-b` | 1 | đang làm |
+| 5a khung plugin, `workshop_ui`, review log, CSS lưới thư mục, phóng to bảng | `product-b` | 1 | đang làm |
+| 4 `pkm setup`, plugin trong Release | `product-b` | 2 (cần 2, 5a) | chờ đợt 1 |
+| 5b giao diện plugin cho đề xuất, nguyên liệu, vùng | `product-b` | 2 (cần 5a, 6) | chờ đợt 1 |
+| 3 đổi thư mục, `pkm-contract` | sau merge | 3 | chờ `phase-17-one-door` merge |
+
+Không làm ở đây (E12.7 mục 3.5, 3.6): `migrate_v3`, `selection_signals`, `board.mjs`, Apps Script; nhập Evernote (`normalize`, `highlight_colours`) chờ user quyết có bán không. Điện thoại (`pkm serve`) không thuộc plan này.
 
 ## Kết quả cuối (Goal)
 
@@ -62,7 +80,9 @@ Phase 4, 5, 6 chạy song song được sau phase 3. Số công lấy từ bản
 Ba mục trong `docs/DECISIONS.md` và mục GATES 2026-11-03 ở repo nghiên cứu. Xong khi cả hai đã vào nhánh chính của mỗi repo.
 
 ### Phase 2: chuyển preset bản B và hướng dẫn người dùng
-Chép sang `presets/b/` (thư mục mới, không đụng `crates/`, nên không phải đợi phase 3): `schema.yaml`, phần dữ liệu của adapter e11, mẫu `CLAUDE.md` (`scripts/e11/vault-agent.md`), template, theme. Chuyển phần playbook dành cho khách thành hướng dẫn người dùng trong `docs/`; phần dành cho người nghiên cứu ở lại repo nghiên cứu. Ghi rõ nguồn mỗi file (commit của repo nghiên cứu). Xong khi `presets/b/` đủ để dựng bản B mà không đọc gì từ repo nghiên cứu, và rà bằng grep không thấy nội dung vault thật.
+Chép sang `presets/b/` (thư mục mới, không đụng `crates/`, nên không phải đợi phase 3): mẫu `CLAUDE.md` (`scripts/e11/vault-agent.md`, giữ tên `vault-agent.md`), CSS lưới thư mục, theme (nguồn, font OFL, bản đã dựng), `setup.json` (plugin ghim kèm sha256, adapter ACP, cờ MCP, giá trị theme). Chuyển phần playbook dành cho khách thành hướng dẫn người dùng trong `docs/user-guide/`; phần dành cho người nghiên cứu ở lại repo nghiên cứu. Ghi rõ nguồn mỗi file (commit của repo nghiên cứu). Xong khi `presets/b/` đủ để dựng bản B mà không đọc gì từ repo nghiên cứu, và rà bằng grep không thấy nội dung vault thật.
+
+Kết quả (2026-11-04, nguồn `9061581`; chi tiết ở [presets/b/README.md](../../presets/b/README.md)): `schema.yaml` không chép vì file nhúng của `pkm-core` giống từng byte bản của repo nghiên cứu, file nhúng là gốc. Adapter e11 là mã Rust (`adapter/e11.rs`), không có phần dữ liệu. Trang chủ, file `.base`, trang chủ đề và 8 mẫu note là chuỗi trong `workshop_ui.py`, chưa phải file: ra file khi phase 5 chuyển `workshop_ui`. Plugin `e11-review-log`, `e11-table-zoom` là mã JS, gộp vào plugin ở phase 5. Còn mở cho phase 4, 5: theme Primary 2.10.0 và plugin Style Settings chưa script nào cài; `TOPIC_ROOTS`, `INBOXES` của `workshop_ui.py` ghi cứng thư mục của vault nghiên cứu, máy khách cần cấu hình.
 
 ### Phase 3: đổi thư mục, dựng khung plugin
 Một PR: `git mv crates/pkm apps/pkm`, `git mv crates/pkm-core packages/pkm-core`, `git mv parity tools/parity`, `git mv probes tools/probes`; sửa `Cargo.toml` của workspace, đường dẫn trong `.github/workflows/ci.yml`, `release.yml`, `scripts/release-assets.sh`, `scripts/install.sh`, bộ so khớp (`tools/parity/src/*`, `parity/golden/`), `include_str!` (ví dụ `schema/schema.yaml` của `pkm-core`), README, `docs/`, `spec/PORTING.md`. Cùng PR thêm `pnpm-workspace.yaml`, khung `apps/obsidian-plugin` (manifest, settings, lớp gọi `pkm … --json`) và `packages/pkm-contract` sinh kiểu TS từ Rust. Release ra thêm plugin cùng tag. Chỉ mở PR khi không còn nhánh nào chờ merge. Xong khi CI xanh ba nền (PR chỉ chạy Linux và Windows; chạy tay ma trận đủ có macOS bằng `gh workflow run ci.yml --ref <nhánh>`), so khớp kg-solo 0 lệch chưa có tên, chạy thử Release (`workflow_dispatch`) ra đủ file và checksums khớp.
@@ -81,7 +101,7 @@ Phần tính chuyển sang Rust, ra JSON qua `pkm … --json`; phần bấm (nh�
 - **Đường dẫn sau khi đổi thư mục:** CI, `release.yml`, `scripts/release-assets.sh` (đọc `cargo pkgid`), `scripts/install.sh`, bộ so khớp, golden, `include_str!` đều có đường dẫn cứng. Sót một chỗ thì Release hỏng âm thầm. Giảm bằng grep `crates/`, `parity/`, `probes/` trước khi mở PR và chạy thử Release.
 - **Xung đột nhánh:** đổi thư mục khi còn nhánh chờ merge thì nhánh đó phải rebase qua `git mv`. Chỉ làm khi không còn nhánh nào chờ.
 - **Preset bản B lẫn nội dung vault thật:** `presets/b/` chỉ chứa schema, mẫu, theme, không chứa tên note, đường dẫn note, nội dung hay đường dẫn vault của user. Rà bằng grep trước mỗi commit chạm `presets/`.
-- **Hai bản `schema.yaml`:** `pkm-core` nhúng một bản, `presets/b/` có một bản. Phải chốt bản nào là gốc, bản kia sinh ra hoặc kiểm khớp trong CI.
+- **Hai bản `schema.yaml`:** đã chốt ở phase 2: chỉ một bản, file nhúng của `pkm-core`; `presets/b/` không có bản sao.
 - **Plugin và GUI không thành hình sau `v0.1.0`:** khi đó giữ `crates/` và `plugin/` cũng được (DECISIONS, mục bố cục).
 
 <!-- slug: product-layout -->

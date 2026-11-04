@@ -1,0 +1,56 @@
+{
+  "plugins": {
+    "homepage": {
+      "repo": "mirnovov/obsidian-homepage",
+      "version": "4.2.2",
+      "sha256": {
+        "main.js": "303e9188de3688e2364927b5da63aaa22969eac8a2fab470f5a1e485afac052c",
+        "manifest.json": "860bfe5bdcf115d6ccac90dbc25e64f10c18d69c0b459ac6328064d25a3b6a38",
+        "styles.css": "b17d097b0ab3585b6957b65c1cfe53cff7e6ff7d03d7ec178e27fa0029ddb429"
+      }
+    },
+    "templater-obsidian": {
+      "repo": "SilentVoid13/Templater",
+      "version": "2.26.0",
+      "sha256": {
+        "main.js": "0acd45cfdb3a7337e2bef511699bc1f819dc64645ad3480df33579d42d2dcbaa",
+        "manifest.json": "91c9fa8510082fffa0b3d022aac4986e3b392295b1126e847ead7ed7289169b8",
+        "styles.css": "67a6dd2d1d6dedca1287c334ca884ec4196433f71ca47388a0bd3eac14cf8b5f"
+      }
+    },
+    "agent-client": {
+      "repo": "RAIT-09/obsidian-agent-client",
+      "version": "0.13.0",
+      "sha256": {
+        "main.js": "c82e4904c8749304158296222a050076b3b04a5fb86ec2ad7a7ff61477a1c0b4",
+        "manifest.json": "3fc1d8d412bc9fc1ca4533d11a2ad2f2fac531fdd02c2626dbc0a0c82fdf6897",
+        "styles.css": "254cfdda3f5076473f2993e04934da327f4f47425228c63ff31dcce95386b327"
+      }
+    }
+  },
+  "core_plugins": ["bases"],
+  "agent": {
+    "acp_package": "@agentclientprotocol/claude-agent-acp",
+    "acp_version": "0.99.1",
+    "agent_client_preset": "claude-code-acp",
+    "agent_client_preset_default_command": "claude-agent-acp",
+    "guide": {"source": "vault-agent.md", "target": ".claude/CLAUDE.md"},
+    "allow": ["mcp__pkm"]
+  },
+  "mcp": {
+    "name": "pkm",
+    "replaces": ["kg", "ohs"],
+    "flags": ["--packs", "capture", "--no-aliases", "--edge-keys", "links", "--body-edges", "--adapter", "e11"],
+    "about": "Kho ghi chú cá nhân chuyển từ Evernote: bài cắt, trích dẫn, ý, dự án, chủ đề."
+  },
+  "snippets": {
+    "e11-folder-grid": "folder-grid.css",
+    "e11-theme": "theme/e11-theme.css"
+  },
+  "theme": {
+    "css_theme": "Primary",
+    "css_theme_version": "2.10.0",
+    "base_font_size": 19,
+    "disable_plugins": ["obsidian-minimal-settings"]
+  }
+}
