@@ -1,0 +1,9 @@
+{
+  "id": "pkm",
+  "name": "PKM",
+  "version": "0.1.0-rc.4",
+  "minAppVersion": "1.9.0",
+  "description": "Dựng xưởng (trang chủ, Bases, mẫu, trang chủ đề), ghi nhật ký duyệt đề xuất, nút phóng bảng, và gọi pkm để tính trên vault.",
+  "author": "obsidian-pkm",
+  "isDesktopOnly": true
+}
