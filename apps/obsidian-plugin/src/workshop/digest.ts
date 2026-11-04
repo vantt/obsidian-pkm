@@ -6,8 +6,10 @@ export function sha(text: string): string {
   return createHash('sha256').update(text, 'utf8').digest('hex');
 }
 
-/** `json.dumps(value, sort_keys=True, ensure_ascii=False)` of Python, for values parsed from YAML. */
-export function pyJson(v: unknown): string {
+/** `json.dumps(value, sort_keys=True, ensure_ascii=False)` of Python, for values parsed from YAML or JSON; with
+ * `sortKeys` false, keys keep their insertion order (`json.dumps(value, ensure_ascii=False)`). */
+export function pyJson(v: unknown, sortKeys = true): string {
+  const rec = (x: unknown) => pyJson(x, sortKeys);
   if (v === null || v === undefined) return 'null';
   if (typeof v === 'boolean') return v ? 'true' : 'false';
   if (typeof v === 'number') {
@@ -16,11 +18,12 @@ export function pyJson(v: unknown): string {
     return String(v);
   }
   if (typeof v === 'string') return JSON.stringify(v);
-  if (Array.isArray(v)) return `[${v.map(pyJson).join(', ')}]`;
+  if (Array.isArray(v)) return `[${v.map(rec).join(', ')}]`;
   if (v instanceof Date) return JSON.stringify(v.toISOString());
   if (typeof v === 'object') {
-    const keys = Object.keys(v).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
-    return `{${keys.map((k) => `${JSON.stringify(k)}: ${pyJson((v as Record<string, unknown>)[k])}`).join(', ')}}`;
+    const keys = Object.keys(v);
+    if (sortKeys) keys.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+    return `{${keys.map((k) => `${JSON.stringify(k)}: ${rec((v as Record<string, unknown>)[k])}`).join(', ')}}`;
   }
   return JSON.stringify(String(v));
 }

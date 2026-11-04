@@ -15,7 +15,8 @@ function listEl(parent: HTMLElement, title: string, paths: string[]): void {
   if (paths.length > SHOWN) ul.createEl('li', { text: `… và ${paths.length - SHOWN} file nữa` });
 }
 
-class ConfirmModal extends Modal {
+/** Title, body, Cancel and one action button. */
+export class ConfirmModal extends Modal {
   constructor(
     app: App,
     private readonly title: string,

@@ -68,3 +68,10 @@
 
 /* Workshop confirmation dialog */
 .pkm-workshop-list { max-height: 12em; overflow-y: auto; font-size: var(--font-ui-small); }
+
+/* Proposal review and zone dialogs */
+.pkm-proposal-name { cursor: pointer; color: var(--link-color); }
+.pkm-proposal-name:hover { text-decoration: underline; }
+.pkm-zone { border-top: 1px solid var(--background-modifier-border); padding-bottom: var(--size-4-2); }
+.pkm-zone-notes { font-size: var(--font-ui-small); margin-bottom: var(--size-4-2); }
+.pkm-zone blockquote { margin: var(--size-4-1) 0; font-size: var(--font-ui-small); color: var(--text-muted); }

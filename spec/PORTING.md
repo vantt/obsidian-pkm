@@ -403,6 +403,16 @@ Chỗ cố ý khác:
 - **Ghi YAML:** `propose::dump` làm như `yaml.safe_dump(..., sort_keys=False, allow_unicode=True, width=10_000)` (so với PyYAML 6.0.3 trên 74 chuỗi khó, số thực, dict lồng: `src/propose/pyyaml-dump-cases.json`), trừ việc không gập dòng ở chuỗi dài hơn 10.000 ký tự.
 - **Lớp ký tự:** `\b` của `NAME` theo Unicode của crate `regex` (dấu kết hợp là chữ), Python thì không; văn bản đã NFC nên tên tiếng Việt không bị ảnh hưởng.
 
+Phần plugin (`apps/obsidian-plugin/src/proposals/`): hộp thoại "Đề xuất chờ duyệt" (Nhận, Bỏ kèm `reject_reason` không bắt buộc; chỉ đổi `status` của note đề xuất), lệnh Áp dụng, Hoàn tác, Đo duyệt, Làm mới. Áp dụng, hoàn tác và đo duyệt làm như `--apply`, `--revert`, `--stats` của Python: cùng việc cho từng kiểu, cùng `status`/`closed`/`asserted_at`, cùng dòng sổ `{at, proposal, proposal_old, decision, reject_reason, changes}` (khoá theo thứ tự đó, `json.dumps(ensure_ascii=False)`), cùng note `Ý/… - ý.md` và `Người/<tên>.md` từng byte, cùng trang `_E11/Đo duyệt.md`. Đối chiếu: `test/fixtures/python-proposals.json` là `propose.py --apply`, `--stats`, `--revert` chạy trên vault bịa ở trên (`test/proposals.test.ts`). Làm mới chạy `pkm VAULT pairs --write [--db]` rồi `pkm VAULT propose --create --similar VAULT/_E11/similar-pairs.json --json`; `pairs` lỗi (kể cả `ohs_not_ready`) thì báo và chạy `propose` không có `--similar`. `propose` không nhận `--db`.
+
+Chỗ plugin cố ý khác Python:
+- **Sửa thuộc tính qua Obsidian:** `processFrontMatter`, nên khối thuộc tính do Obsidian viết theo kiểu YAML của nó (Python viết lại bằng `yaml.safe_dump`); nội dung thuộc tính giống, thân note giữ từng byte, note CRLF vẫn CRLF trong khối thuộc tính. Vì vậy văn bản cũ trong `changes` của một note đã bị đề xuất trước trong cùng lượt sửa khác Python ở cách viết khối thuộc tính; hoàn tác vẫn trả đúng từng byte.
+- **`fix-link` chỉ sửa thân** (`vault.process`); Python viết lại cả frontmatter, và note không có frontmatter bị thêm `---\n{}\n---`.
+- **Một đề xuất lỗi không làm hỏng lượt:** note đích không có, `notes` hỏng, thiếu `data` thì các file đề xuất đó đã sửa được trả lại, đề xuất giữ `nhận`, lỗi được báo, đề xuất sau vẫn chạy (Python dừng giữa chừng). Tên người trong `data.value` phải là tên file hợp lệ.
+- **`related`, `who` là một chuỗi** thì coi là danh sách một mục (Python tách chuỗi thành từng ký tự hoặc ném `TypeError`).
+- **Hoàn tác** kiểm cả sổ trước khi trả file nào; dòng hỏng thì báo số dòng và không đổi gì.
+- **Đo duyệt:** dòng nhật ký hỏng và file không phải `.md` trong `_Đề xuất/` bị bỏ qua; câu giải thích ghi "plugin PKM" thay cho "plugin e11-review-log".
+
 Nguồn: `propose.py` không có test Python. Chạy: `cargo test -p pkm-core propose`, `cargo test -p pkm --test cli_propose`.
 
 | Test Python | Test Rust | Trạng thái | Ghi chú |
@@ -439,11 +449,22 @@ Nguồn: `scripts/e11/tests/test_material.py` (3 test), `scripts/e11/tests/test_
 | Test Python | Test Rust | Trạng thái | Ghi chú |
 |---|---|---|---|
 | `test_material.Draft.test_sections_and_queries` | `material::tests::sections_and_queries_skip_material_section_code_and_default_title` | đã chuyển | |
-| `test_material.Draft.test_add_uses` | — | không áp dụng | Ghi `uses` thuộc plugin |
-| `test_material.Draft.test_ticked` | — | không áp dụng | Ô đã tích thuộc plugin |
+| `test_material.Draft.test_add_uses` | plugin `test/writing.test.ts` (`ticks into uses`) | đã chuyển sang plugin | So theo nội dung thuộc tính (xem Phần plugin) |
+| `test_material.Draft.test_ticked` | plugin `test/writing.test.ts` (`reads ticked boxes like ticked_in`) | đã chuyển sang plugin | |
 | `test_material.Loop.test_graph_and_tick` | `material::tests::graph_reaches_notes_through_edges_not_topic_pages` | đã chuyển phần graph | Phần đánh dấu rồi chạy lại thuộc plugin |
 | `test_zones.Louvain.test_two_cliques` | `zones::tests::louvain_splits_two_cliques_joined_by_a_weak_edge_and_is_stable` | đã chuyển | |
 | `test_zones.Louvain.test_split_big_and_drop_small` | `zones::tests::big_communities_are_split_and_small_ones_dropped` | đã chuyển | |
 | `test_zones.Describe.test_score_and_label` | `zones::tests::score_label_colours_folders_and_posts` | đã chuyển | Kiểm thêm điểm, năm, thư mục đầu |
 
 Test Rust thêm, không có bản Python: `ohs::tests::invalid_vector_input_is_rejected_before_anything_is_sent`, `tests/ohs_fake.rs::{vectors_send_paths_and_options_and_return_meta_and_nfc_records, neighbors_return_scores_in_order_with_nfc_paths, vectors_and_neighbors_report_not_ready_and_remote_errors}`, `tests/ohs_vectors_real.rs` (`#[ignore]`, gói OHS thật; đã chạy qua trên Linux với gói `0.17.2-vantt.4` và kg-solo: vector đơn vị, note không có, `neighbors` khớp cosine tính lại), `material::tests::{queries_clean_markup_label_the_lead_and_stop_at_eight, python_splitlines_breaks, draft_is_resolved_and_system_pages_refused, every_paragraph_is_its_own_search_and_scores_are_normalised_per_query, ohs_not_ready_is_returned_without_fallback, hit_files_accept_lists_and_search_results}`, `zones::tests::{shuffle_matches_python_random_7, unknown_highlight_colour_keeps_its_name, words_drop_stopwords_numbers_single_letters_and_skipped, zones_on_an_e11_vault_score_highlights_and_skip_generated_pages, page_lists_zones_and_is_never_written_over_an_existing_page}`, `pairs::tests::*`, `crates/pkm/tests/cli_writing.rs` (ba lệnh với OHS giả, file ghi đúng chỗ, trang không bị đè, `ohs_not_ready` khi `PKM_NO_OHS=1`, không còn tiến trình OHS).
+
+### Phần plugin
+
+Mã: `apps/obsidian-plugin/src/material/`, `src/zones/`. Plugin gọi `pkm VAULT material DRAFT [--db]`, `pkm VAULT zones --apply|--write [--db]`, `pkm VAULT pairs --write [--db]` không có `--json` (ba lệnh này luôn in JSON và không nhận cờ đó); `--db` lấy từ cài đặt `graphDbPath` khi có. Trang nguyên liệu giống `material.render` từng byte trừ dòng `generated_by` (`test/fixtures/python-writing.json`, `test/writing.test.ts`).
+
+Chỗ plugin cố ý khác Python:
+- **`uses` qua `processFrontMatter`:** Obsidian viết lại khối thuộc tính của bản nháp theo kiểu của nó, nên "phần còn lại của file giữ nguyên từng byte" ở trên chỉ còn đúng cho thân note; thuộc tính khác giữ nội dung, CRLF giữ CRLF. Mục mới là chuỗi `[[đường dẫn bỏ .md]]` như Python. Bản nháp chưa có frontmatter thì được thêm (Python không thêm gì).
+- **Note "có trong index" thành note có trong vault:** plugin không đọc DB. Note đã có trong `uses` xét theo link trong thuộc tính `uses` mà Obsidian phân giải (Python xét cạnh `uses` trong DB).
+- **Sổ `_E11/material-log.jsonl`:** `via` là `pkm plugin tick` (Python `material.py tick`); các khoá khác như cũ.
+- **Ô đã đánh được giữ** trên trang mới với mục vẫn còn trong danh sách (Python dựng lại trang không có ô nào đánh). Trang ghi `generated_by: pkm material`, mở ở khung bên cạnh (dùng lại khung đang mở trang). Lệnh chạy được từ chính trang nguyên liệu (bản nháp lấy từ thuộc tính `draft`). `pkm` lỗi sau khi đã ghi `uses` thì trang cũ giữ nguyên và thông báo nói số note đã vào `uses`.
+- **Vùng:** plugin hiện vùng trong một hộp thoại (tóm tắt như dòng trên trang, điểm chấm đọc từ dòng **Chấm:** của trang, note chính, đoạn tô). "Viết bài từ vùng này" tạo `Bài viết/<nhãn bỏ ·>.md` qua API Obsidian với đúng nội dung của link `obsidian://new` trên trang; bài cùng tên đã có thì chỉ mở, không ghi đè.

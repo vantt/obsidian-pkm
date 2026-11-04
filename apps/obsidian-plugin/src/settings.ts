@@ -1,10 +1,14 @@
-// Plugin settings: where pkm is, how long to wait for it, and the vault folders the workshop reads.
+// Plugin settings: where pkm is, how long to wait for it, the graph index the writing commands read, and the vault
+// folders the workshop reads.
 
 export interface PkmSettings {
   /** Path to the pkm binary; empty = the installer's default location, detected at each run. */
   pkmPath: string;
   /** Kill pkm after this many seconds. */
   timeoutSeconds: number;
+  /** Graph index passed as `--db` to material, zones and pairs; empty = pkm's default `VAULT/.kg/graph.db`. `pkm
+   * setup` fills it in data.json. */
+  graphDbPath: string;
   /**
    * Folders whose grandchildren get a topic page (root/<group>/<topic>, like a PARA layout). Empty = no topic pages.
    */
@@ -16,6 +20,7 @@ export interface PkmSettings {
 export const DEFAULT_SETTINGS: PkmSettings = {
   pkmPath: '',
   timeoutSeconds: 90,
+  graphDbPath: '',
   topicRoots: [],
   inboxFolders: [],
 };
@@ -46,6 +51,7 @@ export function normalizeSettings(raw: unknown): PkmSettings {
   if (typeof raw !== 'object' || raw === null) return s;
   const r = raw as Record<string, unknown>;
   if (typeof r.pkmPath === 'string') s.pkmPath = r.pkmPath.trim();
+  if (typeof r.graphDbPath === 'string') s.graphDbPath = r.graphDbPath.trim();
   if (typeof r.timeoutSeconds === 'number' && Number.isFinite(r.timeoutSeconds)) {
     s.timeoutSeconds = Math.min(MAX_TIMEOUT, Math.max(MIN_TIMEOUT, Math.round(r.timeoutSeconds)));
   }

@@ -1,0 +1,245 @@
+{
+ "source": "scripts/e11/material.py, scripts/e11/zones.py at 9061581",
+ "now": "2026-11-04T09:05:07",
+ "material": {
+  "draft": "Bài viết/Vườn rau ban công.md",
+  "queries": [
+   [
+    "tên bài",
+    "Vườn rau ban công"
+   ],
+   [
+    "Ý một câu",
+    "Trồng rau trên ban công cần nắng, đất tơi và tưới đều đặn mỗi sáng"
+   ],
+   [
+    "Dàn ý",
+    "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+   ]
+  ],
+  "methods": {
+   "ohs": 3,
+   "ohs-hits": 1
+  },
+  "items": [
+   {
+    "id": "Vườn/Cây cà chua.md",
+    "type": "note",
+    "found_by": "ohs",
+    "rank": 0.12,
+    "used": false,
+    "sections": [
+     "tên bài",
+     "Dàn ý"
+    ],
+    "ohs_score": 1.0,
+    "highlights": 2,
+    "first_highlights": [
+     "Cà chua cần nắng sáu giờ mỗi ngày",
+     "Tưới gốc, không tưới lá"
+    ],
+    "wise": "làm được",
+    "gist": "nắng là chính"
+   },
+   {
+    "id": "Trích/Người làm vườn.md",
+    "type": "quote",
+    "found_by": "ohs",
+    "rank": 0.1,
+    "used": false,
+    "sections": [
+     "Ý một câu"
+    ],
+    "ohs_score": 0.8,
+    "highlights": 0,
+    "first_highlights": []
+   },
+   {
+    "id": "Lưu/Đất trồng.md",
+    "type": null,
+    "found_by": "ohs",
+    "rank": 0.09,
+    "used": false,
+    "sections": [
+     "Dàn ý"
+    ],
+    "ohs_score": 0.7,
+    "highlights": 1,
+    "first_highlights": [
+     "Đất tơi xốp"
+    ],
+    "use": "tham khảo"
+   },
+   {
+    "id": "Bản đồ/Làm vườn.md",
+    "type": "moc",
+    "found_by": "ohs",
+    "rank": 0.05,
+    "used": false,
+    "sections": [
+     "tên bài"
+    ],
+    "ohs_score": 0.5,
+    "highlights": 0,
+    "first_highlights": []
+   },
+   {
+    "id": "Lạ/Sổ tay.md",
+    "type": "logbook",
+    "found_by": "ohs",
+    "rank": 0.04,
+    "used": false,
+    "sections": [
+     "tên bài"
+    ],
+    "ohs_score": 0.4,
+    "highlights": 0,
+    "first_highlights": [],
+    "why": "ghi chép đo đạc"
+   },
+   {
+    "id": "Vườn/Phân bón.md",
+    "type": "note",
+    "found_by": "graph",
+    "rank": 0.03,
+    "used": false,
+    "layer": "proposed",
+    "via": [
+     {
+      "from": "Vườn/Cây cà chua.md",
+      "rel": "related",
+      "to": "Vườn/Ủ phân.md",
+      "status": "accepted",
+      "claim": null,
+      "proposed_by": null,
+      "score": null,
+      "origin": null
+     },
+     {
+      "from": "Vườn/Ủ phân.md",
+      "rel": "related",
+      "to": "Vườn/Phân bón.md",
+      "status": "proposed",
+      "claim": null,
+      "proposed_by": "model",
+      "score": 0.8123,
+      "origin": "proposal"
+     }
+    ],
+    "highlights": 0,
+    "first_highlights": []
+   },
+   {
+    "id": "Vườn/Hạt giống.md",
+    "type": "clip",
+    "found_by": "graph",
+    "rank": 0.02,
+    "used": false,
+    "layer": "proposed",
+    "via": [
+     {
+      "from": "Vườn/Cây cà chua.md",
+      "rel": "link",
+      "to": "Vườn/Hạt giống.md",
+      "status": "proposed",
+      "claim": null,
+      "proposed_by": null,
+      "score": null,
+      "origin": null
+     }
+    ],
+    "highlights": 3,
+    "first_highlights": [
+     "Hạt ngâm ấm qua đêm"
+    ]
+   },
+   {
+    "id": "Vườn/Chậu.md",
+    "type": "note",
+    "found_by": "used",
+    "used": true,
+    "highlights": 0,
+    "first_highlights": []
+   }
+  ],
+  "missing": [],
+  "edges": {
+   "accepted": 12,
+   "proposed": 3
+  },
+  "draft_seed": true,
+  "topics": [
+   {
+    "id": "Vườn/Vườn (chủ đề).md",
+    "hits": 3
+   }
+  ]
+ },
+ "ticked": [
+  "Vườn/Cây cà chua.md",
+  "Vườn/Hạt giống.md"
+ ],
+ "page": "---\ndraft: \"[[Bài viết/Vườn rau ban công]]\"\ngenerated: 2026-11-04T09:05\ngenerated_by: scripts/e11/material.py\n---\n\n# Nguyên liệu: [[Bài viết/Vườn rau ban công|Vườn rau ban công]]\n\n> Máy gom lúc 09:05 04/11: tìm chữ cho 3 đoạn của bài (ohs ×3, ohs-hits ×1), rồi đi graph (12 cạnh đã duyệt, 3 cạnh máy gợi ý). Bài đã có cạnh nên bản thân bài cũng là điểm xuất phát.\n> Máy chỉ chỉ chỗ. Mở note, đọc, tự quyết. Đánh dấu `[x]` note muốn dùng rồi chạy lại lệnh: note vào `uses` của bài (dùng là duyệt).\n\n## Đã dùng trong bài (1)\n\n- [[Vườn/Chậu|Chậu]] · note\n\n## Tìm theo chữ (5)\n\n### Ý của anh (1)\n\n- [x] [[Vườn/Cây cà chua|Cây cà chua]] · note · khớp: tên bài, Dàn ý · 2 đoạn tô · wise làm được\n    - gist: nắng là chính\n    - ==Cà chua cần nắng sáu giờ mỗi ngày==\n    - ==Tưới gốc, không tưới lá==\n\n### Trích (1)\n\n- [ ] [[Trích/Người làm vườn|Người làm vườn]] · quote · khớp: Ý một câu\n\n### Bài lưu (1)\n\n- [ ] [[Lưu/Đất trồng|Đất trồng]] · bài lưu · khớp: Dàn ý · 1 đoạn tô · use tham khảo\n    - ==Đất tơi xốp==\n\n### Bản đồ của anh (MOC) (1)\n\n- [ ] [[Bản đồ/Làm vườn|Làm vườn]] · moc · khớp: tên bài\n\n### Khác (1)\n\n- [ ] [[Lạ/Sổ tay|Sổ tay]] · logbook · khớp: tên bài\n    - why: ghi chép đo đạc\n\n## Graph đưa tới, tìm chữ không ra (2)\n\nMỗi note kèm đường đi từ một note tìm được. Bước in nghiêng là cạnh máy gợi ý, chưa ai duyệt.\n\n- [ ] [[Vườn/Phân bón|Phân bón]] · note\n    - đường: [[Vườn/Cây cà chua|Cây cà chua]] —related→ [[Vườn/Ủ phân|Ủ phân]] —related→ [[Vườn/Phân bón|Phân bón]] *(máy gợi ý: model 0.81)*\n- [x] [[Vườn/Hạt giống|Hạt giống]] · clip · 3 đoạn tô\n    - đường: [[Vườn/Cây cà chua|Cây cà chua]] —link→ [[Vườn/Hạt giống|Hạt giống]] *(máy gợi ý: máy)*\n    - ==Hạt ngâm ấm qua đêm==\n\n## Cửa vào chủ đề\n\nThư mục chứa các note tìm được; mở để xem cả nhóm.\n\n- [[Vườn/Vườn (chủ đề)|Vườn (chủ đề)]] · 3 note tìm được nằm ở đây\n\n## Đoạn của bài máy đã tìm\n\n- tên bài: Vườn rau ban công\n- Ý một câu: Trồng rau trên ban công cần nắng, đất tơi và tưới đều đặn mỗi sáng\n- Dàn ý: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx…\n",
+ "emptyPage": "---\ndraft: \"[[Bài viết/Bài mới]]\"\ngenerated: 2026-11-04T09:05\ngenerated_by: scripts/e11/material.py\n---\n\n# Nguyên liệu: [[Bài viết/Bài mới|Bài mới]]\n\n> Máy gom lúc 09:05 04/11: tìm chữ cho 0 đoạn của bài (không có), rồi đi graph (0 cạnh đã duyệt, 0 cạnh máy gợi ý).\n> Máy chỉ chỉ chỗ. Mở note, đọc, tự quyết. Đánh dấu `[x]` note muốn dùng rồi chạy lại lệnh: note vào `uses` của bài (dùng là duyệt).\n\n## Tìm theo chữ (0)\n\n## Graph đưa tới, tìm chữ không ra (0)\n\nMỗi note kèm đường đi từ một note tìm được. Bước in nghiêng là cạnh máy gợi ý, chưa ai duyệt.\n\n\n## Đoạn của bài máy đã tìm\n\n- (bài chưa có chữ: viết ý một câu hoặc dàn ý trước)\n",
+ "zones": [
+  {
+   "label": "cà chua · ban công",
+   "score": 21.4,
+   "notes": 14,
+   "core": [
+    "Vườn/Cây cà chua.md",
+    "Vườn/Ban công.md"
+   ],
+   "with_highlights": 3,
+   "highlights": 7,
+   "highlight_weight": 15,
+   "colours": {
+    "làm được": 4,
+    "chưa màu": 3
+   },
+   "own_ideas": 2,
+   "folders": 3,
+   "top_folders": [
+    "Vườn"
+   ],
+   "posts": [
+    "Bài viết/Vườn rau.md"
+   ],
+   "years": [
+    "2020",
+    "2024"
+   ],
+   "picks": [
+    {
+     "text": "Cà chua cần nắng",
+     "colour": "làm được"
+    },
+    {
+     "text": "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+     "colour": "chưa màu"
+    }
+   ]
+  },
+  {
+   "label": "đất · phân",
+   "score": 9.5,
+   "notes": 6,
+   "core": [
+    "Vườn/Đất trồng.md"
+   ],
+   "with_highlights": 0,
+   "highlights": 0,
+   "highlight_weight": 0,
+   "colours": {},
+   "own_ideas": 0,
+   "folders": 1,
+   "top_folders": [
+    "Vườn"
+   ],
+   "posts": [],
+   "years": [],
+   "picks": []
+  }
+ ],
+ "zonesPage": "---\ngenerated: 2026-11-04\ngenerated_by: scripts/e11/zones.py\n---\n\n# Gợi ý bài viết\n\nMáy quét 2026-11-04: 2 vùng tri thức (nhóm note cùng nói về một việc, theo nghĩa và liên kết bạn viết). Vùng xếp theo điểm: note có tô, màu tô (xanh lá, đỏ nặng hơn vàng; tính tới 150 điểm), ý của mình, số thư mục, số note. Tên vùng là các chữ hay gặp trong tiêu đề, máy đặt, chưa phải góc viết: góc viết là việc của bạn.\n\nChấm: ghi `đáng viết`, `không` hoặc `bất ngờ` (vùng tự mình không thấy) ở dòng **Chấm** của mỗi vùng.\n\n## 1. cà chua · ban công\n\n14 note, 3 thư mục, 3 note có tô (7 đoạn: làm được 4, chưa màu 3), 2 ý của mình, năm 2020–2024. Điểm 21.4. **Đã có bài:** [[Bài viết/Vườn rau|Vườn rau]]\n\nNote chính: [[Vườn/Cây cà chua|Cây cà chua]] · [[Vườn/Ban công|Ban công]]\n\n> Cà chua cần nắng *(làm được)*\n>\n> yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy *(chưa màu)*\n\n[Viết bài từ vùng này](obsidian://new?vault=Vault&file=B%C3%A0i%20vi%E1%BA%BFt%2Fc%C3%A0%20chua%20ban%20c%C3%B4ng&content=---%0Atype%3A%20post%0Astatus%3A%20%C3%BD%20t%C6%B0%E1%BB%9Fng%0A---%0A%0A%23%23%20Ngu%E1%BB%93n%20%28m%C3%A1y%20gom%20t%E1%BB%AB%20v%C3%B9ng%29%0A%0A-%20%5B%5BV%C6%B0%E1%BB%9Dn%2FC%C3%A2y%20c%C3%A0%20chua%5D%5D%0A-%20%5B%5BV%C6%B0%E1%BB%9Dn%2FBan%20c%C3%B4ng%5D%5D%0A) · **Chấm:** \n\n## 2. đất · phân\n\n6 note, 1 thư mục, 0 note có tô (0 đoạn: ), 0 ý của mình. Điểm 9.5.\n\nNote chính: [[Vườn/Đất trồng|Đất trồng]]\n\n[Viết bài từ vùng này](obsidian://new?vault=Vault&file=B%C3%A0i%20vi%E1%BA%BFt%2F%C4%91%E1%BA%A5t%20ph%C3%A2n&content=---%0Atype%3A%20post%0Astatus%3A%20%C3%BD%20t%C6%B0%E1%BB%9Fng%0A---%0A%0A%23%23%20Ngu%E1%BB%93n%20%28m%C3%A1y%20gom%20t%E1%BB%AB%20v%C3%B9ng%29%0A%0A-%20%5B%5BV%C6%B0%E1%BB%9Dn%2F%C4%90%E1%BA%A5t%20tr%E1%BB%93ng%5D%5D%0A) · **Chấm:** \n"
+}

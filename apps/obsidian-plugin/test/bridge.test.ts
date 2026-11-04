@@ -86,6 +86,16 @@ describe('runPkm', () => {
     expect(calls).toEqual([['/x/pkm', ['vault', 'stats', '--json'], 1234]]);
   });
 
+  it('leaves --json out for commands that always print JSON', async () => {
+    const seen: string[][] = [];
+    const runner = async (_file: string, args: string[]) => {
+      seen.push(args);
+      return ok('[]');
+    };
+    await runPkm('pkm', ['/v', 'pairs', '--write'], { timeoutMs: 1, runner, json: false });
+    expect(seen).toEqual([['/v', 'pairs', '--write']]);
+  });
+
   it('refuses an empty binary path', async () => {
     await expect(runPkm(' ', ['doctor'], { timeoutMs: 1 })).rejects.toMatchObject({ kind: 'not_configured' });
   });
