@@ -1,7 +1,7 @@
 ---
 title: "Repo sản phẩm: preset bản B, bố cục apps/packages, pkm setup, plugin"
 description: "Biến obsidian-pkm thành repo sản phẩm đủ đồ để dựng bản B trên máy khách: chuyển preset và hướng dẫn, đổi crates/ sang apps/packages, pkm setup, khung plugin, chuyển phần tính E11 vào pkm-core."
-status: pending
+status: in-progress
 priority: P1
 effort: "khoảng 15-18 ngày công (ước theo E12.7 mục 3 của repo nghiên cứu, chưa đo)"
 branch: main
@@ -17,9 +17,27 @@ created: 2026-11-03
 
 Quyết định ở [docs/DECISIONS.md](../../docs/DECISIONS.md), ba mục ngày 2026-11-03 (tách vai hai repo; cài đặt là `pkm setup`; bố cục `apps/` + `packages/`). Plan này chỉ xếp việc; lý do nằm ở đó, không chép lại.
 
-Trạng thái: chưa bắt đầu. Bước 1 (ghi quyết định) xong cùng plan này. Bước 2, 4, 5, 6 làm được khi user giao. Riêng bước 3 (đổi thư mục) đợi `phase-17-one-door` merge vào `main`. Tuần chạy song song (phase 16 của [kế hoạch tổng](../261102-0535-rust-core-port-master/plan.md)) vẫn chạy để user duyệt trước `v0.1.0`; plan này không chặn nó.
+Trạng thái (2026-11-04): user giao làm mọi bước làm được ngay. Bước 1 xong; bước 2, 4, 5, 6 đang làm (xem "Thực hiện" dưới). Riêng bước 3 (đổi thư mục) đợi `phase-17-one-door` merge vào `main`. Tuần chạy song song (phase 16 của [kế hoạch tổng](../261102-0535-rust-core-port-master/plan.md)) vẫn chạy để user duyệt trước `v0.1.0`; plan này không chặn nó.
 
 Từ 2026-11-03 repo này là nguồn sự thật của lõi; spec ghim `da62ecb` là lần cuối. Script Python của repo nghiên cứu chạy nguyên trạng cho bản B tới khi được chuyển. Muốn đổi hành vi script nào thì chuyển nó sang đây trước.
+
+## Thực hiện (2026-11-04)
+
+Nguồn chuyển: repo nghiên cứu `vantt/obsidian-pkm-automation` ở `9061581` (`scripts/e11/`, bảng việc ở `docs/plans/E12.7-port-rust-js.md` mục 3), fork OHS `vantt/obsidian-hybrid-search` ở `327c995` (đặc tả bản vá `vantt/patches/0003-vector-export.spec.md`, `0004-stdio-parity.spec.md` cho `vectors`, `neighbors`). Gói OHS ghim vẫn là `vantt.4` (đã có P03, P04).
+
+Thứ tự đổi so với bảng phase: bước 4, 5, 6 không đợi bước 3. Chúng viết ở bố cục hiện tại (`crates/`, plugin ở `apps/obsidian-plugin/` là thư mục mới) trên nhánh `product-b`, nhánh này xếp chồng trên `phase-17-one-door` vì cần MCP một cửa, `search` và bộ cài mới. Bước 3 (đổi `crates/` sang `apps/` + `packages/`) vẫn đợi `phase-17-one-door` merge như quyết định 2026-11-03; `git mv` mang theo mã mới. Bước 2 không đụng `crates/` nên làm thẳng trên `main`.
+
+| Bước | Nhánh | Đợt | Trạng thái |
+|---|---|---|---|
+| 2 preset bản B, hướng dẫn người dùng | `main` | 1 | đang làm |
+| 6a `propose` vào `pkm-core` | `product-b` | 1 | đang làm |
+| 6b `material`, `zones`, cặp note giống nhau (thay `note_knn.mjs`, `similar_pairs.mjs`) qua `vectors`, `neighbors` của OHS | `product-b` | 1 | đang làm |
+| 5a khung plugin, `workshop_ui`, review log, CSS lưới thư mục, phóng to bảng | `product-b` | 1 | đang làm |
+| 4 `pkm setup`, plugin trong Release | `product-b` | 2 (cần 2, 5a) | chờ đợt 1 |
+| 5b giao diện plugin cho đề xuất, nguyên liệu, vùng | `product-b` | 2 (cần 5a, 6) | chờ đợt 1 |
+| 3 đổi thư mục, `pkm-contract` | sau merge | 3 | chờ `phase-17-one-door` merge |
+
+Không làm ở đây (E12.7 mục 3.5, 3.6): `migrate_v3`, `selection_signals`, `board.mjs`, Apps Script; nhập Evernote (`normalize`, `highlight_colours`) chờ user quyết có bán không. Điện thoại (`pkm serve`) không thuộc plan này.
 
 ## Kết quả cuối (Goal)
 
