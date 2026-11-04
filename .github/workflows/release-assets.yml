@@ -3,8 +3,13 @@ name: Release assets
 # Dựng bốn binary phát hành, đóng gói bằng scripts/release-assets.sh (tên asset, chạy thử `--version`, kiểm CRT tĩnh
 # trên Windows), chạy thử bộ cài trên runner của chính nền đó, rồi lưu artifact `pkm-<target>`. Không đăng gì.
 # Gọi từ ci.yml (mọi PR và push lên main) và qua ci.yml từ release.yml (tag), để lỗi đóng gói lộ ra trước khi gắn tag.
+# `full` = false (push, PR): chỉ Linux và Windows, gồm cả hai bài thử bộ cài; true: thêm hai binary macOS.
 on:
   workflow_call:
+    inputs:
+      full:
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -18,19 +23,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - target: x86_64-unknown-linux-gnu
-            os: ubuntu-24.04 # glibc 2.39 là trần của binary Linux
-            installer: sh
-          - target: x86_64-apple-darwin
-            os: macos-15 # runner arm64, biên dịch chéo; chạy thử qua Rosetta nếu có
-            installer: none # install.sh trên máy arm64 chọn bản arm64
-          - target: aarch64-apple-darwin
-            os: macos-15
-            installer: sh
-          - target: x86_64-pc-windows-msvc
-            os: windows-2025
-            installer: ps1
+        # Bốn đích: x86_64-unknown-linux-gnu (ubuntu-24.04, glibc 2.39 là trần của binary Linux; thử install.sh),
+        # x86_64-apple-darwin (macos-15 arm64, biên dịch chéo, chạy thử qua Rosetta nếu có; không thử bộ cài vì
+        # install.sh trên máy arm64 chọn bản arm64), aarch64-apple-darwin (macos-15; thử install.sh),
+        # x86_64-pc-windows-msvc (windows-2025; thử install.ps1). Không `full` thì bỏ hai đích macOS.
+        include: ${{ fromJSON(inputs.full && '[{"target":"x86_64-unknown-linux-gnu","os":"ubuntu-24.04","installer":"sh"},{"target":"x86_64-apple-darwin","os":"macos-15","installer":"none"},{"target":"aarch64-apple-darwin","os":"macos-15","installer":"sh"},{"target":"x86_64-pc-windows-msvc","os":"windows-2025","installer":"ps1"}]' || '[{"target":"x86_64-unknown-linux-gnu","os":"ubuntu-24.04","installer":"sh"},{"target":"x86_64-pc-windows-msvc","os":"windows-2025","installer":"ps1"}]') }}
     runs-on: ${{ matrix.os }}
     defaults:
       run:
