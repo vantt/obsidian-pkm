@@ -3,7 +3,9 @@
 
 pub mod adapter;
 pub mod index;
+pub mod material;
 pub mod ohs;
+pub mod pairs;
 pub mod platform;
 pub mod query;
 pub mod related;
@@ -11,3 +13,4 @@ pub mod schema;
 pub mod tools;
 pub mod validate;
 pub mod vault;
+pub mod zones;

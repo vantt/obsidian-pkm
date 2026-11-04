@@ -20,6 +20,13 @@
 //! `id`) in JSON, để test kiểm tham số gửi đi. `read` trả mỗi đường dẫn một note (dạng NFD): đường dẫn bắt đầu bằng `thiếu` là
 //! `{found: false, suggestions}`, còn lại là `{found: true, …, request}` với `request` là request nhận được (bỏ `id`);
 //! `paths` rỗng thì trả `{"error"}` như OHS.
+//!
+//! `vectors` và `neighbors` lấy vector từ cấu hình `vectors` (`{đường dẫn: [số, …]}`, coi như vector đã gộp của
+//! note): `vectors` trả các note được hỏi (hoặc mọi note theo thứ tự đường dẫn), chuẩn hoá L2 trừ khi `normalize:
+//! false`; `neighbors` tính cosine, giữ `k` (mặc định 10) note điểm cao nhất (hoà thì theo thứ tự đường dẫn), bỏ điểm
+//! dưới `minScore`, `scope` là một tiền tố đường dẫn giới hạn ứng viên. Note được hỏi mà không có trong cấu hình là
+//! `{path, error: "note not found in the index"}`. Đường dẫn trả về ở dạng NFD; `meta` có thêm `request` (request
+//! nhận được, bỏ `id`). Cấu hình `vectors_error` (chuỗi) thay mọi phản hồi của hai action bằng `{"error"}`.
 
 use std::fs::{self, OpenOptions};
 use std::io::{BufRead, Write};
@@ -214,6 +221,18 @@ fn main() {
                         json!({"id": id, "notes": notes})
                     }
                 }
+                Some(action @ ("vectors" | "neighbors")) => {
+                    let mut echo = req.clone();
+                    echo.as_object_mut().map(|m| m.remove("id"));
+                    match vector_reply(action, &req, &config(&vault)) {
+                        Ok((meta, records)) => {
+                            let mut meta = meta;
+                            meta["request"] = echo;
+                            json!({"id": id, "meta": meta, "records": records})
+                        }
+                        Err(e) => json!({"id": id, "error": e}),
+                    }
+                }
                 Some(other) => json!({"id": id, "error": format!("unknown action: {other}")}),
             };
             say(&out, &reply);
@@ -225,4 +244,101 @@ fn main() {
     if config(&vault)["ignore_eof"].as_bool().unwrap_or(false) {
         sleep_forever();
     }
+}
+
+/// Phản hồi của `vectors`/`neighbors` từ cấu hình `vectors`: `(meta, records)`.
+fn vector_reply(action: &str, req: &Value, cfg: &Value) -> Result<(Value, Vec<Value>), String> {
+    if let Some(e) = cfg["vectors_error"].as_str() {
+        return Err(e.to_owned());
+    }
+    let unit = |v: &[f64]| -> Vec<f64> {
+        let n = v.iter().map(|x| x * x).sum::<f64>().sqrt();
+        if n == 0.0 {
+            v.to_vec()
+        } else {
+            v.iter().map(|x| x / n).collect()
+        }
+    };
+    let mut all: Vec<(String, Vec<f64>)> = cfg["vectors"]
+        .as_object()
+        .map(|m| {
+            m.iter()
+                .map(|(p, v)| {
+                    let v = v
+                        .as_array()
+                        .map(|a| a.iter().filter_map(Value::as_f64).collect());
+                    (p.clone(), v.unwrap_or_default())
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    all.sort_by(|a, b| a.0.cmp(&b.0));
+    let mut requested: Vec<String> = Vec::new();
+    for p in req["paths"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+    {
+        if !requested.iter().any(|r| r == p) {
+            requested.push(p.to_owned());
+        }
+    }
+    let nfd = |p: &str| -> String { p.nfd().collect() };
+    let missing = |p: &str| json!({"path": nfd(p), "error": "note not found in the index"});
+    let dim = all.first().map_or(0, |(_, v)| v.len());
+    let note_count = if requested.is_empty() {
+        all.len()
+    } else {
+        requested.len()
+    };
+    let meta = json!({"model": "fake:m", "dim": dim, "pooling": req["pooling"].as_str().unwrap_or("mean"),
+                      "note_count": note_count, "ohs_version": "fake"});
+    let mut records = Vec::new();
+    if action == "vectors" {
+        let normalize = req["normalize"].as_bool().unwrap_or(true);
+        for (p, v) in &all {
+            if requested.is_empty() || requested.contains(p) {
+                let v = if normalize { unit(v) } else { v.clone() };
+                records.push(json!({"path": nfd(p), "dim": v.len(), "model": "fake:m", "chunks": 1, "vector": v}));
+            }
+        }
+        for p in requested
+            .iter()
+            .filter(|p| !all.iter().any(|(q, _)| q == *p))
+        {
+            records.push(missing(p));
+        }
+        return Ok((meta, records));
+    }
+    let k = req["k"].as_u64().unwrap_or(10) as usize;
+    let min = req["minScore"].as_f64().unwrap_or(f64::NEG_INFINITY);
+    let scope = req["scope"].as_str().unwrap_or("");
+    let sources: Vec<String> = if requested.is_empty() {
+        all.iter().map(|(p, _)| p.clone()).collect()
+    } else {
+        requested
+    };
+    for src in &sources {
+        let Some((_, sv)) = all.iter().find(|(p, _)| p == src) else {
+            records.push(missing(src));
+            continue;
+        };
+        let sv = unit(sv);
+        let mut top: Vec<(String, f64)> = Vec::new();
+        for (p, v) in all.iter().filter(|(p, _)| p != src && p.starts_with(scope)) {
+            let score: f64 = sv.iter().zip(unit(v)).map(|(a, b)| a * b).sum();
+            if score >= min {
+                top.push((p.clone(), score));
+            }
+        }
+        top.sort_by(|a, b| b.1.total_cmp(&a.1));
+        top.truncate(k);
+        let neighbors: Vec<Value> = top
+            .iter()
+            .map(|(p, s)| json!({"path": nfd(p), "score": s}))
+            .collect();
+        records.push(json!({"path": nfd(src), "neighbors": neighbors}));
+    }
+    Ok((meta, records))
 }
