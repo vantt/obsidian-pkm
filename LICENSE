@@ -1,0 +1,35 @@
+Copyright (c) 2026 Van Tran. All rights reserved.
+
+This repository (the `pkm` program, the `pkm` Obsidian plugin, the vault B
+presets, the installers, and their documentation) is proprietary software.
+The source code is published for viewing only. No right to use, copy, modify,
+build, distribute, sublicense, or sell any part of it is granted by its
+publication.
+
+The right to use the software is granted only to customers who have bought it,
+under the end-user license agreement (EULA) they accept when they buy it and
+only within the scope of that agreement.
+
+Third-party components keep their own licenses:
+- Rust crates compiled into `pkm`, and the fonts embedded in its theme
+  snippet (SIL Open Font License 1.1, see presets/b/theme/fonts/OFL-*.txt),
+  are listed with their license texts in THIRD_PARTY_NOTICES shipped with
+  each release.
+- Obsidian plugins, themes, and other software that `pkm setup` downloads from
+  their official sources are not part of this software and are licensed by
+  their authors.
+
+---
+
+Bản quyền (c) 2026 Van Tran. Giữ mọi quyền.
+
+Repo này (chương trình `pkm`, plugin Obsidian `pkm`, preset bản B, bộ cài và
+tài liệu đi kèm) là phần mềm độc quyền. Mã nguồn được công bố chỉ để xem.
+Việc công bố không cấp quyền dùng, sao chép, sửa, dựng, phân phối, cấp phép
+lại hay bán bất kỳ phần nào.
+
+Quyền dùng phần mềm chỉ cấp cho khách đã mua, theo điều khoản sử dụng (EULA)
+khách đồng ý khi mua, và trong phạm vi điều khoản đó.
+
+Thành phần của bên thứ ba giữ giấy phép riêng của chúng (xem phần tiếng Anh ở
+trên).

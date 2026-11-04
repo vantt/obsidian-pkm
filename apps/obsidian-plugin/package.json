@@ -2,6 +2,7 @@
   "name": "pkm-obsidian-plugin",
   "version": "0.1.0-rc.4",
   "private": true,
+  "license": "UNLICENSED",
   "description": "Obsidian plugin for pkm: workshop pages, review log, table zoom, and a bridge to the pkm binary",
   "type": "module",
   "scripts": {

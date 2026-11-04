@@ -7,3 +7,4 @@ version = "0.1.0-rc.4"
 edition = "2024"
 rust-version = "1.97"
 publish = false
+license-file = "LICENSE"
