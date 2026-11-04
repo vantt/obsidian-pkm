@@ -1,0 +1,21 @@
+/* E11.15: card grid on topic pages (cssclasses: folder-grid), Bases cards view.
+   Variables and classes from Obsidian 1.15.0 (--bases-cards-*, .bases-cards-item, .bases-cards-cover). */
+.folder-grid {
+  --bases-cards-radius: 12px;
+  --bases-cards-shadow: 0 1px 3px rgb(0 0 0 / .08), 0 0 0 1px var(--background-modifier-border);
+  --bases-cards-shadow-hover: 0 8px 20px rgb(0 0 0 / .16), 0 0 0 1px var(--interactive-accent);
+  --bases-cards-cover-background: var(--background-secondary);
+}
+.folder-grid .bases-cards-item {
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+.folder-grid .bases-cards-item:hover {
+  transform: translateY(-2px);
+}
+.folder-grid .bases-cards-cover {
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+@media (prefers-reduced-motion: reduce) {
+  .folder-grid .bases-cards-item { transition: none; }
+  .folder-grid .bases-cards-item:hover { transform: none; }
+}
