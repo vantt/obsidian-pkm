@@ -55,6 +55,21 @@ export class PkmSettingTab extends PluginSettingTab {
         }),
       );
 
+    new Setting(containerEl)
+      .setName('Index graph (--db)')
+      .setDesc(
+        'Đường dẫn đầy đủ tới file index graph mà Nguyên liệu, Gợi ý bài viết và cặp gần nghĩa đọc. Để trống thì pkm dùng VAULT/.kg/graph.db. pkm setup tự điền.',
+      )
+      .addText((t) =>
+        t
+          .setPlaceholder('VAULT/.kg/graph.db')
+          .setValue(s.graphDbPath)
+          .onChange(async (v) => {
+            s.graphDbPath = v.trim();
+            await this.plugin.saveSettings();
+          }),
+      );
+
     containerEl.createEl('h3', { text: 'Dựng xưởng' });
 
     new Setting(containerEl)

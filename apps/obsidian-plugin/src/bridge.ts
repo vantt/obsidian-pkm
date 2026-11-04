@@ -69,13 +69,16 @@ export interface RunOptions {
   timeoutMs: number;
   cwd?: string;
   runner?: Runner;
+  /** Append `--json` (default). `material`, `zones` and `pairs` print JSON without it and refuse the flag. */
+  json?: boolean;
 }
 
-/** Runs `pkm <args> --json` and returns the parsed JSON; throws PkmError otherwise. */
+/** Runs `pkm <args> --json` (or `pkm <args>` with `json: false`) and returns the parsed JSON; throws PkmError otherwise. */
 export async function runPkm(bin: string, args: string[], opts: RunOptions): Promise<unknown> {
   if (!bin.trim()) throw new PkmError('not_configured', NOT_CONFIGURED);
   const runner = opts.runner ?? execRunner;
-  const raw = await runner(bin, [...args, '--json'], { timeoutMs: opts.timeoutMs, cwd: opts.cwd });
+  const full = opts.json === false ? args : [...args, '--json'];
+  const raw = await runner(bin, full, { timeoutMs: opts.timeoutMs, cwd: opts.cwd });
   return interpret(raw, bin, opts.timeoutMs);
 }
 
@@ -180,6 +183,9 @@ function firstLines(text: string, max = 300): string {
   const t = text.trim().split(/\r?\n/).slice(0, 3).join(' ');
   return t.length > max ? `${t.slice(0, max)}…` : t;
 }
+
+/** How the commands call pkm: `args` after the binary, `json` as in RunOptions. */
+export type PkmCall = (args: string[], opts?: { json?: boolean }) => Promise<unknown>;
 
 /** Notice text for any error thrown while talking to pkm. */
 export function messageFor(err: unknown): string {

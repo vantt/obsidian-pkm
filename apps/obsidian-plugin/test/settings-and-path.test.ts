@@ -38,9 +38,13 @@ describe('settings', () => {
 
   it('normalizes hand-edited data', () => {
     expect(normalizeSettings(null)).toEqual(DEFAULT_SETTINGS);
-    expect(normalizeSettings({ pkmPath: ' /x/pkm ', timeoutSeconds: 1, topicRoots: ['A', 3, '..'], inboxFolders: 'x' })).toEqual({
+    expect(normalizeSettings({ graphDbPath: 3 }).graphDbPath).toBe('');
+    expect(
+      normalizeSettings({ pkmPath: ' /x/pkm ', timeoutSeconds: 1, graphDbPath: ' /v/.e11/graph.db ', topicRoots: ['A', 3, '..'], inboxFolders: 'x' }),
+    ).toEqual({
       pkmPath: '/x/pkm',
       timeoutSeconds: 5,
+      graphDbPath: '/v/.e11/graph.db',
       topicRoots: ['A'],
       inboxFolders: [],
     });
