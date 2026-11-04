@@ -379,3 +379,34 @@ Nguồn: `scripts/kg/tests/test_mcp.py` (`Protocol.test_related`, `FixtureOverMc
 | `HiddenAndLayers.test_related_skips_system` | `tools::tests::related_skips_system` | đã chuyển | |
 
 Test Rust thêm, không có bản Python: `related::tests::{sum_compensates_like_python_312, round_half_even_on_the_binary_value, hit_shapes_like_tools_related, type_filter_like_python_in, no_known_hit_gives_empty_result_without_method, nfd_hit_paths_match_nfc_note_ids, bad_hit_values_raise_like_python, isolated_seed_keeps_all_its_mass, push_spreads_mass_both_ways_and_conserves_it, max_pushes_bounds_the_work}`, `tests/related_ohs_fake.rs` (hạt giống từ OHS giả ở dạng NFD, `indexing` thành `ohs_not_ready`, OHS báo lỗi, note OHS trả không có trong index, phiên không có OHS), `tests/related_ohs_real.rs` (`#[ignore]`, gói OHS thật; đã chạy qua trên Linux với gói `0.17.2-vantt.1`, `0.17.2-vantt.3` và `0.17.2-vantt.4`).
+
+## Module `propose`
+
+`pkm_core::propose` chuyển phần tính của `scripts/e11/propose.py` ở repo nghiên cứu (`9061581`, ngoài đường dẫn theo dõi của spec ghim): đọc vault, tính bảy kiểu đề xuất (`duplicate`, `same-topic`, `fix-link`, `type-batch`, `related`, `idea`, `person`), trừ đề xuất đã có trong `_Đề xuất/`, giữ trần 20 đề xuất đang chờ cho `idea` và `person`, ghi mỗi đề xuất mới thành một note. Lệnh: `pkm VAULT propose [--similar FILE] [--create] [--json]` (`crates/pkm/src/cli.rs`, `propose_command`). Bản Python là điểm xuất phát, không phải đặc tả (docs/DECISIONS.md, 2026-11-03).
+
+Không chuyển, để plugin làm: `--apply` (nhận, bỏ, sửa note nguồn, ghi `_E11/proposals-log.jsonl`), `--revert`, `--stats` (đọc `_E11/review-log.jsonl`, ghi `_E11/Đo duyệt.md`). Rust không sửa note nào đang có: chỉ tạo file mới trong `_Đề xuất/` (`create_new`, trùng tên thì ` 2`, ` 3`).
+
+Đối chiếu với Python: trên vault bịa `crates/pkm-core/tests/propose/vault/` (đủ bảy kiểu và các ca bị loại) đề xuất và văn bản note đề xuất khớp từng byte (`expected.json`, `expected-notes.json` là đầu ra của Python); `--create` của hai bản trên hai bản sao vault ra cùng tên file, cùng nội dung; mỗi bản đọc hàng chờ do bản kia ghi và không thêm đề xuất nào. Trên kg-solo (60 đề xuất `person`) khớp Python (`tests/propose/kg-solo.json`, cần `PKM_KG_SOLO`).
+
+Hợp đồng JSON (`--json`): `{"total": số đề xuất tính được, "new": số đề xuất mới, "by_kind": {kiểu: số}, "proposals": [...], "written": [đường dẫn note đề xuất]}`; `written[i]` ứng với `proposals[i]`, rỗng khi không `--create`. Mỗi đề xuất có khoá và thứ tự như dict của Python: `kind`, `notes`, (`from_text`, `to` | `value` | `score`), `reason`, `on_accept`, (`lines`).
+
+Giữ nguyên có chủ ý: `extracted_by` vẫn là `propose.py <kiểu>@schema_v3` (tên luật, để đề xuất cũ và mới của cùng một luật gộp được khi đo); thân note vẫn dặn `propose.py --apply`, vì tới khi plugin có lệnh nhận/bỏ đó vẫn là đường áp dụng duy nhất (định dạng note không đổi nên bản Python đọc được).
+
+Chỗ cố ý khác:
+- **Thứ tự đi vault:** Rust đi theo đường dẫn đã sắp; Python theo `os.walk` (thứ tự của hệ thống file). Chỉ đổi thứ tự giữa các nhóm `duplicate` và giữa các nhóm `same-topic` khi có từ hai nhóm (và số ` 2`, ` 3` của tên file trùng); kiểu khác Python đã tự sắp.
+- **Đường dẫn NFC:** đường dẫn note trong đề xuất là NFC như index; `fix-link` so tên đích đã NFC. Python dùng tên trên đĩa nguyên dạng. `from_text` vẫn là chữ nguyên văn trong note (để thay chuỗi khi áp dụng).
+- **Không dừng vì một file:** frontmatter lỗi YAML hay không phải dict coi như không có; file hay thư mục đọc lỗi bị bỏ qua; trong hàng chờ, thư mục con, file không phải đề xuất, đề xuất thiếu `kind` hay `notes` hỏng bị bỏ qua (thiếu `notes` vẫn tính vào số đang chờ). Python ném ngoại lệ và không ra đề xuất nào.
+- **`--similar`:** phải là mảng JSON các object có `a`, `b` là chuỗi, sai thì báo lỗi có tên cờ (Python `KeyError`/`TypeError`). `score` thiếu là `null` như Python.
+- **`.obsidian/`:** chỉ `--create` đòi `VAULT/.obsidian/` (Python đòi ở mọi chế độ); chạy chỉ tính thì đọc được cả thư mục không phải vault (fixture kg-solo không có `.obsidian/`).
+- **`proposed_type` không phải chuỗi:** dùng `str()` của giá trị (Python giữ nguyên object, nên `value: 1` thành `value: '1'`).
+- **Đầu ra chữ:** dòng `proposals N, new M: {...}` và tối đa sáu dòng mẫu như Python; `--create` in `written N to _Đề xuất`. `--json` là mới.
+- **Ghi YAML:** `propose::dump` làm như `yaml.safe_dump(..., sort_keys=False, allow_unicode=True, width=10_000)` (so với PyYAML 6.0.3 trên 74 chuỗi khó, số thực, dict lồng: `src/propose/pyyaml-dump-cases.json`), trừ việc không gập dòng ở chuỗi dài hơn 10.000 ký tự.
+- **Lớp ký tự:** `\b` của `NAME` theo Unicode của crate `regex` (dấu kết hợp là chữ), Python thì không; văn bản đã NFC nên tên tiếng Việt không bị ảnh hưởng.
+
+Nguồn: `propose.py` không có test Python. Chạy: `cargo test -p pkm-core propose`, `cargo test -p pkm --test cli_propose`.
+
+| Test Python | Test Rust | Trạng thái | Ghi chú |
+|---|---|---|---|
+| (không có) | `tests/propose.rs::{fixture_proposals_match_python, fixture_proposal_notes_match_python, fixture_covers_every_kind, kg_solo_matches_golden}` | mới | Kỳ vọng sinh từ bản Python trên cùng vault; kg-solo cần `PKM_KG_SOLO`, `PKM_WRITE_GOLDEN=1` ghi lại golden |
+| (không có) | `propose::tests::*` | mới | Kiểu chuỗi YAML như PyYAML, `norm`, nhúng không phải link, chỉ số theo ký tự, file cặp gần nghĩa, frontmatter hỏng, hàng chờ và trần, không ghi đè, tên file |
+| (không có) | `tests/cli_propose.rs` | mới | JSON, `--create` một lần, cần `.obsidian/`, `--similar` từ file và lỗi, vault không có |

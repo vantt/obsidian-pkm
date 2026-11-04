@@ -1,3 +1,4 @@
 # Note ca biên phải giữ nguyên từng byte (CRLF, BOM, UTF-8 hỏng) trên mọi nền.
 yaml-cases/** -text
 yaml-cases.pyyaml.jsonl -text
+propose/** -text

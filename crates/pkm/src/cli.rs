@@ -41,6 +41,7 @@ const USAGE: &str = "Cách gọi:
   pkm VAULT build [--packs business] [--full] [--json]   dựng hoặc cập nhật tăng dần (mặc định VAULT/.kg/graph.db)
   pkm VAULT stats | validate | find | note | read | neighbors | reach | paths | loops | provenance | select | valid | related ...
   pkm VAULT mcp [--packs business] [--db PATH] ...       MCP server stdio (pkm VAULT mcp --help)
+  pkm VAULT propose [--similar FILE] [--create] [--json]  đề xuất chờ duyệt; --create ghi note mới vào _Đề xuất/
   pkm mcp install VAULT [--dry-run] | --check | --remove  cài MCP `pkm` cho Claude Desktop (pkm mcp install --help)
   pkm doctor [--json] [--deep]                            chẩn đoán (chỉ đọc) cấu hình, index, gói OHS
 Chi tiết lệnh trên vault: pkm VAULT stats --help.";
@@ -209,6 +210,9 @@ pub fn run(argv: Vec<OsString>) -> ExitCode {
     };
     if word(1) == Some("mcp") {
         return mcp::main(argv);
+    }
+    if word(1) == Some("propose") {
+        return propose_command(&argv);
     }
     if word(0) == Some("mcp") && word(1) == Some("install") {
         let cmd = InstallCmd::parse_from(with_name("pkm mcp install", &argv[2..]));
@@ -581,6 +585,94 @@ fn tool_command(a: &VaultArgs, db: &Path) -> Result<(), Failure> {
             format!("{method}: {}", mcp::py_str(Some(e))),
         )),
         _ => Ok(()),
+    }
+}
+
+#[derive(Parser)]
+#[command(
+    name = "pkm VAULT propose",
+    about = "Đề xuất của máy chờ người dùng duyệt (trùng, cùng chủ đề, sửa link, gán loại, liên quan, rút ý, người). \
+Mặc định chỉ tính và in; --create ghi mỗi đề xuất mới thành một note trong VAULT/_Đề xuất/, không sửa note nào \
+đang có. Đề xuất đã có trong hàng chờ không lặp lại; idea và person giữ tối đa 20 đề xuất đang chờ mỗi kiểu.
+Đầu ra nêu tên note thật của vault: chỉ in ra terminal, không dán vào repo nếu là vault thật."
+)]
+struct ProposeCmd {
+    vault: PathBuf,
+    /// Cặp gần nghĩa cho kiểu `related`: mảng JSON `[{"a": path, "b": path, "score": số}, ...]`.
+    #[arg(long)]
+    similar: Option<PathBuf>,
+    /// Ghi đề xuất mới vào `_Đề xuất/` (cần `VAULT/.obsidian/`).
+    #[arg(long)]
+    create: bool,
+    /// In JSON: `{total, new, by_kind, proposals, written}`.
+    #[arg(long)]
+    json: bool,
+}
+
+/// `pkm VAULT propose ...`: `argv` là `[VAULT, "propose", cờ...]`.
+fn propose_command(argv: &[OsString]) -> ExitCode {
+    use pkm_core::propose;
+    let args = std::iter::once(OsString::from("pkm VAULT propose"))
+        .chain(argv.first().cloned())
+        .chain(argv.iter().skip(2).cloned());
+    let a = ProposeCmd::parse_from(args);
+    let run = || -> Result<(), String> {
+        if !a.vault.is_dir() {
+            return Err(format!("không phải thư mục: {}", a.vault.display()));
+        }
+        if a.create && !a.vault.join(".obsidian").is_dir() {
+            return Err("not a vault: no .obsidian/".into());
+        }
+        let similar = match &a.similar {
+            Some(p) => {
+                let text = std::fs::read_to_string(p)
+                    .map_err(|e| format!("--similar {}: {e}", p.display()))?;
+                propose::parse_similar(&text)
+                    .map_err(|e| format!("--similar {}: {e}", p.display()))?
+            }
+            None => Vec::new(),
+        };
+        let plan = propose::plan(&a.vault, &similar).map_err(|e| e.to_string())?;
+        let written = if a.create {
+            let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+            propose::write(&a.vault, &plan.new, &today).map_err(|e| e.to_string())?
+        } else {
+            Vec::new()
+        };
+        let text = if a.json {
+            pyjson::dumps(&plan.to_json(&written), pyjson::INDENT1) + "\n"
+        } else {
+            let kinds: Vec<String> = plan
+                .by_kind()
+                .iter()
+                .map(|(k, n)| format!("'{k}': {n}"))
+                .collect();
+            let mut t = format!(
+                "proposals {}, new {}: {{{}}}\n",
+                plan.total,
+                plan.new.len(),
+                kinds.join(", ")
+            );
+            if a.create {
+                t += &format!("written {} to {}\n", written.len(), propose::QUEUE);
+            } else {
+                for p in plan.new.iter().take(6) {
+                    let names: Vec<String> = p
+                        .notes
+                        .iter()
+                        .take(3)
+                        .map(|n| format!("'{}'", n.rsplit('/').next().unwrap_or(n)))
+                        .collect();
+                    t += &format!("  {} [{}]\n", p.kind.as_str(), names.join(", "));
+                }
+            }
+            t
+        };
+        print(&text).map_err(|_| "không ghi được ra stdout".to_owned())
+    };
+    match run() {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => fail(&format!("propose: {e}")),
     }
 }
 
