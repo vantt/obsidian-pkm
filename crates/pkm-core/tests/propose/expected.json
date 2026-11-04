@@ -1,0 +1,182 @@
+[
+ {
+  "kind": "duplicate",
+  "notes": [
+   "Nhập/Cũ/Bánh.md",
+   "Ghi chép/Công thức bánh bông lan.md",
+   "Nhập/Công thức bánh bông lan (1).md"
+  ],
+  "reason": "3 note có nội dung giống hệt nhau, ở: Ghi chép; Nhập; Nhập/Cũ.",
+  "on_accept": "Các bản còn lại được ghi `duplicate_of` trỏ về bản giữ (Bánh). Không xoá note nào."
+ },
+ {
+  "kind": "same-topic",
+  "notes": [
+   "Cũ/Hoi thao/Hoi thao (chủ đề).md",
+   "Dự án/Hội thảo/Hội thảo (chủ đề).md"
+  ],
+  "reason": "Hai thư mục cùng tên (bỏ dấu), có thể là cùng một dự án hay chủ đề ở hai thời kỳ.",
+  "on_accept": "Hai trang chủ đề được nối với nhau qua `related`."
+ },
+ {
+  "kind": "fix-link",
+  "notes": [
+   "Ghi chép/Nhật ký đọc.md",
+   "Ghi chép/Hội thảo chiều.md"
+  ],
+  "from_text": "Hoi thao chieu",
+  "to": "Ghi chép/Hội thảo chiều.md",
+  "reason": "Liên kết `[[Hoi thao chieu]]` không trỏ tới note nào; một note có tên gần giống: Hội thảo chiều.",
+  "on_accept": "Trong note nguồn, `[[Hoi thao chieu` đổi thành `[[Ghi chép/Hội thảo chiều`."
+ },
+ {
+  "kind": "fix-link",
+  "notes": [
+   "Ghi chép/Nhật ký đọc.md",
+   "Ghi chép/Hội thảo chiều.md"
+  ],
+  "from_text": "Tham khảo/hoi thao chieu.md",
+  "to": "Ghi chép/Hội thảo chiều.md",
+  "reason": "Liên kết `[[Tham khảo/hoi thao chieu.md]]` không trỏ tới note nào; một note có tên gần giống: Hội thảo chiều.",
+  "on_accept": "Trong note nguồn, `[[Tham khảo/hoi thao chieu.md` đổi thành `[[Ghi chép/Hội thảo chiều`."
+ },
+ {
+  "kind": "fix-link",
+  "notes": [
+   "Ghi chép/Nhật ký đọc.md",
+   "Ghi chép/Hội thảo chiều.md"
+  ],
+  "from_text": "hoi-thao chieu",
+  "to": "Ghi chép/Hội thảo chiều.md",
+  "reason": "Liên kết `[[hoi-thao chieu]]` không trỏ tới note nào; một note có tên gần giống: Hội thảo chiều.",
+  "on_accept": "Trong note nguồn, `[[hoi-thao chieu` đổi thành `[[Ghi chép/Hội thảo chiều`."
+ },
+ {
+  "kind": "type-batch",
+  "notes": [
+   "Bài cắt gốc.md"
+  ],
+  "value": "clipping",
+  "reason": "1 note trong thư mục (gốc) có `Source URL` của Evernote: đoán là bài cắt từ web.",
+  "on_accept": "Cả lô được gán `type: clipping` và bỏ `proposed_type`. Note nào không phải bài cắt thì sửa tay sau, hoặc bỏ cả lô."
+ },
+ {
+  "kind": "type-batch",
+  "notes": [
+   "Nhập/Du lịch.md",
+   "Nhập/Nhiếp ảnh.md"
+  ],
+  "value": "clipping",
+  "reason": "2 note trong thư mục Nhập có `Source URL` của Evernote: đoán là bài cắt từ web.",
+  "on_accept": "Cả lô được gán `type: clipping` và bỏ `proposed_type`. Note nào không phải bài cắt thì sửa tay sau, hoặc bỏ cả lô."
+ },
+ {
+  "kind": "type-batch",
+  "notes": [
+   "Nhập/Cũ/Bánh.md"
+  ],
+  "value": "clipping",
+  "reason": "1 note trong thư mục Cũ có `Source URL` của Evernote: đoán là bài cắt từ web.",
+  "on_accept": "Cả lô được gán `type: clipping` và bỏ `proposed_type`. Note nào không phải bài cắt thì sửa tay sau, hoặc bỏ cả lô."
+ },
+ {
+  "kind": "related",
+  "notes": [
+   "Ghi chép/Bài giảng.md",
+   "Ghi chép/Sách hay.md"
+  ],
+  "score": 0.8123,
+  "reason": "Gần nghĩa (OHS, điểm 0.8123), khác thư mục: tìm theo từ khoá dễ bỏ sót.",
+  "on_accept": "Hai note được nối với nhau qua `related` (hai chiều)."
+ },
+ {
+  "kind": "related",
+  "notes": [
+   "Ghi chép/Hội thảo chiều.md",
+   "Ghi chép/Họp khách.md"
+  ],
+  "score": null,
+  "reason": "Gần nghĩa (OHS, điểm None), khác thư mục: tìm theo từ khoá dễ bỏ sót.",
+  "on_accept": "Hai note được nối với nhau qua `related` (hai chiều)."
+ },
+ {
+  "kind": "idea",
+  "notes": [
+   "Ghi chép/Sách hay.md"
+  ],
+  "reason": "Bạn đã tô 13 đoạn trong note này: dấu hiệu có ý đáng rút ra.",
+  "on_accept": "Tạo một note nháp trong `Ý/` có `from` trỏ về note này, các đoạn đã tô làm nguồn, trạm `to-clarify`. Phần ý chính để trống: bạn viết bằng lời mình.",
+  "lines": [
+   "## Các đoạn bạn đã tô",
+   "",
+   "> ý tưởng số 01 đáng giữ lại\n",
+   "> ý tưởng số 02 đáng giữ lại\n",
+   "> ý tưởng số 03 đáng giữ lại\n",
+   "> ý tưởng số 04 đáng giữ lại\n",
+   "> ý tưởng số 05 đáng giữ lại\n",
+   "> ý tưởng số 06 đáng giữ lại\n",
+   "> ý tưởng số 07 đáng giữ lại\n",
+   "> ý tưởng số 08 đáng giữ lại\n",
+   "> ý tưởng số 09 đáng giữ lại\n",
+   "> ý tưởng số 10 đáng giữ lại\n",
+   "> ý tưởng số 11 đáng giữ lại\n",
+   "> ý tưởng số 12 đáng giữ lại\n",
+   "*(và 1 đoạn nữa)*",
+   "",
+   "Đọc trong ngữ cảnh: [[Ghi chép/Sách hay|Sách hay]]",
+   ""
+  ]
+ },
+ {
+  "kind": "idea",
+  "notes": [
+   "Ghi chép/Bài giảng.md"
+  ],
+  "reason": "Bạn đã tô 2 đoạn trong note này: dấu hiệu có ý đáng rút ra.",
+  "on_accept": "Tạo một note nháp trong `Ý/` có `from` trỏ về note này, các đoạn đã tô làm nguồn, trạm `to-clarify`. Phần ý chính để trống: bạn viết bằng lời mình.",
+  "lines": [
+   "## Các đoạn bạn đã tô",
+   "",
+   "> học bằng cách dạy lại\n",
+   "> ghi chép bằng lời mình\n",
+   "Đọc trong ngữ cảnh: [[Ghi chép/Bài giảng|Bài giảng]]",
+   ""
+  ]
+ },
+ {
+  "kind": "person",
+  "notes": [
+   "Ghi chép/Họp khách.md",
+   "Ghi chép/Họp nhóm.md",
+   "Người/Trần Minh Khoa.md"
+  ],
+  "value": "Trần Minh Khoa",
+  "reason": "Tên **Trần Minh Khoa** xuất hiện trong 3 note.",
+  "on_accept": "Tạo trang `Người/Trần Minh Khoa` (liệt kê mọi note nhắc tới người này) và ghi `who` vào 3 note. Nếu đây không phải tên người (tên đường, nhân vật lịch sử), chọn bỏ.",
+  "lines": [
+   "## Ở đâu",
+   "",
+   "- [[Ghi chép/Họp khách|Họp khách]]: **Trần Minh Khoa** trình bày, Phạm Thị Lan ghi lại. **Trần Minh Khoa** nói thêm. V",
+   "- [[Ghi chép/Họp nhóm|Họp nhóm]]: Có **Trần Minh Khoa** và Phạm Thị Lan (CCCD ••••, điện thoại ••••",
+   "- [[Người/Trần Minh Khoa|Trần Minh Khoa]]: # **Trần Minh Khoa**",
+   ""
+  ]
+ },
+ {
+  "kind": "person",
+  "notes": [
+   "Ghi chép/Họp khách.md",
+   "Ghi chép/Họp quý.md"
+  ],
+  "value": "Đặng Thị Minh Khai",
+  "reason": "Tên **Đặng Thị Minh Khai** xuất hiện trong 2 note.",
+  "on_accept": "Tạo trang `Người/Đặng Thị Minh Khai` (liệt kê mọi note nhắc tới người này) và ghi `who` vào 2 note. Nếu đây không phải tên người (tên đường, nhân vật lịch sử), chọn bỏ.",
+  "lines": [
+   "## Ở đâu",
+   "",
+   "- [[Ghi chép/Họp khách|Họp khách]]: ột, Lý Văn Hai, Lý Văn Ba, Lý Văn Bốn, Lý Văn Năm. Nhắc tới **Đặng Thị Minh Khai** Xuân một lần, rồi **Đặng Thị Minh Khai** Xuân lần nữa.",
+   "- [[Ghi chép/Họp quý|Họp quý]]: **Đặng Thị Minh Khai** Xuân chủ trì.",
+   ""
+  ]
+ }
+]

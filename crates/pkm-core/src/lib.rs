@@ -5,6 +5,7 @@ pub mod adapter;
 pub mod index;
 pub mod ohs;
 pub mod platform;
+pub mod propose;
 pub mod query;
 pub mod related;
 pub mod schema;
