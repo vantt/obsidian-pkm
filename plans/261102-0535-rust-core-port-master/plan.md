@@ -123,7 +123,7 @@ Thử `v0.1.0-rc.3` trên Windows 2026-11-03 ([báo cáo](../reports/windows-tes
 | Nhóm | Phase | Còn lại |
 |---|---|---|
 | Xong | 01, 02, 03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 14 | — |
-| Xong, còn việc ở fork | 13 | Windows sạch qua (Sandbox, rc.3); tìm theo nghĩa cần VC++ Redistributable. Phía `pkm` đã xong trên nhánh `phase-17-one-door` (2026-11-03): `doctor` có mục `ohs_runtime` kèm lệnh `winget`, `ohs_not_ready` khi `model_missing` nêu DLL thiếu. Còn ở fork OHS: chép runtime vào gói win32-x64 |
+| Xong, còn việc ở fork | 13 | Windows sạch qua (Sandbox, rc.3); tìm theo nghĩa cần VC++ Redistributable. Phía `pkm` đã xong và thử trong Sandbox với rc.4 (2026-11-04, [báo cáo](../reports/windows-tester-261104-1030-rc4-vcpp.md)): `doctor` có mục `ohs_runtime` kèm lệnh `winget`, `ohs_not_ready` khi `model_missing` nêu DLL thiếu, cài VC++ xong thì `related` chạy. Còn ở fork OHS: chép runtime vào gói win32-x64 |
 | Đang làm, theo lượt | 15 | hai lượt đuổi theo 2026-11-02: lượt 1 chuyển `223c9c3`; lượt 2 xử lý `24f193a`, `58010ad`, `8f89403`, `6af65b1`, `9f0700b`, ghim `da62ecb`, dựng lại golden; `follow` báo 0. Lượt sau khi user bảo |
 | Đang chạy | 16 | tuần chạy song song từ 2026-11-03 với rc.3; user chấm playbook nhóm A–C, F; cuối tuần user duyệt chuyển hẳn |
 | Đang chạy | 17 | mã xong ở nhánh `phase-17-one-door` (rc.3); repo đặc tả đã đổi sang `pkm`; còn đo lượt gọi tool và token câu A–D (cùng tuần), rồi merge vào main và ra `v0.1.0` |
