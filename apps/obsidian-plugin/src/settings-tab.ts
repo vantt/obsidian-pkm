@@ -70,6 +70,18 @@ export class PkmSettingTab extends PluginSettingTab {
           }),
       );
 
+    new Setting(containerEl)
+      .setName('Cây thư mục theo note đang mở')
+      .setDesc(
+        'Mở note từ link, quick switcher hay tab thì cây thư mục mở thư mục chứa note và cuộn dòng của nó vào giữa. Bấm file ngay trong cây thì cây đứng yên.',
+      )
+      .addToggle((t) =>
+        t.setValue(s.navFollow).onChange(async (v) => {
+          s.navFollow = v;
+          await this.plugin.saveSettings();
+        }),
+      );
+
     containerEl.createEl('h3', { text: 'Dựng xưởng' });
 
     new Setting(containerEl)

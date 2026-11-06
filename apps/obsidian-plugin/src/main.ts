@@ -3,6 +3,7 @@ import os from 'node:os';
 import { FileSystemAdapter, Notice, Plugin } from 'obsidian';
 import { messageFor, type PkmCall, runPkm } from './bridge';
 import { activeDraft, materialCommand } from './material/command';
+import { startNavFollow } from './nav-follow';
 import { detectPkm } from './pkm-path';
 import { startReviewLog } from './review-log';
 import { normalizeSettings, type PkmSettings } from './settings';
@@ -51,6 +52,7 @@ export default class PkmPlugin extends Plugin {
 
     startReviewLog(this);
     startThemeGuard(this);
+    startNavFollow(this, () => this.pkmSettings.navFollow);
     this.tableZoom = new TableZoom(this);
     this.tableZoom.load();
   }

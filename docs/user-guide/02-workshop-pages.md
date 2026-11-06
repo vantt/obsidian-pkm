@@ -56,6 +56,7 @@ Bản B dùng theme Primary cộng một snippet `e11-theme` (bật trong Settin
 - **Đổi font đọc, font heading:** plugin Style Settings, mục "E11 giao diện" (font đọc Merriweather hay Inter; heading Inter, Archivo Narrow, Manrope hay cùng font đọc). Đổi font ở Settings, Appearance, Text font không có tác dụng trong note vì snippet đặt font cho khung note.
 - **Đổi cỡ chữ:** thanh cỡ chữ ở Settings, Appearance.
 - **Bảng rộng bị bóp cột:** rê chuột lên bảng, bấm nút ở góc trên bên phải để phóng bảng ra hết chiều ngang; bấm lại hoặc Esc để thu. Có cho bảng Markdown, bảng Bases và bảng Dataview. Lệnh (Ctrl+P): "Phóng hoặc thu mọi bảng trong note đang mở".
+- **Tìm note đang mở trong cây thư mục:** dòng của note đang mở có vạch màu nhấn bên trái, tên các thư mục chứa nó cũng tô màu nhấn. Mở note từ một link, quick switcher hay tab thì cây tự mở thư mục và cuộn dòng đó vào giữa; bấm file ngay trong cây thì cây đứng yên. Tắt việc tự cuộn: Settings, pkm, "Cây thư mục theo note đang mở". Về kiểu dòng của Primary: Style Settings, "Dòng file đang mở kiểu Primary".
 
 ## Lưu ý
 

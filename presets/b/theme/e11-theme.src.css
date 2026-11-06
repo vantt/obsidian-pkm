@@ -23,7 +23,11 @@
                                             tiêu đề không còn màu xen kẽ cột (lỗi user thấy ở bảng nhúng 2026-11-06)
    9. Callout                               tiêu đề và thân cùng một sắc màu như Default, tiêu đề đậm hơn thân một
                                             chút (user 2026-11-06). Trả về kiểu Primary: Style Settings, "Callout kiểu
-                                            Primary". Hai thanh trượt chỉnh độ đậm thân và tiêu đề */
+                                            Primary". Hai thanh trượt chỉnh độ đậm thân và tiêu đề
+  10. Dòng file đang mở trong cây thư mục   Primary chỉ phủ nền gần trong suốt, không thấy được; thêm vạch trái màu
+                                            nhấn, nền nhạt, chữ đậm, tên các thư mục cha màu nhấn để mắt lần theo
+                                            (user 2026-11-06). Trả về: Style Settings, "Dòng file đang mở kiểu
+                                            Primary". Tự cuộn tới file khi mở từ link: plugin e11-nav-follow */
 
 /* @settings
 
@@ -89,6 +93,12 @@ settings:
         max: 45
         step: 1
         format: '%'
+    -
+        id: e11-nav-active-primary
+        title: Dòng file đang mở kiểu Primary
+        description: Bật để trả dòng file đang mở trong cây thư mục về kiểu của Primary (nền gần trong suốt). Tắt là kiểu E11, vạch trái màu nhấn, nền nhạt, chữ đậm, tên thư mục cha màu nhấn.
+        type: class-toggle
+        default: false
 
 */
 
@@ -303,4 +313,38 @@ body.e11-on-primary:not(.e11-callout-primary) .callout {
 }
 body.e11-on-primary:not(.e11-callout-primary) .callout-title {
   background-color: color-mix(in srgb, rgb(var(--callout-color)) var(--e11-callout-title-tint), var(--background-primary));
+}
+
+/* ── Active file in the file explorer (index 10) ─────────────────────────────────────────────────────────────────
+   Primary marks the open file's row with a near-transparent fill (white 25% Light, black 12.5% Dark), a faint
+   button shadow and one grey step of text: after "Reveal current file" the user could not find it (2026-11-06).
+   Here: a 3px accent bar on the left, an accent tint over the sidebar surface, text in --text-normal; every
+   folder on the way down has its name in the accent colour, so the eye can follow the path from the top.
+   Text stays --text-normal on the tint; folder names use --text-accent on --background-secondary (PAIRS in
+   theme.mjs). Off switch: Style Settings, "Dòng file đang mở kiểu Primary" adds .e11-nav-active-primary to body.
+   A row outside the rendered part of the tree (folder collapsed, or scrolled far away) is not in the DOM, so
+   its folders are not marked; the e11-nav-follow plugin scrolls the row into view when a note opens from a link.
+   No animation when the row arrives: a fill flash, a rainbow lap and a pastel glow were tried and dropped (user
+   2026-11-06); the straight bar is enough once the row always lands in the middle. */
+:root {
+  --e11-nav-active-tint: 18%;
+}
+body.e11-on-primary:not(.e11-nav-active-primary) .nav-file-title.is-active {
+  background-color: color-mix(in srgb, var(--text-accent) var(--e11-nav-active-tint), var(--background-secondary));
+  box-shadow: inset 3px 0 0 var(--text-accent);
+  border-radius: 0;   /* Primary rounds the row, which bent the bar into a curve; the user wanted it straight */
+  /* Primary's active padding is 4px top, 6px bottom (room for its button shadow, dropped here), so the name sat
+     high. Even, and 2px more each side than a plain row (5px): the user wanted the bar a little taller. */
+  padding: calc(var(--size-4-1) + 3px) var(--size-4-2) calc(var(--size-4-1) + 3px) var(--size-4-6);
+  color: var(--text-normal);   /* the darker tone is enough; semibold tired the eye (user 2026-11-06) */
+}
+/* Light: the brown tint over the beige sidebar read muddy (user 2026-11-06). The row takes the note's own paper
+   colour instead, a sheet lying on the beige: text as on a note (--text-normal on --background-primary), row edge
+   as the note/sidebar edge (1.18:1). Dark keeps the tint (row 6.9:1, edge 1.43:1, estimated by hand). */
+body.e11-on-primary.theme-light:not(.e11-nav-active-primary) .nav-file-title.is-active {
+  background-color: var(--background-primary);
+}
+body.e11-on-primary:not(.e11-nav-active-primary) .nav-folder:not(.mod-root):has(.nav-file-title.is-active) > .nav-folder-title {
+  --icon-color: var(--text-accent);
+  color: var(--text-accent);
 }

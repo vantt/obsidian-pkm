@@ -1,5 +1,5 @@
-// Plugin settings: where pkm is, how long to wait for it, the graph index the writing commands read, and the vault
-// folders the workshop reads.
+// Plugin settings: where pkm is, how long to wait for it, the graph index the writing commands read, the vault
+// folders the workshop reads, and whether the file explorer follows the open note.
 
 export interface PkmSettings {
   /** Path to the pkm binary; empty = the installer's default location, detected at each run. */
@@ -15,6 +15,8 @@ export interface PkmSettings {
   topicRoots: string[];
   /** Extra capture folders listed under "Mới lưu" on the home page, besides `Inbox`. */
   inboxFolders: string[];
+  /** Scroll the file explorer to the note when it opens from a link, the switcher or a tab (nav-follow.ts). */
+  navFollow: boolean;
 }
 
 export const DEFAULT_SETTINGS: PkmSettings = {
@@ -23,6 +25,7 @@ export const DEFAULT_SETTINGS: PkmSettings = {
   graphDbPath: '',
   topicRoots: [],
   inboxFolders: [],
+  navFollow: true,
 };
 
 export const MIN_TIMEOUT = 5;
@@ -52,6 +55,7 @@ export function normalizeSettings(raw: unknown): PkmSettings {
   const r = raw as Record<string, unknown>;
   if (typeof r.pkmPath === 'string') s.pkmPath = r.pkmPath.trim();
   if (typeof r.graphDbPath === 'string') s.graphDbPath = r.graphDbPath.trim();
+  if (typeof r.navFollow === 'boolean') s.navFollow = r.navFollow;
   if (typeof r.timeoutSeconds === 'number' && Number.isFinite(r.timeoutSeconds)) {
     s.timeoutSeconds = Math.min(MAX_TIMEOUT, Math.max(MIN_TIMEOUT, Math.round(r.timeoutSeconds)));
   }

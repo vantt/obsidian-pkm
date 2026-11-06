@@ -40,14 +40,16 @@ describe('settings', () => {
     expect(normalizeSettings(null)).toEqual(DEFAULT_SETTINGS);
     expect(normalizeSettings({ graphDbPath: 3 }).graphDbPath).toBe('');
     expect(
-      normalizeSettings({ pkmPath: ' /x/pkm ', timeoutSeconds: 1, graphDbPath: ' /v/.e11/graph.db ', topicRoots: ['A', 3, '..'], inboxFolders: 'x' }),
+      normalizeSettings({ pkmPath: ' /x/pkm ', timeoutSeconds: 1, graphDbPath: ' /v/.e11/graph.db ', topicRoots: ['A', 3, '..'], inboxFolders: 'x', navFollow: false }),
     ).toEqual({
       pkmPath: '/x/pkm',
       timeoutSeconds: 5,
       graphDbPath: '/v/.e11/graph.db',
       topicRoots: ['A'],
       inboxFolders: [],
+      navFollow: false,
     });
+    expect(normalizeSettings({ navFollow: 'no' }).navFollow).toBe(true);
   });
 });
 
