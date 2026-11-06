@@ -361,7 +361,7 @@ fn embedded_preset_parses_and_matches_its_readme() {
     // sha256 ghi trong presets/b/README.md.
     assert_eq!(
         files::sha256_hex(css),
-        "ea31f413335867a05878e295f0383e91cae3031b5cce48b4c8f4365aecb70c67"
+        "e778c30df46ac222913d722be7927ae839fe46317f859850d378443c9f4c55de"
     );
     assert!(Preset::parse(&SETUP_JSON_WITH_UNKNOWN_FILE).is_err());
 }

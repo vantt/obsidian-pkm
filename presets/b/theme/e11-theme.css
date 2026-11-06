@@ -16,7 +16,10 @@
    7. Trích dẫn                             thêm khoảng trên dưới, chế độ đọc và Live Preview; Primary để vạch sát mép
                                             chữ (user 2026-11-06)
    8. Bảng                                  viền mảnh, tiêu đề có nền riêng, sọc dòng, hover, chữ nhỏ hơn một bậc;
-                                            tiêu đề không còn màu xen kẽ cột (lỗi user thấy ở bảng nhúng 2026-11-06) */
+                                            tiêu đề không còn màu xen kẽ cột (lỗi user thấy ở bảng nhúng 2026-11-06)
+   9. Callout                               tiêu đề và thân cùng một sắc màu như Default, tiêu đề đậm hơn thân một
+                                            chút (user 2026-11-06). Trả về kiểu Primary: Style Settings, "Callout kiểu
+                                            Primary". Hai thanh trượt chỉnh độ đậm thân và tiêu đề */
 
 /* @settings
 
@@ -56,6 +59,32 @@ settings:
             -
                 label: Cùng font đọc
                 value: e11-head-body
+    -
+        id: e11-callout-primary
+        title: Callout kiểu Primary
+        description: Bật để trả callout về kiểu của Primary (dải tiêu đề màu, thân nền trung tính). Tắt là kiểu E11, tiêu đề và thân cùng một sắc màu.
+        type: class-toggle
+        default: false
+    -
+        id: e11-callout-body-tint
+        title: Callout E11, độ đậm màu thân
+        description: Phần trăm màu callout pha vào nền note (mặc định 12)
+        type: variable-number-slider
+        default: 12
+        min: 4
+        max: 30
+        step: 1
+        format: '%'
+    -
+        id: e11-callout-title-tint
+        title: Callout E11, độ đậm màu tiêu đề
+        description: Đậm hơn thân một chút cho tiêu đề nổi lên (mặc định 24)
+        type: variable-number-slider
+        default: 24
+        min: 4
+        max: 45
+        step: 1
+        format: '%'
 
 */
 
@@ -337,4 +366,26 @@ settings:
 .markdown-rendered tbody tr:hover > td,
 .markdown-source-view.mod-cm6 .cm-table-widget tbody tr:hover > td {
   background: var(--table-row-background-hover);
+}
+
+/* ── Callout (index 9) ───────────────────────────────────────────────────────────────────────────────────────────
+   Primary paints the whole callout in its colour at 32.5% and gives the body its own neutral surface, so the title
+   reads as a coloured band over a grey box. Obsidian's Default tints title and body with the same hue; the user
+   preferred that (2026-11-06), with the title a little darker than the body.
+   Here: body = callout colour mixed into the note background at --e11-callout-body-tint, title at
+   --e11-callout-title-tint, body surface and its inner shadow dropped. Primary's --callout-color is a bare
+   "r,g,b", hence rgb(). Text keeps --text-normal (lowest measured: 6.4:1 body, 4.9:1 title, Dark).
+   Off switch: Style Settings, "Callout kiểu Primary" adds .e11-callout-primary to body and these rules stop. The
+   switch is off by default so the look works without Style Settings. */
+body {
+  --e11-callout-body-tint: 12%;
+  --e11-callout-title-tint: 24%;
+}
+body:not(.e11-callout-primary) .callout {
+  --callout-content-background: transparent;
+  --callout-content-shadow: none;
+  background-color: color-mix(in srgb, rgb(var(--callout-color)) var(--e11-callout-body-tint), var(--background-primary));
+}
+body:not(.e11-callout-primary) .callout-title {
+  background-color: color-mix(in srgb, rgb(var(--callout-color)) var(--e11-callout-title-tint), var(--background-primary));
 }
