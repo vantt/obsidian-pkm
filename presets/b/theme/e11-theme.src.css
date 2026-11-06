@@ -3,6 +3,10 @@
    Check after any colour change: `node scripts/e11/theme.mjs contrast <vault> --snippet <built file>`.
    Fonts: Merriweather, Archivo Narrow, Manrope (SIL OFL 1.1, see theme/fonts/OFL-*.txt); Inter comes with Primary.
    Every rule here is written for this snippet; nothing is copied from Primary, its forks or Obsidian's app.css.
+   Only on Primary: every rule starts with body.e11-on-primary. The local plugin e11-theme-guard
+   (scripts/e11/theme-guard-plugin, installed with this snippet) puts that class on body while the theme is
+   Primary. Another theme, or the plugin off: the snippet does nothing. A new rule must start with it too:
+   body.e11-on-primary .x for an element inside, body.e11-on-primary.theme-dark for a class on body itself.
 
    Mục lục tùy biến (cái gì đổi so với Primary, vì sao; chi tiết ở playbook 05, mục theme.mjs):
    1. Màu chữ, link, accent (Light, Dark)   chữ phụ, chữ mờ, link vàng của Primary dưới 4,5:1; tối lại cùng tông
@@ -93,7 +97,7 @@ settings:
 /* ── Colour (index 1, 2) ──────────────────────────────────────────────────────────────────────────────────────
    Light: Primary's text greys and yellow link sit at 2.1–3.4:1 on its paper background; darkened in the same hue.
    Surfaces (note, sidebar, table header, zebra, code) were 1.07–1.14:1 apart; spread so each edge shows. */
-.theme-light {
+body.e11-on-primary.theme-light {
   --text-muted: hsl(34, 32%, 33%);
   --text-faint: hsl(33, 24%, 45%);
   --link-color: hsl(30, 85%, 29%);
@@ -118,7 +122,7 @@ settings:
 }
 
 /* Dark: text was fine except the accent (1.44:1) and faint text; surfaces 1.07:1 apart. */
-.theme-dark {
+body.e11-on-primary.theme-dark {
   --text-faint: hsl(34, 22%, 53%);
   --text-accent: hsl(36, 62%, 62%);
   --text-accent-hover: hsl(38, 70%, 70%);
@@ -137,7 +141,7 @@ settings:
    Obsidian colours code tokens from --color-red, --color-pink…; Primary mutes that palette, so code reads flat.
    Own hues, each at least 4.8:1 on --code-background above (theme.mjs contrast measures them). Comments and
    punctuation stay on --text-faint / --text-muted. */
-.theme-light {
+body.e11-on-primary.theme-light {
   --code-keyword: hsl(330, 72%, 42%);
   --code-function: hsl(42, 90%, 26%);
   --code-string: hsl(142, 62%, 27%);
@@ -147,7 +151,7 @@ settings:
   --code-tag: hsl(355, 72%, 43%);
   --code-important: hsl(28, 88%, 32%);
 }
-.theme-dark {
+body.e11-on-primary.theme-dark {
   --code-keyword: hsl(330, 80%, 74%);
   --code-function: hsl(46, 85%, 62%);
   --code-string: hsl(140, 55%, 58%);
@@ -161,10 +165,10 @@ settings:
 /* ── Canvas colours (index 4) ─────────────────────────────────────────────────────────────────────────────────
    Primary sets --canvas-color-N to --color-*-rgb, a bare "223,90,90". Obsidian 1.13+ uses --canvas-color as a
    whole colour (color-mix, border-color), so canvas cards and edges lost their colour. Same Primary hues, wrapped
-   in rgb(). Card 5 stays blue as in Primary (Obsidian's default is cyan). .theme-dark.theme-dark: Primary sets
-   --canvas-color with that doubled class in Dark. */
-.theme-light.theme-light,
-.theme-dark.theme-dark {
+   in rgb(). Card 5 stays blue as in Primary (Obsidian's default is cyan). Primary sets --canvas-color in Dark with
+   .theme-dark.theme-dark (0,2,0); body.e11-on-primary.theme-dark (0,2,1) outranks it. */
+body.e11-on-primary.theme-light,
+body.e11-on-primary.theme-dark {
   --canvas-color: rgb(var(--color-gray-rgb));
   --canvas-color-1: rgb(var(--color-red-rgb));
   --canvas-color-2: rgb(var(--color-orange-rgb));
@@ -176,8 +180,8 @@ settings:
 
 /* ── Reading font, weight, rhythm (index 5, 6) ────────────────────────────────────────────────────────────────
    Set on the note views, not body: Obsidian puts the font chosen in Settings inline on body. */
-.markdown-preview-view,
-.markdown-source-view.mod-cm6 {
+body.e11-on-primary .markdown-preview-view,
+body.e11-on-primary .markdown-source-view.mod-cm6 {
   --e11-body-font: 'Merriweather', 'Inter', Georgia, serif;
   --e11-body-weight: 300;
   --font-text: var(--e11-body-font);
@@ -191,33 +195,33 @@ settings:
   --h4-font: var(--h1-font); --h5-font: var(--h1-font); --h6-font: var(--h1-font); --inline-title-font: var(--h1-font);
   font-weight: var(--e11-body-weight);
 }
-.e11-body-inter :is(.markdown-preview-view, .markdown-source-view.mod-cm6) {
+body.e11-on-primary.e11-body-inter :is(.markdown-preview-view, .markdown-source-view.mod-cm6) {
   --e11-body-font: 'Inter', sans-serif;
   --e11-body-weight: 350;
   --bold-weight: 650;
 }
-.e11-head-archivo :is(.markdown-preview-view, .markdown-source-view.mod-cm6) {
+body.e11-on-primary.e11-head-archivo :is(.markdown-preview-view, .markdown-source-view.mod-cm6) {
   --h1-font: 'Archivo Narrow', 'Inter', sans-serif; --h2-font: var(--h1-font); --h3-font: var(--h1-font);
   --h4-font: var(--h1-font); --h5-font: var(--h1-font); --h6-font: var(--h1-font); --inline-title-font: var(--h1-font);
 }
-.e11-head-manrope :is(.markdown-preview-view, .markdown-source-view.mod-cm6) {
+body.e11-on-primary.e11-head-manrope :is(.markdown-preview-view, .markdown-source-view.mod-cm6) {
   --h1-font: 'Manrope', 'Inter', sans-serif; --h2-font: var(--h1-font); --h3-font: var(--h1-font);
   --h4-font: var(--h1-font); --h5-font: var(--h1-font); --h6-font: var(--h1-font); --inline-title-font: var(--h1-font);
 }
-.e11-head-body :is(.markdown-preview-view, .markdown-source-view.mod-cm6) {
+body.e11-on-primary.e11-head-body :is(.markdown-preview-view, .markdown-source-view.mod-cm6) {
   --h1-font: var(--e11-body-font); --h2-font: var(--h1-font); --h3-font: var(--h1-font);
   --h4-font: var(--h1-font); --h5-font: var(--h1-font); --h6-font: var(--h1-font); --inline-title-font: var(--h1-font);
 }
 /* Primary gives every heading level weight 650; step it so levels read apart. */
-.markdown-preview-view, .markdown-source-view.mod-cm6 {
+body.e11-on-primary .markdown-preview-view, body.e11-on-primary .markdown-source-view.mod-cm6 {
   --h1-weight: 750; --h2-weight: 700; --h3-weight: 650; --h4-weight: 600; --h5-weight: 600; --h6-weight: 600;
   --h1-line-height: 1.25; --h2-line-height: 1.3; --h3-line-height: 1.35; --h4-line-height: 1.4;
 }
 /* A heading sits closer to its own paragraph than to the one before it. */
-.markdown-rendered :is(h1, h2, h3, h4, h5, h6) { margin-top: var(--heading-spacing); margin-bottom: 0.45em; }
-.markdown-rendered > div:first-child :is(h1, h2, h3, h4, h5, h6) { margin-top: 0.3em; }
-.markdown-rendered :is(ul, ol) > li { margin-bottom: 0.3em; }
-.markdown-rendered :is(ul, ol) > li > :is(ul, ol) { margin-top: 0.3em; }
+body.e11-on-primary .markdown-rendered :is(h1, h2, h3, h4, h5, h6) { margin-top: var(--heading-spacing); margin-bottom: 0.45em; }
+body.e11-on-primary .markdown-rendered > div:first-child :is(h1, h2, h3, h4, h5, h6) { margin-top: 0.3em; }
+body.e11-on-primary .markdown-rendered :is(ul, ol) > li { margin-bottom: 0.3em; }
+body.e11-on-primary .markdown-rendered :is(ul, ol) > li > :is(ul, ol) { margin-top: 0.3em; }
 
 /* ── Blockquote (index 7) ─────────────────────────────────────────────────────────────────────────────────────
    Primary keeps Obsidian's quote: a bar with no room above the first line or below the last. Room inside the bar
@@ -226,31 +230,31 @@ settings:
    of bar (::before, top 0 to bottom 0). Pad the first and the last quote line, so the bar runs past the text.
    Padding, not margin: CodeMirror measures line heights and margins throw its cursor maths off. The blank line
    that Markdown needs before and after a quote already gives the room outside. */
-.markdown-rendered blockquote {
+body.e11-on-primary .markdown-rendered blockquote {
   padding-block: 1em;
   margin-block: 1.6em;
 }
-.markdown-source-view.mod-cm6.is-live-preview .cm-content > .cm-line:not(.HyperMD-quote) + .cm-line.HyperMD-quote,
-.markdown-source-view.mod-cm6.is-live-preview .cm-content > .cm-line.HyperMD-quote:first-child {
+body.e11-on-primary .markdown-source-view.mod-cm6.is-live-preview .cm-content > .cm-line:not(.HyperMD-quote) + .cm-line.HyperMD-quote,
+body.e11-on-primary .markdown-source-view.mod-cm6.is-live-preview .cm-content > .cm-line.HyperMD-quote:first-child {
   padding-top: 1em;
 }
-.markdown-source-view.mod-cm6.is-live-preview .cm-content > .cm-line.HyperMD-quote:has(+ .cm-line:not(.HyperMD-quote)),
-.markdown-source-view.mod-cm6.is-live-preview .cm-content > .cm-line.HyperMD-quote:last-child {
+body.e11-on-primary .markdown-source-view.mod-cm6.is-live-preview .cm-content > .cm-line.HyperMD-quote:has(+ .cm-line:not(.HyperMD-quote)),
+body.e11-on-primary .markdown-source-view.mod-cm6.is-live-preview .cm-content > .cm-line.HyperMD-quote:last-child {
   padding-bottom: 1em;
 }
 
 /* ── Tables (index 8) ─────────────────────────────────────────────────────────────────────────────────────────
    Primary forces width 100% and clears column stripes; here: thin borders, a header with its own surface, row
    stripes, hover, smaller text. Reading view and Live Preview (CodeMirror table widget). */
-.markdown-rendered table,
-.markdown-source-view.mod-cm6 .cm-table-widget table {
+body.e11-on-primary .markdown-rendered table,
+body.e11-on-primary .markdown-source-view.mod-cm6 .cm-table-widget table {
   --table-header-weight: 650;
   font-size: 0.9em;
   line-height: 1.55;
   border-collapse: collapse;
 }
-.markdown-rendered :is(th, td),
-.markdown-source-view.mod-cm6 .cm-table-widget :is(th, td) {
+body.e11-on-primary .markdown-rendered :is(th, td),
+body.e11-on-primary .markdown-source-view.mod-cm6 .cm-table-widget :is(th, td) {
   border: 1px solid var(--table-border-color);
   padding: 0.45em 0.75em;
   vertical-align: top;
@@ -259,22 +263,22 @@ settings:
    thead tr > th:nth-child(2n+2), more specific than the rule below). Primary sets that variable to its own header
    colour, which matched until this snippet changed --table-header-background: headers came out two-tone, column by
    column. Point it at the new header colour. Body cells are not affected: Primary clears column stripes on td. */
-.theme-light,
-.theme-dark {
+body.e11-on-primary.theme-light,
+body.e11-on-primary.theme-dark {
   --table-column-alt-background: var(--table-header-background);
 }
-.markdown-rendered thead th,
-.markdown-source-view.mod-cm6 .cm-table-widget thead th {
+body.e11-on-primary .markdown-rendered thead th,
+body.e11-on-primary .markdown-source-view.mod-cm6 .cm-table-widget thead th {
   background: var(--table-header-background);
   color: var(--table-header-color);
   font-weight: var(--table-header-weight);
 }
-.markdown-rendered tbody tr:nth-child(even) > td,
-.markdown-source-view.mod-cm6 .cm-table-widget tbody tr:nth-child(even) > td {
+body.e11-on-primary .markdown-rendered tbody tr:nth-child(even) > td,
+body.e11-on-primary .markdown-source-view.mod-cm6 .cm-table-widget tbody tr:nth-child(even) > td {
   background: var(--table-row-alt-background);
 }
-.markdown-rendered tbody tr:hover > td,
-.markdown-source-view.mod-cm6 .cm-table-widget tbody tr:hover > td {
+body.e11-on-primary .markdown-rendered tbody tr:hover > td,
+body.e11-on-primary .markdown-source-view.mod-cm6 .cm-table-widget tbody tr:hover > td {
   background: var(--table-row-background-hover);
 }
 
@@ -286,16 +290,17 @@ settings:
    --e11-callout-title-tint, body surface and its inner shadow dropped. Primary's --callout-color is a bare
    "r,g,b", hence rgb(). Text keeps --text-normal (lowest measured: 6.4:1 body, 4.9:1 title, Dark).
    Off switch: Style Settings, "Callout kiểu Primary" adds .e11-callout-primary to body and these rules stop. The
-   switch is off by default so the look works without Style Settings. */
-body {
+   switch is off by default so the look works without Style Settings. Default tints sit on :root, below the
+   sliders (Style Settings writes them on body), and do nothing by themselves. */
+:root {
   --e11-callout-body-tint: 12%;
   --e11-callout-title-tint: 24%;
 }
-body:not(.e11-callout-primary) .callout {
+body.e11-on-primary:not(.e11-callout-primary) .callout {
   --callout-content-background: transparent;
   --callout-content-shadow: none;
   background-color: color-mix(in srgb, rgb(var(--callout-color)) var(--e11-callout-body-tint), var(--background-primary));
 }
-body:not(.e11-callout-primary) .callout-title {
+body.e11-on-primary:not(.e11-callout-primary) .callout-title {
   background-color: color-mix(in srgb, rgb(var(--callout-color)) var(--e11-callout-title-tint), var(--background-primary));
 }

@@ -64,6 +64,8 @@ Sau đó đề xuất có `status: đã áp dụng` (hoặc `đã bỏ`), `close
 
 Theme (`e11-theme.css`, phông nhúng sẵn, viết cho theme Primary) không nằm trong plugin. Nó là CSS snippet do `pkm setup` chép từ `presets/b/`, bật tắt riêng trong Cài đặt > Giao diện. Lý do: phông nhúng (base64) nặng khoảng 1 MB, chỉ hợp với theme Primary, và người dùng cần tắt được theme mà không mất plugin. Plugin chỉ mang CSS của chính các thành phần nó vẽ (lưới thư mục, nút phóng bảng) trong `styles.css`. Vì nút phóng bảng đã ở trong plugin, bộ cài không cần cài plugin `e11-table-zoom` nữa.
 
+Plugin gắn lớp `e11-on-primary` lên `body` khi theme đang dùng là Primary (`src/theme-guard.ts`, nghe sự kiện `css-change`). Mọi luật của snippet bắt đầu bằng `body.e11-on-primary`, nên đổi sang theme khác là snippet im, không sơn đè theme đó; tắt plugin thì snippet cũng im. Luật mới thêm vào `e11-theme.src.css` phải có tiền tố này; test `theme-guard.test.ts` báo luật nào thiếu.
+
 ## Cài đặt (Cài đặt > PKM)
 
 | Mục | Mặc định | Ý nghĩa |

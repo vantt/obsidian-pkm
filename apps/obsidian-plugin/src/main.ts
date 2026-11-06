@@ -9,6 +9,7 @@ import { normalizeSettings, type PkmSettings } from './settings';
 import { applyCommand, ProposalsModal, refreshCommand, revertCommand, statsCommand } from './proposals/commands';
 import { PkmSettingTab } from './settings-tab';
 import { TableZoom } from './table-zoom';
+import { startThemeGuard } from './theme-guard';
 import { buildWorkshop, removeWorkshopCommand } from './workshop/command';
 import { zonesCommand } from './zones/commands';
 
@@ -49,6 +50,7 @@ export default class PkmPlugin extends Plugin {
     this.addCommand({ id: 'zones', name: 'Gợi ý bài viết (vùng tri thức)', callback: () => void zonesCommand(this) });
 
     startReviewLog(this);
+    startThemeGuard(this);
     this.tableZoom = new TableZoom(this);
     this.tableZoom.load();
   }

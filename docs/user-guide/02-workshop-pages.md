@@ -51,7 +51,7 @@ Công thức hay dùng:
 
 ## Giao diện
 
-Bản B dùng theme Primary cộng một snippet `e11-theme` (bật trong Settings, Appearance, CSS snippets): chữ đủ tương phản ở cả Light lẫn Dark, font đọc Merriweather cỡ 19, bảng có viền, tiêu đề và sọc, chữ trong khung code màu tươi, thẻ canvas đúng màu, trích dẫn có khoảng trên dưới, callout tiêu đề và thân cùng sắc màu (muốn về kiểu Primary: Style Settings, "Callout kiểu Primary"). Gỡ snippet là về Primary nguyên gốc.
+Bản B dùng theme Primary cộng một snippet `e11-theme` (bật trong Settings, Appearance, CSS snippets): chữ đủ tương phản ở cả Light lẫn Dark, font đọc Merriweather cỡ 19, bảng có viền, tiêu đề và sọc, chữ trong khung code màu tươi, thẻ canvas đúng màu, trích dẫn có khoảng trên dưới, callout tiêu đề và thân cùng sắc màu (muốn về kiểu Primary: Style Settings, "Callout kiểu Primary"). Snippet chỉ chạy khi theme là Primary và plugin pkm đang bật; đổi theme khác là nó tự tắt. Gỡ snippet là về Primary nguyên gốc.
 
 - **Đổi font đọc, font heading:** plugin Style Settings, mục "E11 giao diện" (font đọc Merriweather hay Inter; heading Inter, Archivo Narrow, Manrope hay cùng font đọc). Đổi font ở Settings, Appearance, Text font không có tác dụng trong note vì snippet đặt font cho khung note.
 - **Đổi cỡ chữ:** thanh cỡ chữ ở Settings, Appearance.
