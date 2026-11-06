@@ -20,11 +20,14 @@ Chỉ chạy trên máy tính (`isDesktopOnly`), vì plugin chạy binary `pkm`.
 | PKM: Gợi ý bài viết (vùng tri thức) | Chạy `pkm VAULT zones`, hiện các vùng theo điểm: note chính, đoạn tô, vùng đã chấm gì, nút "Viết bài từ vùng này". |
 | PKM: Phóng hoặc thu mọi bảng trong note đang mở | Như bấm nút phóng ở từng bảng. |
 | PKM: Ghi báo cáo nút phóng bảng | Ghi `_E11/table-zoom-report.json`: bề rộng từng bảng, để soát bố cục mà không cần chụp màn hình. |
+| PKM: Đọc đối chiếu với… | Chọn một note, nó mở bên phải note đang mở. Cuộn mỗi bên tới chỗ cần so rồi khoá (xem dưới). |
+| PKM: Khoá hoặc mở khoá cuộn hai bên | Như bấm ổ khoá ở đầu pane; gán phím được. |
 
 Chạy ngầm, không cần lệnh:
 
 - **Nhật ký duyệt:** mỗi lần mở note và mỗi lần `status` của một đề xuất trong `_Đề xuất/` đổi, thêm một dòng vào `_E11/review-log.jsonl`. Không gửi gì ra ngoài vault.
 - **Nút phóng bảng:** góc trên phải mỗi bảng (Markdown, Bases, Dataview) có nút kéo bảng ra hết chiều ngang khung; bấm lại hoặc Esc để thu.
+- **Đọc đối chiếu:** khi đúng hai note đặt cạnh nhau, góc trên phải mỗi pane có ổ khoá. Khoá thì cuộn bên nào bên kia đi theo, giữ đúng độ lệch lúc khoá (bài ngắn dừng ở cuối, cuộn về thì khớp lại). Giữ Alt khi cuộn để chỉnh một bên; nhả ra là khoá ở độ lệch mới. Đổi note, đổi chế độ xem hay đóng pane thì tự mở khoá. Thanh trạng thái báo đang khoá hay tạm mở. Phần lõi lấy từ [Relative Scroll Lock](https://github.com/v-49/obsidian-relative-scroll-lock) (MIT, `v-49`), cùng bản sửa đã gửi lại tác giả ([v-49/obsidian-relative-scroll-lock#1](https://github.com/v-49/obsidian-relative-scroll-lock/pull/1)).
 - **Lưới thư mục:** trang có `cssclasses: folder-grid` (trang chủ đề) hiện note thành thẻ có ảnh bìa.
 
 ### Dựng xưởng không đè file bạn đã sửa
@@ -75,6 +78,7 @@ Plugin gắn lớp `e11-on-primary` lên `body` khi theme đang dùng là Primar
 | Index graph (`--db`) | trống | File index graph mà Nguyên liệu, Gợi ý bài viết, cặp gần nghĩa đọc (khoá `graphDbPath` trong `data.json`, `pkm setup` điền). Trống thì `pkm` dùng `VAULT/.kg/graph.db`. `propose` không đọc index nên không nhận cờ này. |
 | Thư mục chủ đề | trống | Mỗi dòng một thư mục gốc. Mỗi thư mục `gốc/nhóm/chủ đề` (tên không bắt đầu bằng `_`) có từ 3 note trở lên được một trang chủ đề. Trống thì không có trang chủ đề. |
 | Thư mục lưu nhanh khác | trống | Thêm vào mục "Mới lưu" trên Trang chủ, cùng với `Inbox`. |
+| Đọc đối chiếu (`compareScroll`) | bật | Tắt thì ẩn ổ khoá, hai lệnh đọc đối chiếu không hiện trong Ctrl+P. Mục này có cả giấy phép MIT của Relative Scroll Lock. |
 
 Lỗi khi gọi `pkm` hiện thành thông báo tiếng Việt: không thấy `pkm`, không có quyền chạy, quá thời gian chờ, `pkm` báo lỗi, và `ohs_not_ready` (tìm theo nghĩa đang khởi động, đang lập chỉ mục bao nhiêu phần trăm, còn bao lâu, việc cần làm).
 
@@ -105,6 +109,7 @@ Trong `apps/obsidian-plugin/` chạy thẳng `pnpm test`, `pnpm run build`, `pnp
 | `src/workshop/plan.ts` | Danh sách file sẽ ghi, tìm thư mục chủ đề |
 | `src/workshop/apply.ts` | Ghi, gỡ, manifest, không đè file đã sửa |
 | `src/review-log.ts`, `src/table-zoom.ts` | Nhật ký duyệt, nút phóng bảng |
+| `src/compare-scroll/` | Đọc đối chiếu: `session.ts` khoá cuộn (không phụ thuộc Obsidian, có test), `index.ts` lệnh, nút, thanh trạng thái |
 | `src/note-io.ts`, `src/text.ts` | Sửa note qua API Obsidian (`processFrontMatter`, `vault.process`), giữ CRLF; tách frontmatter, giờ địa phương kiểu Python |
 | `src/proposals/` | Hàng đề xuất: liệt kê, nhận/bỏ, áp dụng, hoàn tác, đo duyệt, làm mới (`pairs` rồi `propose`), hộp thoại |
 | `src/material/` | Trang nguyên liệu, ô đã đánh, ghi `uses` |

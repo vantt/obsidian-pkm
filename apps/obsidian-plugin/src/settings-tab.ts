@@ -1,5 +1,6 @@
 import { type App, Notice, PluginSettingTab, Setting } from 'obsidian';
 import { messageFor, pkmVersion } from './bridge';
+import { THIRD_PARTY } from './compare-scroll/session';
 import type PkmPlugin from './main';
 import { MAX_TIMEOUT, MIN_TIMEOUT, parseFolderList } from './settings';
 
@@ -81,6 +82,22 @@ export class PkmSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         }),
       );
+
+    new Setting(containerEl)
+      .setName('Đọc đối chiếu (cuộn chung hai note)')
+      .setDesc(
+        'Lệnh "Đọc đối chiếu với…" mở note thứ hai bên phải. Cuộn mỗi bên tới chỗ cần so, bấm ổ khoá ở góc trên bên phải: từ đó hai bên cuộn cùng nhau. Giữ Alt khi cuộn để chỉnh một bên. Dựa trên plugin Relative Scroll Lock (MIT).',
+      )
+      .addToggle((t) =>
+        t.setValue(s.compareScroll).onChange(async (v) => {
+          s.compareScroll = v;
+          await this.plugin.saveSettings();
+          this.plugin.compareScroll?.refresh();
+        }),
+      );
+    const license = containerEl.createEl('details', { cls: 'pkm-third-party' });
+    license.createEl('summary', { text: 'Giấy phép Relative Scroll Lock' });
+    license.createEl('pre', { text: THIRD_PARTY });
 
     containerEl.createEl('h3', { text: 'Dựng xưởng' });
 

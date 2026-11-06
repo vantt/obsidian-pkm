@@ -1,5 +1,5 @@
 // Plugin settings: where pkm is, how long to wait for it, the graph index the writing commands read, the vault
-// folders the workshop reads, and whether the file explorer follows the open note.
+// folders the workshop reads, whether the file explorer follows the open note, and side-by-side reading.
 
 export interface PkmSettings {
   /** Path to the pkm binary; empty = the installer's default location, detected at each run. */
@@ -17,6 +17,8 @@ export interface PkmSettings {
   inboxFolders: string[];
   /** Scroll the file explorer to the note when it opens from a link, the switcher or a tab (nav-follow.ts). */
   navFollow: boolean;
+  /** Lock button and commands for scrolling two side-by-side notes together (compare-scroll/). */
+  compareScroll: boolean;
 }
 
 export const DEFAULT_SETTINGS: PkmSettings = {
@@ -26,6 +28,7 @@ export const DEFAULT_SETTINGS: PkmSettings = {
   topicRoots: [],
   inboxFolders: [],
   navFollow: true,
+  compareScroll: true,
 };
 
 export const MIN_TIMEOUT = 5;
@@ -56,6 +59,7 @@ export function normalizeSettings(raw: unknown): PkmSettings {
   if (typeof r.pkmPath === 'string') s.pkmPath = r.pkmPath.trim();
   if (typeof r.graphDbPath === 'string') s.graphDbPath = r.graphDbPath.trim();
   if (typeof r.navFollow === 'boolean') s.navFollow = r.navFollow;
+  if (typeof r.compareScroll === 'boolean') s.compareScroll = r.compareScroll;
   if (typeof r.timeoutSeconds === 'number' && Number.isFinite(r.timeoutSeconds)) {
     s.timeoutSeconds = Math.min(MAX_TIMEOUT, Math.max(MIN_TIMEOUT, Math.round(r.timeoutSeconds)));
   }

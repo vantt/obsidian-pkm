@@ -75,3 +75,21 @@
 .pkm-zone { border-top: 1px solid var(--background-modifier-border); padding-bottom: var(--size-4-2); }
 .pkm-zone-notes { font-size: var(--font-ui-small); margin-bottom: var(--size-4-2); }
 .pkm-zone blockquote { margin: var(--size-4-1) 0; font-size: var(--font-ui-small); color: var(--text-muted); }
+
+/* Side-by-side reading (compare-scroll/): the lock button shows only while two notes sit side by side. */
+.pkm-compare-lock.is-hidden,
+.pkm-compare-status.is-hidden {
+  display: none;
+}
+.pkm-compare-lock.is-active {
+  color: var(--text-accent);
+}
+.pkm-compare-status {
+  cursor: pointer;
+  color: var(--text-accent);
+}
+.pkm-third-party pre {
+  white-space: pre-wrap;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}

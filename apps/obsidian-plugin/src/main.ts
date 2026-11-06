@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import { FileSystemAdapter, Notice, Plugin } from 'obsidian';
 import { messageFor, type PkmCall, runPkm } from './bridge';
+import { CompareScroll } from './compare-scroll';
 import { activeDraft, materialCommand } from './material/command';
 import { startNavFollow } from './nav-follow';
 import { detectPkm } from './pkm-path';
@@ -24,6 +25,7 @@ interface DoctorCheck {
 export default class PkmPlugin extends Plugin {
   pkmSettings!: PkmSettings;
   private tableZoom: TableZoom | null = null;
+  compareScroll: CompareScroll | null = null;
 
   override async onload(): Promise<void> {
     this.pkmSettings = normalizeSettings(await this.loadData());
@@ -55,10 +57,13 @@ export default class PkmPlugin extends Plugin {
     startNavFollow(this, () => this.pkmSettings.navFollow);
     this.tableZoom = new TableZoom(this);
     this.tableZoom.load();
+    this.compareScroll = new CompareScroll(this, () => this.pkmSettings.compareScroll);
+    this.compareScroll.load();
   }
 
   override onunload(): void {
     this.tableZoom?.unload();
+    this.compareScroll?.unload();
   }
 
   async saveSettings(): Promise<void> {
