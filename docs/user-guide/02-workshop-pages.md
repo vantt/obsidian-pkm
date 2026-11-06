@@ -58,6 +58,26 @@ Bản B dùng theme Primary cộng một snippet `e11-theme` (bật trong Settin
 - **Bảng rộng bị bóp cột:** rê chuột lên bảng, bấm nút ở góc trên bên phải để phóng bảng ra hết chiều ngang; bấm lại hoặc Esc để thu. Có cho bảng Markdown, bảng Bases và bảng Dataview. Lệnh (Ctrl+P): "Phóng hoặc thu mọi bảng trong note đang mở".
 - **Tìm note đang mở trong cây thư mục:** dòng của note đang mở có vạch màu nhấn bên trái, tên các thư mục chứa nó cũng tô màu nhấn. Mở note từ một link, quick switcher hay tab thì cây tự mở thư mục và cuộn dòng đó vào giữa; bấm file ngay trong cây thì cây đứng yên. Tắt việc tự cuộn: Settings, pkm, "Cây thư mục theo note đang mở". Về kiểu dòng của Primary: Style Settings, "Dòng file đang mở kiểu Primary".
 
+## Đọc đối chiếu hai note
+
+So hai bài cạnh nhau mà không phải cuộn tay từng bên: bản nháp mới với bản cũ, bài gốc với bản dịch, bài cắt về với tóm tắt của bạn. Bạn canh hai đoạn tương ứng bằng mắt, rồi khoá; từ đó hai bên cuộn cùng nhau.
+
+1. Mở note thứ nhất. Ctrl+P, gõ "Đọc đối chiếu với…", chọn note thứ hai. Note đó mở ở nửa bên phải.
+2. Cuộn từng bên tới chỗ muốn so, sao cho hai đoạn tương ứng cùng nằm gần mép trên.
+3. Bấm **ổ khoá** ở góc trên bên phải của một trong hai bên. Ổ khoá đóng lại ở cả hai bên; thanh trạng thái dưới cùng hiện "Cuộn chung: khoá".
+4. Cuộn bên nào cũng được: bên kia đi theo đúng chừng ấy.
+5. Thấy hai đoạn lệch dần (một bài viết dài hơn ở giữa)? **Giữ Alt** khi cuộn: chỉ bên đó chạy, thanh trạng thái hiện "tạm mở (Alt)". Nhả Alt là khoá lại ở chỗ mới.
+6. Xong thì bấm ổ khoá lần nữa để mở khoá.
+
+Điều nên biết:
+
+- Ổ khoá chỉ hiện khi đúng hai note nằm cạnh nhau, trái và phải. Tự chia đôi cũng được (chuột phải lên tab, Split right) thay cho lệnh ở bước 1.
+- Một bài ngắn hơn thì khi tới cuối nó dừng lại, bài kia cuộn tiếp; cuộn ngược lên, hai bên khớp lại đúng chỗ bạn đã canh.
+- Đổi note ở một bên, đổi chế độ đọc hay sửa, hoặc đóng một bên: khoá tự bỏ, có thông báo. Canh lại rồi khoá lại.
+- Sửa chữ được bình thường ở cả hai bên khi đang khoá.
+- Gán phím cho việc khoá: Settings, Hotkeys, tìm "Khoá hoặc mở khoá cuộn hai bên".
+- Tắt hẳn: Settings, pkm, "Đọc đối chiếu".
+
 ## Lưu ý
 
 - Cần Obsidian 1.9 trở lên và core plugin Bases bật.
