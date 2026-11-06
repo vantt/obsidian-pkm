@@ -19,7 +19,7 @@ Nguồn: repo nghiên cứu `vantt/obsidian-pkm-automation` ở commit `9061581`
 
 ### Dựng lại `theme/e11-theme.css`
 
-Phải dựng lại mỗi khi sửa `e11-theme.src.css` hay `fonts/`, trong cùng commit. Cách dựng (như hàm `build()` của `theme.mjs`): đọc `e11-theme.src.css`, thay chuỗi `/*FONTFACES*/` đầu tiên bằng nội dung `fonts/fonts.css` trong đó mỗi `url(<file>)` (bỏ dấu nháy) đổi thành `url(data:font/woff2;base64,<nội dung file>)`; file không có trong `fonts/` thì báo lỗi. Kết quả không phụ thuộc máy: hai lần dựng ra giống nhau từng byte. Bản trong repo có sha256 `80aa6969a25c2d50c2620fd49492eacfd61ad9dc49f8b5d99e56fc1d83eea6fe`.
+Phải dựng lại mỗi khi sửa `e11-theme.src.css` hay `fonts/`, trong cùng commit. Cách dựng (như hàm `build()` của `theme.mjs`): đọc `e11-theme.src.css`, thay chuỗi `/*FONTFACES*/` đầu tiên bằng nội dung `fonts/fonts.css` trong đó mỗi `url(<file>)` (bỏ dấu nháy) đổi thành `url(data:font/woff2;base64,<nội dung file>)`; file không có trong `fonts/` thì báo lỗi. Kết quả không phụ thuộc máy: hai lần dựng ra giống nhau từng byte. Bản trong repo có sha256 `ea31f413335867a05878e295f0383e91cae3031b5cce48b4c8f4365aecb70c67`.
 
 ### `setup.json`
 

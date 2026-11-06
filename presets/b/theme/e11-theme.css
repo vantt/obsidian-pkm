@@ -1,7 +1,22 @@
 /* E11.21: vault B's look on top of Primary 2.10.0. Overrides Primary's variables only; theme.css is untouched.
    Built by `node scripts/e11/theme.mjs build` (fonts inlined), installed by `theme.mjs install`.
    Check after any colour change: `node scripts/e11/theme.mjs contrast <vault> --snippet <built file>`.
-   Fonts: Merriweather, Archivo Narrow, Manrope (SIL OFL 1.1, see theme/fonts/OFL-*.txt); Inter comes with Primary. */
+   Fonts: Merriweather, Archivo Narrow, Manrope (SIL OFL 1.1, see theme/fonts/OFL-*.txt); Inter comes with Primary.
+   Every rule here is written for this snippet; nothing is copied from Primary, its forks or Obsidian's app.css.
+
+   Mục lục tùy biến (cái gì đổi so với Primary, vì sao; chi tiết ở playbook 05, mục theme.mjs):
+   1. Màu chữ, link, accent (Light, Dark)   chữ phụ, chữ mờ, link vàng của Primary dưới 4,5:1; tối lại cùng tông
+   2. Nền note, sidebar, bảng, code         các mặt nền gần như trùng nhau (1,07–1,14:1); giãn ra cho thấy ranh giới
+   3. Màu chữ trong khung code              Primary làm nhạt bảng màu nên code đục; đặt màu tươi riêng, đạt 4,8:1
+                                            (user so 2026-11-06: Default rõ và tươi hơn hẳn)
+   4. Màu canvas                            từ Obsidian 1.13 Primary đưa bộ ba số (223,90,90) vào chỗ cần màu, thẻ
+                                            canvas mất màu; bọc lại bằng rgb() (user so 2026-11-06)
+   5. Font đọc, font heading                Merriweather 300 cho thân note, heading Inter; chọn trong Style Settings
+   6. Nhịp dòng, đoạn, heading, danh sách   dòng 1,78; heading gần đoạn của nó; bậc đậm heading khác nhau
+   7. Trích dẫn                             thêm khoảng trên dưới, chế độ đọc và Live Preview; Primary để vạch sát mép
+                                            chữ (user 2026-11-06)
+   8. Bảng                                  viền mảnh, tiêu đề có nền riêng, sọc dòng, hover, chữ nhỏ hơn một bậc;
+                                            tiêu đề không còn màu xen kẽ cột (lỗi user thấy ở bảng nhúng 2026-11-06) */
 
 /* @settings
 
@@ -136,7 +151,7 @@ settings:
 }
 
 
-/* ── Colour ────────────────────────────────────────────────────────────────────────────────────────────────
+/* ── Colour (index 1, 2) ──────────────────────────────────────────────────────────────────────────────────────
    Light: Primary's text greys and yellow link sit at 2.1–3.4:1 on its paper background; darkened in the same hue.
    Surfaces (note, sidebar, table header, zebra, code) were 1.07–1.14:1 apart; spread so each edge shows. */
 .theme-light {
@@ -179,7 +194,48 @@ settings:
   --code-normal: var(--text-normal);
 }
 
-/* ── Reading font, weight, rhythm ──────────────────────────────────────────────────────────────────────────
+/* ── Code colours (index 3) ───────────────────────────────────────────────────────────────────────────────────
+   Obsidian colours code tokens from --color-red, --color-pink…; Primary mutes that palette, so code reads flat.
+   Own hues, each at least 4.8:1 on --code-background above (theme.mjs contrast measures them). Comments and
+   punctuation stay on --text-faint / --text-muted. */
+.theme-light {
+  --code-keyword: hsl(330, 72%, 42%);
+  --code-function: hsl(42, 90%, 26%);
+  --code-string: hsl(142, 62%, 27%);
+  --code-property: hsl(184, 75%, 25%);
+  --code-value: hsl(262, 70%, 55%);
+  --code-operator: hsl(355, 72%, 43%);
+  --code-tag: hsl(355, 72%, 43%);
+  --code-important: hsl(28, 88%, 32%);
+}
+.theme-dark {
+  --code-keyword: hsl(330, 80%, 74%);
+  --code-function: hsl(46, 85%, 62%);
+  --code-string: hsl(140, 55%, 58%);
+  --code-property: hsl(182, 60%, 56%);
+  --code-value: hsl(262, 85%, 78%);
+  --code-operator: hsl(358, 85%, 73%);
+  --code-tag: hsl(358, 85%, 73%);
+  --code-important: hsl(30, 90%, 60%);
+}
+
+/* ── Canvas colours (index 4) ─────────────────────────────────────────────────────────────────────────────────
+   Primary sets --canvas-color-N to --color-*-rgb, a bare "223,90,90". Obsidian 1.13+ uses --canvas-color as a
+   whole colour (color-mix, border-color), so canvas cards and edges lost their colour. Same Primary hues, wrapped
+   in rgb(). Card 5 stays blue as in Primary (Obsidian's default is cyan). .theme-dark.theme-dark: Primary sets
+   --canvas-color with that doubled class in Dark. */
+.theme-light.theme-light,
+.theme-dark.theme-dark {
+  --canvas-color: rgb(var(--color-gray-rgb));
+  --canvas-color-1: rgb(var(--color-red-rgb));
+  --canvas-color-2: rgb(var(--color-orange-rgb));
+  --canvas-color-3: rgb(var(--color-yellow-rgb));
+  --canvas-color-4: rgb(var(--color-green-rgb));
+  --canvas-color-5: rgb(var(--color-blue-rgb));
+  --canvas-color-6: rgb(var(--color-purple-rgb));
+}
+
+/* ── Reading font, weight, rhythm (index 5, 6) ────────────────────────────────────────────────────────────────
    Set on the note views, not body: Obsidian puts the font chosen in Settings inline on body. */
 .markdown-preview-view,
 .markdown-source-view.mod-cm6 {
@@ -224,7 +280,27 @@ settings:
 .markdown-rendered :is(ul, ol) > li { margin-bottom: 0.3em; }
 .markdown-rendered :is(ul, ol) > li > :is(ul, ol) { margin-top: 0.3em; }
 
-/* ── Tables ────────────────────────────────────────────────────────────────────────────────────────────────
+/* ── Blockquote (index 7) ─────────────────────────────────────────────────────────────────────────────────────
+   Primary keeps Obsidian's quote: a bar with no room above the first line or below the last. Room inside the bar
+   in both views; reading view also gets room outside (apart from the paragraphs around it).
+   Live Preview has no quote box: each quote line is its own CodeMirror line (.HyperMD-quote) with its own piece
+   of bar (::before, top 0 to bottom 0). Pad the first and the last quote line, so the bar runs past the text.
+   Padding, not margin: CodeMirror measures line heights and margins throw its cursor maths off. The blank line
+   that Markdown needs before and after a quote already gives the room outside. */
+.markdown-rendered blockquote {
+  padding-block: 1em;
+  margin-block: 1.6em;
+}
+.markdown-source-view.mod-cm6.is-live-preview .cm-content > .cm-line:not(.HyperMD-quote) + .cm-line.HyperMD-quote,
+.markdown-source-view.mod-cm6.is-live-preview .cm-content > .cm-line.HyperMD-quote:first-child {
+  padding-top: 1em;
+}
+.markdown-source-view.mod-cm6.is-live-preview .cm-content > .cm-line.HyperMD-quote:has(+ .cm-line:not(.HyperMD-quote)),
+.markdown-source-view.mod-cm6.is-live-preview .cm-content > .cm-line.HyperMD-quote:last-child {
+  padding-bottom: 1em;
+}
+
+/* ── Tables (index 8) ─────────────────────────────────────────────────────────────────────────────────────────
    Primary forces width 100% and clears column stripes; here: thin borders, a header with its own surface, row
    stripes, hover, smaller text. Reading view and Live Preview (CodeMirror table widget). */
 .markdown-rendered table,
@@ -239,6 +315,14 @@ settings:
   border: 1px solid var(--table-border-color);
   padding: 0.45em 0.75em;
   vertical-align: top;
+}
+/* Header stripes: Obsidian paints every second header cell with --table-column-alt-background (selector
+   thead tr > th:nth-child(2n+2), more specific than the rule below). Primary sets that variable to its own header
+   colour, which matched until this snippet changed --table-header-background: headers came out two-tone, column by
+   column. Point it at the new header colour. Body cells are not affected: Primary clears column stripes on td. */
+.theme-light,
+.theme-dark {
+  --table-column-alt-background: var(--table-header-background);
 }
 .markdown-rendered thead th,
 .markdown-source-view.mod-cm6 .cm-table-widget thead th {
