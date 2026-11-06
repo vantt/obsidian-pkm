@@ -94,6 +94,27 @@ pnpm --filter pkm-obsidian-plugin build    # kiểm phiên bản, typecheck, ra 
 
 Trong `apps/obsidian-plugin/` chạy thẳng `pnpm test`, `pnpm run build`, `pnpm run typecheck`, `pnpm run check-version`.
 
+### Test e2e (Obsidian thật)
+
+Mỗi thay đổi người dùng thấy được cần một test e2e ([AGENTS.md](../../AGENTS.md)). Test chạy trong Obsidian đang mở, trên một vault thử chỉ có note bịa, qua Obsidian CLI (`obsidian eval`).
+
+```sh
+pnpm e2e                        # build, chép plugin vào vault thử, nạp lại, chạy mọi e2e/*.e2e.mjs
+pnpm e2e -- --no-build compare  # bỏ build, chỉ file có "compare" trong tên
+pnpm e2e:vault                  # chỉ dựng hay làm mới vault thử
+```
+
+Một lần đầu, bằng tay: `pnpm e2e:vault`, rồi trong Obsidian chọn Open folder as vault, trỏ tới `C:\pkm-e2e-vault`, tin tác giả và bật community plugins. Để cửa sổ vault đó mở khi chạy. Đổi chỗ: biến `PKM_E2E_VAULT`; đổi lệnh CLI: `OBSIDIAN_CLI`.
+
+`e2e/vault.mjs` chỉ ghi vào thư mục trống hoặc có file đánh dấu `.pkm-e2e-vault`, không bao giờ đụng vault thật. Mỗi lần chạy, nó ghi lại các note bịa và plugin vừa build.
+
+Viết test mới: file `e2e/<tên>.e2e.mjs` export `name`, `run` (hàm async chạy **trong** Obsidian: không import, không dùng biến bên ngoài, có biến toàn cục `app`, trả về giá trị JSON được) và `check(result)` (chạy trong Node, ném lỗi khi sai). Xem `e2e/compare-scroll.e2e.mjs`. Điều nên biết:
+
+- Chờ Obsidian vẽ xong trước khi đo. Chế độ đọc vẽ dần note dài và tự chỉnh vị trí cuộn, nên kiểm quan hệ (hai pane đi cùng một khoảng), không kiểm đúng số pixel.
+- Thử cho test hỏng một lần (đưa lại lỗi, chạy, thấy FAIL) để biết nó bắt được thứ cần bắt.
+- Mã của `run` đi qua dòng lệnh nên giới hạn khoảng 30.000 ký tự.
+- Chưa chạy được trên GitHub Actions: cần Obsidian có giao diện.
+
 `build` ra `dist/main.js`, `dist/manifest.json`, `dist/styles.css` (không commit). Cài thử vào một vault: chép ba file đó vào `VAULT/.obsidian/plugins/pkm/`, rồi bật plugin PKM trong Cài đặt > Plugin cộng đồng.
 
 `check-version` dừng build nếu `version` trong `manifest.json` hoặc `package.json` khác `version` của `[workspace.package]` trong `Cargo.toml` ở gốc. Đổi phiên bản thì sửa cả ba chỗ.
@@ -110,6 +131,7 @@ Trong `apps/obsidian-plugin/` chạy thẳng `pnpm test`, `pnpm run build`, `pnp
 | `src/workshop/apply.ts` | Ghi, gỡ, manifest, không đè file đã sửa |
 | `src/review-log.ts`, `src/table-zoom.ts` | Nhật ký duyệt, nút phóng bảng |
 | `src/compare-scroll/` | Đọc đối chiếu: `session.ts` khoá cuộn (không phụ thuộc Obsidian, có test), `index.ts` lệnh, nút, thanh trạng thái |
+| `e2e/` | Test e2e trong Obsidian thật: `vault.mjs` vault thử, `run.mjs` chạy, `*.e2e.mjs` từng test |
 | `src/note-io.ts`, `src/text.ts` | Sửa note qua API Obsidian (`processFrontMatter`, `vault.process`), giữ CRLF; tách frontmatter, giờ địa phương kiểu Python |
 | `src/proposals/` | Hàng đề xuất: liệt kê, nhận/bỏ, áp dụng, hoàn tác, đo duyệt, làm mới (`pairs` rồi `propose`), hộp thoại |
 | `src/material/` | Trang nguyên liệu, ô đã đánh, ghi `uses` |
