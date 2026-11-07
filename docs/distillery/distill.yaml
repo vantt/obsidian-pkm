@@ -1,0 +1,163 @@
+# distill learning area: goal, domains, sources (cursor + coverage) and intake.
+# Written by distill.mjs; comments are not kept, so put reasons in fields. Lessons live in lessons/<domain>.yaml.
+goal:
+  status: draft
+  purpose: >-
+    obsidian-pkm ships one product for a solo entrepreneur on Obsidian: the pkm binary
+    (CLI, MCP), the pkm Obsidian plugin and the vault-B preset that installs pinned
+    community plugins and a theme. The learning area watches the public projects the
+    product bundles, copies or learns from, so that their fixes, new features, breaking
+    changes and licence terms reach the product quickly, and fixes we make go back to
+    them.
+  core_domains:
+    - bundled-upstreams
+    - plugin-ux
+  in_scope:
+    - >-
+      changes in plugins and themes that pkm setup pins (Homepage, Templater, Agent
+      Client, Style Settings, Primary)
+    - >-
+      code copied into the pkm plugin (Relative Scroll Lock) and fixes sent back
+      upstream
+    - OHS upstream changes that the vantt fork must follow
+    - >-
+      Obsidian API patterns (workspace, layout events, lazy rendering) that make plugin
+      features robust
+    - >-
+      user-facing UX ideas (commands, buttons, status bar, settings) a solo user finds
+      easy
+    - release, pinning, sha256, compatibility, e2e testing patterns
+    - licence and attribution obligations
+  out_of_scope:
+    - >-
+      features unrelated to the vault-B workflow (capture, triage, highlight, summarize,
+      express)
+    - porting code without a licence that allows it
+    - >-
+      the vantt OHS fork itself (owned by another agent; here only what the product
+      needs from upstream)
+  failures_it_prevents:
+    - >-
+      an upstream update breaks a pinned plugin or theme in vault B and we learn it from
+      a user
+    - an upstream fixes a bug we still ship in a copied or pinned version
+    - we reimplement a feature an upstream already has
+    - our copied code drifts from upstream and our fix never goes back
+    - a licence or attribution obligation is missed in a release
+    - a contributed PR goes stale because nobody watches it
+
+domains:
+  - name: bundled-upstreams
+    definition: >-
+      version, pinning, breaking changes and compatibility of plugins and themes pkm
+      setup installs or the pkm plugin copies
+  - name: plugin-ux
+    definition: >-
+      what the user sees and does in the pkm Obsidian plugin (commands, buttons, status
+      bar, settings, notices)
+  - name: obsidian-api
+    definition: >-
+      how plugins use the Obsidian API robustly (workspace, leaves, layout events, view
+      modes, lazy rendering, mobile)
+  - name: search-retrieval
+    definition: OHS search, embeddings, index and the parts of it pkm calls
+  - name: theme-style
+    definition: theme CSS, Style Settings variables, light and dark, readable callouts and tables
+  - name: templates-home
+    definition: templates, start page and note-creation flows in the vault
+  - name: agent-chat
+    definition: chat with an agent inside Obsidian (Agent Client, ACP, Claude Code)
+  - name: testing-release
+    definition: unit and e2e tests on real Obsidian, CI, release, checksums, install
+  - name: licensing-community
+    definition: licences, attribution, contributing back, community plugin directory rules
+
+sources:
+  - name: relative-scroll-lock
+    type: git-repo
+    url: https://github.com/v-49/obsidian-relative-scroll-lock
+    cursor: f5e689ddd28e
+    analyzed: '2026-11-07'
+    domains_covered:
+      - bundled-upstreams
+      - plugin-ux
+      - obsidian-api
+      - search-retrieval
+      - theme-style
+      - templates-home
+      - agent-chat
+      - testing-release
+      - licensing-community
+    coverage:
+      at: f5e689ddd28e
+      read:
+        - src/main.js
+        - tests/
+        - scripts/verify-release.cjs
+        - docs/validation.md
+        - .github/workflows/check.yml
+        - manifest.json
+        - CHANGELOG.md
+      not_read:
+        - path: README.md
+          reason: user instructions already read when installing; nothing beyond main.js behaviour
+        - path: README.zh-CN.md
+          reason: translation of README
+        - path: docs/release-notes-1.0.0.md
+          reason: summarised by CHANGELOG
+        - path: scripts/build.cjs
+          reason: esbuild wrapper; our build is separate
+        - path: styles.css
+          reason: button styling only
+    notes: >-
+      Copied into the pkm plugin (apps/obsidian-plugin/src/compare-scroll, MIT, credit
+      v-49). Our anchor fix is PR
+      https://github.com/v-49/obsidian-relative-scroll-lock/pull/1 from
+      vantt/obsidian-relative-scroll-lock; watch it and drop the note in playbook 05 once
+      merged.
+  - name: homepage
+    type: git-repo
+    url: https://github.com/mirnovov/obsidian-homepage
+    cursor: null
+    analyzed: null
+    domains_covered: []
+    notes: Pinned by pkm setup at 4.2.2 (presets/b/setup.json).
+  - name: templater
+    type: git-repo
+    url: https://github.com/SilentVoid13/Templater
+    cursor: null
+    analyzed: null
+    domains_covered: []
+    notes: Pinned by pkm setup at 2.26.0 (presets/b/setup.json).
+  - name: agent-client
+    type: git-repo
+    url: https://github.com/RAIT-09/obsidian-agent-client
+    cursor: null
+    analyzed: null
+    domains_covered: []
+    notes: Pinned by pkm setup at 0.13.0 (presets/b/setup.json).
+  - name: style-settings
+    type: git-repo
+    url: https://github.com/mgmeyers/obsidian-style-settings
+    cursor: null
+    analyzed: null
+    domains_covered: []
+    notes: Pinned by pkm setup at 1.0.9 (presets/b/setup.json).
+  - name: primary-theme
+    type: git-repo
+    url: https://github.com/primary-theme/obsidian
+    cursor: null
+    analyzed: null
+    domains_covered: []
+    notes: Pinned by pkm setup at 2.10.0 (presets/b/setup.json); e11-theme builds on it.
+  - name: ohs
+    type: git-repo
+    url: https://github.com/flowing-abyss/obsidian-hybrid-search
+    cursor: null
+    analyzed: null
+    domains_covered: []
+    notes: >-
+      Upstream of the vantt/obsidian-hybrid-search fork that pkm downloads (0.17.2-vantt.N).
+      The fork is owned by another agent; here only changes the product needs.
+
+intake: []

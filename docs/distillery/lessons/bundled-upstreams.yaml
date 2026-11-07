@@ -1,0 +1,40 @@
+# Lessons whose primary domain is "bundled-upstreams". Written by distill.mjs: edit freely, then run
+# `distill.mjs format`. final_score = relevance × impact × evidence / effort (impact = number of
+# facts); ranked lessons come first by final_score, then unranked ones by key.
+lessons:
+
+  - key: scroll-lock-accumulated-delta-drift
+    domains:
+      - bundled-upstreams
+      - plugin-ux
+    layer: history
+    what: >-
+      The follower moves by the source's step (scrollTop + delta) and is clamped at its
+      edges; steps lost to clamping are never paid back, so the offset set at lock drifts
+      after the shorter note hits its bottom. An upstream test asserts this drift as
+      correct.
+    notable: >-
+      The bug we hit in vault B. Fixed in our copy by storing the offset at lock and setting
+      the follower to clamp(source plus or minus offset); sent upstream as PR 1 from
+      vantt/obsidian-relative-scroll-lock. Keep watching: if upstream merges a different
+      fix, re-sync our copy and remove the playbook warning.
+    where:
+      - relative-scroll-lock@f5e689ddd28e:src/main.js#L82-L95
+      - relative-scroll-lock@f5e689ddd28e:tests/scroll-lock.test.cjs#L98-L110
+    contrast: already-covered
+    host: apps/obsidian-plugin/src/compare-scroll/session.ts
+    score:
+      relevance: 3
+      facts: []
+      impact: 0
+      evidence: 2
+      effort: 1
+      why: >-
+        Fixed in the host and covered by unit and e2e tests; recorded so the next pass
+        checks PR 1.
+    also_fits:
+      - upstream
+    decision:
+      state: adapted
+      reason: fixed in our copy; PR 1 sent upstream
+      local: ScrollLockSession

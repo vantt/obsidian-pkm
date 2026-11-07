@@ -23,3 +23,12 @@ Thiếu một trong ba thì việc chưa xong: không báo xong, không merge.
 
 - Chỉ lấy mã có giấy phép cho phép (MIT, BSD, Apache...). Ghi công ở đầu file (tên dự án, link, giấy phép, tác giả) và mang theo toàn văn giấy phép vào bản phát hành (ví dụ hiện trong trang cài đặt), vì `legalComments: 'none'` bỏ comment khỏi `main.js`.
 - Tìm ra lỗi hay cải tiến chung trong mã đó thì gửi lại cho tác giả (issue, PR từ fork dưới tài khoản `vantt`), người dùng duyệt lời trước khi gửi. Ghi link PR trong mã.
+
+## Theo dõi dự án nguồn (distill)
+
+Plugin, theme mà `pkm setup` ghim, mã chép vào plugin `pkm` và OHS gốc được theo dõi ở [docs/distillery](docs/distillery/distill.yaml) bằng skill `distill-repo` (script `distill.mjs`). Bài học nằm ở `docs/distillery/lessons/<domain>.yaml`, mỗi bài ghim tới `nguồn@commit:đường dẫn#dòng`.
+
+- Trước khi nâng phiên bản ghim trong `presets/b/setup.json`, hay sửa mã chép từ nguồn khác: chạy `delta <nguồn>`, đọc thay đổi từ cursor, ghi bài học, `seal`.
+- Bản sao nguồn ở `upstreams/` (gitignore); thiếu thì `git clone --filter=blob:none <url> upstreams/<nguồn>`.
+- Chỉ người dùng chốt bài học (`planned`, `rejected`...). Bài học không tự thành việc; muốn làm thì đưa vào plan như việc khác.
+- PR đã gửi cho nguồn (ví dụ relative-scroll-lock PR 1) ghi trong `notes` của nguồn; mỗi lượt delta xem PR đó đã merge chưa.

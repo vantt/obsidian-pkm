@@ -1,0 +1,62 @@
+# Lessons whose primary domain is "plugin-ux". Written by distill.mjs: edit freely, then run
+# `distill.mjs format`. final_score = relevance × impact × evidence / effort (impact = number of
+# facts); ranked lessons come first by final_score, then unranked ones by key.
+lessons:
+
+  - key: ui-language-from-obsidian
+    domains:
+      - plugin-ux
+    layer: wording
+    what: >-
+      All UI strings live in one messages table for zh and en, chosen by Obsidian's
+      getLanguage() at load.
+    notable: >-
+      Our plugin text is Vietnamese only and spread through the code. One table keyed by
+      getLanguage would let the product sell to English users without a second build;
+      trade-off is one more indirection for every string.
+    where:
+      - relative-scroll-lock@f5e689ddd28e:src/main.js#L3-L6
+      - relative-scroll-lock@f5e689ddd28e:src/main.js#L110-L111
+    contrast: new
+    host: apps/obsidian-plugin/src
+    score:
+      relevance: 1
+      facts:
+        - a
+        - b
+      impact: 2
+      evidence: 1
+      effort: 2
+      why: >-
+        peripheral: only matters when selling beyond Vietnamese users. a: English users see
+        Vietnamese text; b: no message table today. One source.
+    final_score: 1
+    keywords:
+      - getLanguage
+      - i18n
+    decision: {state: candidate}
+
+  - key: unlink-native-tab-group-on-lock
+    domains:
+      - plugin-ux
+      - obsidian-api
+    layer: content
+    what: >-
+      On lock the plugin clears Obsidian's "Link with tab" group on both panes
+      (leaf.setGroup(null)) and saves the layout; it never touches links at plugin load.
+    notable: >-
+      Linked tabs make both panes navigate together, which breaks a locked pair. Changing
+      only on user action keeps the plugin from altering the layout silently.
+    where:
+      - relative-scroll-lock@f5e689ddd28e:src/main.js#L173-L178
+      - relative-scroll-lock@f5e689ddd28e:docs/validation.md#L15
+    contrast: already-covered
+    host: apps/obsidian-plugin/src/compare-scroll/index.ts
+    score:
+      relevance: 2
+      facts: []
+      impact: 0
+      evidence: 1
+      effort: 1
+      why: 'peripheral: a layout detail, already done by unlinkTabs in the host.'
+    decision: {state: candidate}

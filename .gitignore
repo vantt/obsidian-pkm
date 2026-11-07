@@ -1,3 +1,6 @@
 /target
 node_modules/
 /apps/obsidian-plugin/dist/
+# DISTILL:START
+/upstreams/
+# DISTILL:END

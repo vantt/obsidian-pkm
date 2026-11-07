@@ -1,0 +1,185 @@
+# Lessons whose primary domain is "testing-release". Written by distill.mjs: edit freely, then run
+# `distill.mjs format`. final_score = relevance × impact × evidence / effort (impact = number of
+# facts); ranked lessons come first by final_score, then unranked ones by key.
+lessons:
+
+  - key: e2e-fail-on-page-errors-and-screenshot
+    domains:
+      - testing-release
+      - plugin-ux
+    layer: validation
+    what: >-
+      The real-app test collects every page error during the run and fails if any occurred,
+      and saves a screenshot plus a JSON of the numbers to test-results/.
+    notable: >-
+      A plugin can pass every position check while throwing in a handler; failing on page
+      errors catches it. The screenshot and JSON become the release evidence and the README
+      image. For us that screenshot is also raw material for the user guide and the sales
+      video the AGENTS.md rule asks for.
+    where:
+      - relative-scroll-lock@f5e689ddd28e:tests/real-app.cjs#L10-L11
+      - relative-scroll-lock@f5e689ddd28e:tests/real-app.cjs#L94-L98
+    contrast: new
+    host: apps/obsidian-plugin/e2e/run.mjs
+    score:
+      relevance: 2
+      facts:
+        - a
+        - b
+        - d
+        - e
+      impact: 4
+      evidence: 1
+      effort: 1
+      why: >-
+        In scope. a: a handler exception passes our e2e today; b: run.mjs neither checks
+        console errors nor saves screenshots; d: becomes a check in run.mjs; e: the failure
+        is silent. One source.
+    final_score: 8
+    keywords:
+      - pageerror
+      - screenshot
+      - test-results
+    decision: {state: candidate}
+
+  - key: e2e-mixed-view-modes
+    domains:
+      - testing-release
+      - obsidian-api
+    layer: validation
+    what: >-
+      The real-app test runs every scenario for three view-mode pairs, source/source,
+      preview/preview and source/preview, because the two panes use different scrollers.
+    notable: >-
+      Our e2e runs preview/preview and source/source only. Reading one note in Reading view
+      next to a draft in Live Preview is the likely real use of side-by-side reading, and it
+      is the pair where scroll heights and lazy rendering differ most. Cheap to add: one
+      more entry in the mode loop.
+    where:
+      - relative-scroll-lock@f5e689ddd28e:tests/real-app.cjs#L26-L35
+    contrast: extends
+    host: apps/obsidian-plugin/e2e/compare-scroll.e2e.mjs
+    score:
+      relevance: 2
+      facts:
+        - a
+        - b
+        - d
+      impact: 3
+      evidence: 1
+      effort: 1
+      why: >-
+        In scope. a: mixed modes are untested though they are the likely real use; b: host
+        loop has two same-mode pairs only; d: lands as one more case in the e2e. One source.
+    final_score: 6
+    decision: {state: candidate}
+
+  - key: verify-release-assets
+    domains:
+      - testing-release
+      - bundled-upstreams
+    layer: enforcement
+    what: >-
+      npm run check runs a script that asserts manifest id, versions.json mapping version to
+      minAppVersion, isDesktopOnly, that main.js parses, and that every release file is
+      present and non-empty; CI runs it on every push.
+    notable: >-
+      The Obsidian community release flow needs versions.json so older apps get a compatible
+      version; our plugin has no versions.json and ships through pkm setup only. Matters the
+      day the pkm plugin goes to the community directory or BRAT.
+    where:
+      - relative-scroll-lock@f5e689ddd28e:scripts/verify-release.cjs#L1-L13
+      - relative-scroll-lock@f5e689ddd28e:.github/workflows/check.yml
+    contrast: new
+    host: apps/obsidian-plugin/manifest.json
+    score:
+      relevance: 1
+      facts:
+        - a
+        - b
+        - d
+      impact: 3
+      evidence: 1
+      effort: 1
+      why: >-
+        Adjacent until the plugin is published outside pkm setup. a: no versions.json, so a
+        community release would fail review; b: none in host; d: a script check. One source.
+    final_score: 3
+    keywords:
+      - versions.json
+      - minAppVersion
+    decision: {state: candidate}
+
+  - key: e2e-real-input-over-cdp
+    domains:
+      - testing-release
+      - plugin-ux
+    layer: validation
+    what: >-
+      The real-app test drives a dedicated Obsidian over Chrome DevTools Protocol with
+      Playwright, so it sends a real mouse wheel, holds the real Alt key and clicks the real
+      status-bar button instead of setting scrollTop or dispatching synthetic events.
+    notable: >-
+      Our e2e (apps/obsidian-plugin/e2e) runs through obsidian eval, sets scrollTop and
+      dispatches a synthetic KeyboardEvent for Alt, so it cannot catch a bug that only shows
+      with a real wheel, a real key or a real click (event order, focus, passive listeners).
+      CDP needs Obsidian started with a debug port, which a pure CLI run avoids; trade-off
+      is a heavier harness for higher fidelity.
+    where:
+      - relative-scroll-lock@f5e689ddd28e:tests/real-app.cjs#L7-L9
+      - relative-scroll-lock@f5e689ddd28e:tests/real-app.cjs#L70-L77
+      - relative-scroll-lock@f5e689ddd28e:tests/real-app.cjs#L80-L89
+    contrast: extends
+    host: apps/obsidian-plugin/e2e/compare-scroll.e2e.mjs
+    score:
+      relevance: 2
+      facts:
+        - a
+        - b
+        - e
+      impact: 3
+      evidence: 1
+      effort: 2
+      why: >-
+        In scope (e2e on the real app, AGENTS.md rule). a: our Alt and wheel checks use
+        synthetic input, so an input-path bug passes; b: no host e2e sends real input; e:
+        such a bug passes silently. One source, unmeasured here.
+    final_score: 3
+    keywords:
+      - playwright
+      - connectOverCDP
+      - mouse.wheel
+      - keyboard.down
+    decision: {state: candidate}
+
+  - key: validation-limits-written-down
+    domains:
+      - testing-release
+      - licensing-community
+    layer: wording
+    what: >-
+      docs/validation.md states exactly what was tested (OS, Obsidian version, modes,
+      synthetic notes) and lists what is not certified (macOS, Linux, physical shortcuts,
+      large image-heavy notes, other editor plugins).
+    notable: >-
+      Selling to non-experts, a short "tested on / not tested on" section prevents promises
+      the product cannot keep and tells support where to look first. Our user guide says
+      what the feature does but not where it was verified.
+    where:
+      - relative-scroll-lock@f5e689ddd28e:docs/validation.md#L3-L11
+      - relative-scroll-lock@f5e689ddd28e:docs/validation.md#L19-L23
+    contrast: new
+    host: docs/user-guide/02-workshop-pages.md
+    score:
+      relevance: 1
+      facts:
+        - a
+        - b
+      impact: 2
+      evidence: 1
+      effort: 1
+      why: >-
+        Adjacent (sales and support honesty). a: the guide implies it works everywhere
+        though e2e covers Windows only; b: no tested-on section. One source.
+    final_score: 2
+    decision: {state: candidate}
